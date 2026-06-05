@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Manuell · MediTest</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+<header class="topbar"><a class="brand" href="/pages/documents.html">MediTest</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
+<main>
+  <section class="card">
+    <h1>Frage manuell erstellen</h1>
+    <p class="muted">Lege eigene Multiple-Choice-Fragen an. Optional kannst du ein Bild zur Frage hinzufügen.</p>
+    <div id="msg" class="hidden"></div>
+    <form id="manualForm">
+      <label for="documentId">Vorhandener Fragenpool</label>
+      <select id="documentId"><option value="">Neuen Fragenpool erstellen</option></select>
+      <label for="documentName">Neuer Fragenpool-Name</label>
+      <input id="documentName" placeholder="z. B. Anatomie Kopf Hals">
+      <label for="questionText">Fragetext</label>
+      <textarea id="questionText" rows="4" required></textarea>
+      <div class="field-row">
+        <div><label for="topic">Thema</label><input id="topic" placeholder="z. B. Kardiologie"></div>
+        <div><label for="difficulty">Schwierigkeit</label><select id="difficulty"><option>leicht</option><option selected>mittel</option><option>schwer</option></select></div>
+      </div>
+      <label for="imageFile">Bild zur Frage</label>
+      <input id="imageFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+      <p class="subtle">PNG, JPEG, WebP oder GIF bis 600 KB.</p>
+      <label for="imageAltText">Bildbeschreibung</label>
+      <input id="imageAltText" placeholder="z. B. EKG mit ST-Hebung">
+      <figure id="imagePreview" class="question-image hidden"></figure>
+      <div class="field-row">
+        <div><label for="option0">Antwort A</label><input id="option0" required></div>
+        <div><label for="option1">Antwort B</label><input id="option1" required></div>
+        <div><label for="option2">Antwort C</label><input id="option2" required></div>
+        <div><label for="option3">Antwort D</label><input id="option3" required></div>
+        <div><label for="option4">Antwort E</label><input id="option4" required></div>
+      </div>
+      <label for="correctOptionIndex">Richtige Antwort</label>
+      <select id="correctOptionIndex"><option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option><option value="4">E</option></select>
+      <label for="explanation">Erklärung</label>
+      <textarea id="explanation" rows="3" placeholder="Kurze Erklärung zur richtigen Antwort..."></textarea>
+      <div class="actions"><button class="primary" type="submit">Frage speichern</button></div>
+    </form>
+  </section>
+</main>
+<script src="/js/api.js"></script>
+<script>
+async function loadDocs(){
+  const docs=await api('/api/documents');
+  const sel=document.getElementById('documentId');
+  docs.forEach(d=>{const o=document.createElement('option'); o.value=d.id; o.textContent=`${d.fileName} (${d.questionCount} Fragen)`; sel.appendChild(o);});
+}
+
+document.getElementById('imageFile').addEventListener('change',async e=>{
+  const preview=document.getElementById('imagePreview');
+  preview.classList.add('hidden');
+  preview.innerHTML='';
+  try{
+    const image=await readImageFileAsDataUrl(e.target);
+    if(!image) return;
+    preview.innerHTML=`<img src="${esc(image.imageDataUrl)}" alt="${esc(document.getElementById('imageAltText').value||'Fragebild')}"><figcaption>${esc(image.imageFileName)}</figcaption>`;
+    preview.classList.remove('hidden');
+  }catch(err){status(document.getElementById('msg'),err.message,'status error'); e.target.value='';}
+});
+
+document.getElementById('manualForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const msg=document.getElementById('msg');
+  status(msg,'Speichere Frage...');
+  try{
+    const image=await readImageFileAsDataUrl(document.getElementById('imageFile'));
+    const payload={
+      documentId:document.getElementById('documentId').value?Number(document.getElementById('documentId').value):null,
+      documentName:document.getElementById('documentName').value.trim()||null,
+      questionText:document.getElementById('questionText').value.trim(),
+      options:[0,1,2,3,4].map(i=>document.getElementById(`option${i}`).value.trim()),
+      correctOptionIndex:Number(document.getElementById('correctOptionIndex').value),
+      explanation:document.getElementById('explanation').value.trim(),
+      topic:document.getElementById('topic').value.trim(),
+      difficulty:document.getElementById('difficulty').value,
+      imageDataUrl:image?.imageDataUrl||null,
+      imageFileName:image?.imageFileName||null,
+      imageAltText:document.getElementById('imageAltText').value.trim()
+    };
+    const r=await api('/api/questions/manual',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    status(msg,`Frage gespeichert in „${r.documentName}“. Insgesamt ${r.totalQuestions} Fragen.`,'status success');
+    e.target.reset();
+    document.getElementById('imagePreview').classList.add('hidden');
+    document.getElementById('imagePreview').innerHTML='';
+  }catch(err){status(msg,err.message,'status error');}
+});
+loadDocs().catch(()=>{});
+</script>
+</body>
+</html>

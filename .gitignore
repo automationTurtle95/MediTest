@@ -1,0 +1,31 @@
+# Build output
+**/bin/
+**/obj/
+**/dist/
+**/.wix/
+**/release/
+
+# IDE and OS files
+.vs/
+**/.vs/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Node/Firebase generated output
+**/node_modules/
+firebase/functions/lib/
+
+# Local data, logs, and secrets
+*.log
+*.db
+meditest.db
+API.txt
+PremiumCode.txt
+OPENAI_API_KEY.txt
+GEMINI_API_KEY.txt
+appsettings.Development.json
+
+# Local source material not meant for public releases
+Altfragen/

@@ -1,0 +1,18 @@
+bin/
+obj/
+.vs/
+.wix/
+release/
+dist/
+
+# Local database and secrets
+meditest.db
+*.db
+OPENAI_API_KEY.txt
+appsettings.Development.json
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

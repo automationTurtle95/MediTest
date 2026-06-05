@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Test · MediTest</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+<header class="topbar"><a class="brand" href="/pages/documents.html">MediTest</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
+<main>
+  <section class="card">
+    <div class="progress"><div id="bar"></div></div>
+    <p id="counter" class="muted"></p>
+    <h1 id="question"></h1>
+    <figure id="questionImage" class="question-image hidden"></figure>
+    <p><span id="topic" class="pill"></span> <span id="difficulty" class="pill"></span> <span id="aiBadge" class="badge ai-badge hidden">KI</span></p>
+    <form id="options"></form>
+    <div class="actions"><button id="prev" type="button">Zurück</button><button id="next" class="primary" type="button">Weiter</button><button id="submit" class="primary hidden" type="button">Test abgeben</button><a id="pdf" class="button" href="#">PDF herunterladen</a></div>
+    <div id="msg" class="hidden"></div>
+  </section>
+</main>
+<script src="/js/api.js"></script>
+<script>
+let test=null;
+let i=0;
+const answers={};
+let draftTimer=null;
+
+function answerPayload(){return{answers:test.questions.map(q=>({questionId:q.questionId,selectedAnswerOptionId:answers[q.questionId]??null}))};}
+function syncLocal(){test.questions.forEach(q=>q.selectedAnswerOptionId=answers[q.questionId]??null);sessionStorage.setItem('currentTest',JSON.stringify(test));}
+async function saveDraft(showStatus=false){
+  if(!test) return;
+  syncLocal();
+  try{
+    const r=await api(`/api/tests/${test.testSessionId}/draft`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(answerPayload())});
+    if(showStatus) status(document.getElementById('msg'),`Zwischenstand gespeichert: ${r.answered}/${r.total} beantwortet.`,'status success');
+  }catch(e){if(showStatus) status(document.getElementById('msg'),e.message,'status error');}
+}
+function scheduleDraft(){clearTimeout(draftTimer);draftTimer=setTimeout(()=>saveDraft(false),350);}
+
+function render(){
+  const q=test.questions[i];
+  document.getElementById('counter').textContent=`Frage ${i+1} von ${test.questions.length}`;
+  document.getElementById('bar').style.width=`${((i+1)/test.questions.length)*100}%`;
+  document.getElementById('question').textContent=q.questionText;
+  const image=document.getElementById('questionImage');
+  if(q.imageDataUrl){
+    image.innerHTML=`<img src="${esc(q.imageDataUrl)}" alt="${esc(q.imageAltText||'Fragebild')}">${q.imageFileName?`<figcaption>${esc(q.imageFileName)}</figcaption>`:''}`;
+    image.classList.remove('hidden');
+  }else{
+    image.innerHTML='';
+    image.classList.add('hidden');
+  }
+  document.getElementById('topic').textContent=q.topic;
+  document.getElementById('difficulty').textContent=q.difficulty;
+  document.getElementById('aiBadge').classList.toggle('hidden',!q.isAiGenerated);
+  document.getElementById('options').innerHTML=q.options.map(o=>`<label class="option"><input type="radio" name="answer" value="${o.answerOptionId}" ${answers[q.questionId]===o.answerOptionId?'checked':''}>${esc(o.text)}</label>`).join('');
+  document.querySelectorAll('input[name="answer"]').forEach(input=>input.addEventListener('change',()=>{save();scheduleDraft();}));
+  document.getElementById('prev').disabled=i===0;
+  document.getElementById('next').classList.toggle('hidden',i===test.questions.length-1);
+  document.getElementById('submit').classList.toggle('hidden',i!==test.questions.length-1);
+  enhanceTooltips();
+}
+function save(){const q=test.questions[i];const checked=document.querySelector('input[name="answer"]:checked');if(checked) answers[q.questionId]=Number(checked.value);syncLocal();}
+document.getElementById('prev').onclick=()=>{save();saveDraft(false);if(i>0)i--;render();};
+document.getElementById('next').onclick=()=>{save();saveDraft(false);if(i<test.questions.length-1)i++;render();};
+document.getElementById('submit').onclick=async()=>{
+  save();
+  const msg=document.getElementById('msg');
+  status(msg,'Speichere und werte aus...');
+  try{
+    await saveDraft(false);
+    await api(`/api/tests/${test.testSessionId}/submit`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(answerPayload())});
+    sessionStorage.removeItem('currentTest');
+    location.href=`/pages/review.html?id=${test.testSessionId}`;
+  }catch(e){status(msg,e.message,'status error');}
+};
+async function init(){
+  const id=qs('id');
+  const stored=JSON.parse(sessionStorage.getItem('currentTest')||'null');
+  if(stored&&(!id||String(stored.testSessionId)===String(id))) test=stored;
+  else if(id) test=await api(`/api/tests/${id}/resume`);
+  else location.href='/pages/documents.html';
+  test.questions.forEach(q=>{if(q.selectedAnswerOptionId) answers[q.questionId]=q.selectedAnswerOptionId;});
+  document.getElementById('pdf').onclick=async e=>{e.preventDefault();try{await downloadApiFile(`/api/tests/${test.testSessionId}/pdf`,`MediTest-${test.testSessionId}.pdf`);}catch(err){status(document.getElementById('msg'),err.message,'status error');}};
+  syncLocal();
+  render();
+}
+init().catch(e=>status(document.getElementById('msg'),e.message,'status error'));
+</script>
+</body>
+</html>

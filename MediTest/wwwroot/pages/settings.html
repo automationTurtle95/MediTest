@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Einstellungen · MediTest</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+<header class="topbar"><a class="brand" href="/pages/documents.html">MediTest</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
+<main>
+  <section class="card">
+    <h1>Einstellungen</h1>
+    <p class="muted">Profil, Darstellung und Kontosicherheit.</p>
+    <div id="msg" class="hidden"></div>
+  </section>
+
+  <form id="settingsForm" class="settings-grid">
+    <section class="card">
+      <h2>Profil</h2>
+      <label for="displayName">Name</label><input id="displayName" autocomplete="name" placeholder="Vor- und Nachname">
+      <div class="field-row">
+        <div><label for="matriculationNumber">Matrikelnummer</label><input id="matriculationNumber" autocomplete="off"></div>
+        <div><label for="semester">Semester</label><input id="semester" placeholder="z. B. 6. Semester"></div>
+      </div>
+      <label for="studyProgram">Studiengang</label><input id="studyProgram" placeholder="z. B. Humanmedizin">
+      <label for="university">Hochschule / Universität</label><input id="university" autocomplete="organization">
+      <label for="email">E-Mail</label><input id="email" type="email" autocomplete="email">
+    </section>
+
+    <section class="card">
+      <h2>Programm</h2>
+      <label for="theme">Darstellung</label><select id="theme"><option value="system">System</option><option value="light">Hell</option><option value="dark">Dunkel</option></select>
+      <div class="actions"><button class="primary" type="submit">Speichern</button><button type="button" id="reloadBtn">Verwerfen</button></div>
+    </section>
+  </form>
+
+  <section class="settings-grid">
+    <section class="card" id="updateCard">
+      <h2>Updates</h2>
+      <p id="updateStatus" class="muted">Update-Status wird geladen...</p>
+      <div id="updateMeta" class="subtle hidden"></div>
+      <div id="updateActions" class="actions">
+        <button type="button" id="checkUpdateBtn">Nach Updates suchen</button>
+      </div>
+    </section>
+  </section>
+
+  <form id="passwordForm" class="settings-grid">
+    <section class="card">
+      <h2>Sicherheit</h2>
+      <label for="currentPassword">Aktuelles Passwort</label>
+      <input id="currentPassword" type="password" autocomplete="current-password" required>
+      <label for="newPassword">Neues Passwort</label>
+      <input id="newPassword" type="password" autocomplete="new-password" required minlength="6">
+      <label for="confirmPassword">Neues Passwort wiederholen</label>
+      <input id="confirmPassword" type="password" autocomplete="new-password" required minlength="6">
+      <div class="actions"><button class="primary" type="submit">Passwort ändern</button></div>
+    </section>
+  </form>
+</main>
+<script src="/js/api.js"></script>
+<script>
+const profileFields=['displayName','matriculationNumber','studyProgram','university','semester','email'];
+let currentSettings=null;
+
+function setValue(id,value){const el=document.getElementById(id); if(!el)return; el.value=value??'';}
+function readSettings(){
+  return {
+    displayName:document.getElementById('displayName').value.trim(),
+    matriculationNumber:document.getElementById('matriculationNumber').value.trim(),
+    studyProgram:document.getElementById('studyProgram').value.trim(),
+    university:document.getElementById('university').value.trim(),
+    semester:document.getElementById('semester').value.trim(),
+    email:document.getElementById('email').value.trim(),
+    theme:document.getElementById('theme').value,
+    defaultGenerateQuestionCount:Number(currentSettings?.defaultGenerateQuestionCount)||25,
+    defaultTestQuestionCount:Number(currentSettings?.defaultTestQuestionCount)||25,
+    aiProvider:'firebase',
+    aiModel:'gemini-2.5-flash',
+    aiApiBaseUrl:'https://europe-west3-meditest-12354.cloudfunctions.net/meditestAi',
+    openAiModel:'gemini-2.5-flash',
+    openAiApiKey:null,
+    clearOpenAiApiKey:true,
+    allowLocalFallback:false
+  };
+}
+function render(settings){
+  currentSettings=settings;
+  profileFields.forEach(id=>setValue(id,settings[id]));
+  setValue('theme',settings.theme);
+  applyTheme(settings.theme);
+  enhanceTooltips();
+}
+function fileSizeLabel(bytes){
+  const value=Number(bytes)||0;
+  if(!value)return '';
+  if(value>=1024*1024)return `${(value/1024/1024).toFixed(1).replace('.',',')} MB`;
+  if(value>=1024)return `${Math.round(value/1024)} KB`;
+  return `${value} B`;
+}
+function renderUpdateInfo(info){
+  const statusEl=document.getElementById('updateStatus');
+  const metaEl=document.getElementById('updateMeta');
+  const actionsEl=document.getElementById('updateActions');
+  const checkButton='<button type="button" id="checkUpdateBtn">Nach Updates suchen</button>';
+  if(!info?.configured){
+    statusEl.textContent='Update-Prüfung ist noch nicht mit GitHub verbunden.';
+    metaEl.className='subtle hidden';
+    metaEl.textContent='';
+    actionsEl.innerHTML=checkButton;
+    wireUpdateButton();
+    return;
+  }
+  statusEl.textContent=info.message||'Update-Status konnte nicht gelesen werden.';
+  metaEl.className='subtle';
+  metaEl.textContent=`Installiert: ${info.currentVersion||'-'} · Plattform: ${info.currentPlatform||'-'}`;
+  const download=info.recommendedDownload;
+  let actions=checkButton;
+  if(info.updateAvailable&&download?.url){
+    const size=fileSizeLabel(download.sizeBytes);
+    actions+=`<a class="button primary" href="${esc(download.url)}" target="_blank" rel="noopener">Update herunterladen${size?` · ${esc(size)}`:''}</a>`;
+  }
+  if(info.releaseUrl){
+    actions+=`<a class="button" href="${esc(info.releaseUrl)}" target="_blank" rel="noopener">GitHub Release</a>`;
+  }
+  actionsEl.innerHTML=actions;
+  wireUpdateButton();
+}
+async function checkForUpdates(){
+  const statusEl=document.getElementById('updateStatus');
+  try{
+    statusEl.textContent='Prüfe GitHub auf Updates...';
+    renderUpdateInfo(await api('/api/system/update'));
+  }catch(err){
+    statusEl.textContent=err.message;
+  }
+}
+function wireUpdateButton(){
+  const btn=document.getElementById('checkUpdateBtn');
+  if(btn)btn.onclick=checkForUpdates;
+}
+async function loadSettings(){const msg=document.getElementById('msg'); try{const settings=await getAppSettings(true); render(settings);}catch(e){status(msg,e.message,'status error');}}
+document.getElementById('settingsForm').addEventListener('submit',async e=>{e.preventDefault(); const msg=document.getElementById('msg'); try{const payload=readSettings(); status(msg,'Speichere Einstellungen...'); const saved=await api('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); sessionStorage.setItem(SETTINGS_CACHE_KEY,JSON.stringify(saved)); window.mediTestSettings=saved; render(saved); status(msg,'Einstellungen gespeichert.','status success');}catch(err){status(msg,err.message,'status error');}});
+document.getElementById('passwordForm').addEventListener('submit',async e=>{e.preventDefault(); const msg=document.getElementById('msg'); try{status(msg,'Ändere Passwort...'); const r=await changeFirebasePassword({currentPassword:document.getElementById('currentPassword').value,newPassword:document.getElementById('newPassword').value,confirmPassword:document.getElementById('confirmPassword').value}); document.getElementById('passwordForm').reset(); status(msg,r.message,'status success');}catch(err){status(msg,err.message,'status error');}});
+document.getElementById('reloadBtn').onclick=loadSettings;
+loadSettings();
+wireUpdateButton();
+checkForUpdates();
+</script>
+</body>
+</html>

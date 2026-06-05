@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Katalog · MediTest</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+<header class="topbar"><a class="brand" href="/pages/documents.html">MediTest</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/catalog.html">Katalog</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
+<main>
+  <section id="adminIntro" class="card hidden">
+    <h1>Firestore-Katalog</h1>
+    <p class="muted">Themenspezifische Tests herunterladen und in deinem MediTest-Konto durchführen.</p>
+  </section>
+
+  <section class="card">
+    <h2>Verfügbare Tests</h2>
+    <div id="msg" class="hidden"></div>
+    <div id="catalog" class="grid"></div>
+  </section>
+
+  <section id="adminPanel" class="card hidden">
+    <h2>Admin</h2>
+    <form id="publishForm">
+      <label for="documentId">Fragenpool</label>
+      <select id="documentId" required></select>
+      <label for="title">Titel</label>
+      <input id="title" required>
+      <label for="description">Beschreibung</label>
+      <textarea id="description" rows="3"></textarea>
+      <div class="field-row">
+        <div><label for="topic">Thema</label><input id="topic" placeholder="z. B. Kardiologie"></div>
+        <div><label for="difficulty">Schwierigkeit</label><select id="difficulty"><option>leicht</option><option selected>mittel</option><option>schwer</option></select></div>
+      </div>
+      <div class="actions"><button class="primary" type="submit">Veröffentlichen</button></div>
+    </form>
+  </section>
+</main>
+<script src="/js/api.js"></script>
+<script>
+let catalogState={canPublish:false,tests:[]};
+let localDocs=[];
+
+function dateLabel(value){return value?new Date(value).toLocaleDateString():'ohne Datum';}
+function safeJsId(id){return esc(id).replace(/'/g,'&#39;');}
+
+async function loadCatalog(){
+  const box=document.getElementById('catalog');
+  const msg=document.getElementById('msg');
+  catalogState=await api('/api/catalog/tests');
+  const tests=catalogState.tests||[];
+  document.getElementById('adminIntro').classList.add('hidden');
+  document.getElementById('adminPanel').classList.add('hidden');
+  if(!tests.length){
+    box.innerHTML='<p class="muted">Noch keine Firestore-Tests veröffentlicht.</p>';
+  }else{
+    box.innerHTML=tests.map(t=>{
+      const id=safeJsId(t.id);
+      const buyButton=t.requiresPurchase&&!catalogState.canPublish&&!t.purchased?`<button type="button" onclick="buyTest('${id}')">Kaufen</button>`:'';
+      const downloadButton=t.requiresPurchase&&!t.purchased?'':`<button class="primary" type="button" onclick="downloadTest('${id}')">Herunterladen</button>`;
+      const accessLabel=t.purchased?'Freigeschaltet':catalogState.canPublish?'Admin-Zugriff':t.requiresPurchase?'Einzelzugang':'Verfügbar';
+      return `<article class="card doc-card">
+        <div><span class="badge">${Number(t.questionCount)||0} Fragen</span> <span class="badge new-badge">${accessLabel}</span></div>
+        <h2>${esc(t.title)}</h2>
+        <p class="muted">${esc(t.topic||'Allgemein')} · ${esc(t.difficulty||'mittel')} · ${esc(t.version||'')} · ${dateLabel(t.publishedAt)}</p>
+        ${t.description?`<p>${esc(t.description)}</p>`:''}
+        <div class="actions">${buyButton}${downloadButton}</div>
+      </article>`;
+    }).join('');
+  }
+  if(catalogState.canPublish){
+    document.getElementById('adminIntro').classList.remove('hidden');
+    document.getElementById('adminPanel').classList.remove('hidden');
+    await loadLocalDocs();
+  }
+  enhanceTooltips();
+}
+
+async function loadLocalDocs(){
+  localDocs=await api('/api/documents');
+  const sel=document.getElementById('documentId');
+  sel.innerHTML=localDocs.map(d=>`<option value="${d.id}">${esc(d.fileName)} (${d.questionCount} Fragen)</option>`).join('');
+  updatePublishTitle();
+}
+
+function updatePublishTitle(){
+  const selected=localDocs.find(d=>String(d.id)===document.getElementById('documentId').value);
+  if(selected&&!document.getElementById('title').value.trim()) document.getElementById('title').value=selected.fileName;
+}
+
+async function buyTest(id){
+  const msg=document.getElementById('msg');
+  status(msg,'Bereite Checkout vor...');
+  try{
+    const r=await api(`/api/catalog/tests/${encodeURIComponent(id)}/checkout`,{method:'POST'});
+    if(r.available&&r.url) location.href=r.url;
+    else status(msg,r.message,'status error');
+  }catch(e){status(msg,e.message,'status error');}
+}
+
+async function downloadTest(id){
+  const msg=document.getElementById('msg');
+  status(msg,'Lade Firestore-Test herunter...');
+  try{
+    const r=await api(`/api/catalog/tests/${encodeURIComponent(id)}/download`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({documentName:null})});
+    status(msg,`Heruntergeladen: ${r.documentName} (${r.importedQuestions} Fragen).`,'status success');
+    const actions=document.createElement('div');
+    actions.className='actions';
+    actions.innerHTML=`<a class="button primary" href="/pages/questions.html?id=${r.documentId}">Fragen ansehen</a><a class="button" href="/pages/documents.html">Dokumente öffnen</a>`;
+    msg.appendChild(actions);
+  }catch(e){status(msg,e.message,'status error');}
+}
+
+document.getElementById('documentId').addEventListener('change',()=>{document.getElementById('title').value='';updatePublishTitle();});
+document.getElementById('publishForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const msg=document.getElementById('msg');
+  const payload={
+    documentId:Number(document.getElementById('documentId').value),
+    title:document.getElementById('title').value.trim(),
+    description:document.getElementById('description').value.trim(),
+    topic:document.getElementById('topic').value.trim(),
+    difficulty:document.getElementById('difficulty').value
+  };
+  status(msg,'Veröffentliche Firestore-Test...');
+  try{
+    const r=await api('/api/catalog/tests/publish',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    status(msg,`Veröffentlicht: ${r.title} (${r.questionCount} Fragen).`,'status success');
+    document.getElementById('publishForm').reset();
+    await loadCatalog();
+  }catch(err){status(msg,err.message,'status error');}
+});
+
+loadCatalog().catch(e=>status(document.getElementById('msg'),e.message,'status error'));
+</script>
+</body>
+</html>

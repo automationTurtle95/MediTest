@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dokumente · MediTest</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+<header class="topbar"><a class="brand" href="/pages/documents.html">MediTest</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
+<main>
+  <section class="card">
+    <h1>Dokumente & Fragenpools</h1>
+    <p class="muted">Lade Unterlagen hoch, importiere vorhandene Fragen, generiere KI-Fragen und starte Tests aus deinen Fragenpools.</p>
+    <div id="msg" class="hidden"></div>
+  </section>
+
+  <section id="uploadPanel" class="tool-grid">
+    <article class="card">
+      <h2>Unterlage hochladen</h2>
+      <p class="muted">PDF, PPTX oder TXT hochladen und automatisch als Fragenpool vorbereiten.</p>
+      <form id="uploadForm">
+        <label for="file">Unterlage</label>
+        <input id="file" name="file" type="file" accept=".pdf,.pptx,.txt" required>
+        <div class="actions"><button class="primary" type="submit">Hochladen & Text extrahieren</button></div>
+      </form>
+    </article>
+
+    <article class="card">
+      <h2>Fragen aus TXT importieren</h2>
+      <p class="muted">Vorbereitete Fragenlisten als eigenen Fragenpool importieren.</p>
+      <form id="importForm">
+        <label for="importFile">TXT-Datei</label>
+        <input id="importFile" type="file" accept=".txt" required>
+        <label for="importName">Fragenpool-Name (optional)</label>
+        <input id="importName" placeholder="z. B. Innere Medizin Altfragen">
+        <div class="actions"><button type="submit">Importieren</button></div>
+      </form>
+    </article>
+  </section>
+
+  <section class="card">
+    <h2>Gespeicherte Dokumente</h2>
+    <div id="docs" class="grid"></div>
+  </section>
+</main>
+<script src="/js/api.js"></script>
+<script>
+let pageSettings={defaultGenerateQuestionCount:25,defaultTestQuestionCount:25};
+function questionCountOptions(selected){const counts=[10,25,50,75,100]; if(!counts.includes(selected))counts.unshift(selected); return counts.map(c=>`<option value="${c}" ${c===selected?'selected':''}>${c}</option>`).join('');}
+async function loadDocs(){
+  const box=document.getElementById('docs');
+  const [docs,settings]=await Promise.all([api('/api/documents'),getAppSettings().catch(()=>null)]);
+  if(settings) pageSettings=settings;
+  if(!docs.length){box.innerHTML='<p class="muted">Noch keine Dokumente. Nutze oben den Hochladen-Bereich oder importiere eine TXT-Fragenliste.</p>'; return;}
+  const generateDefault=Number(pageSettings.defaultGenerateQuestionCount)||25;
+  const testDefault=Number(pageSettings.defaultTestQuestionCount)||25;
+  box.innerHTML=docs.map(d=>`<article class="card doc-card"><span class="badge">${d.questionCount} Fragen</span><h2>${esc(d.fileName)}</h2><p class="muted">${d.textLength} Zeichen · ${new Date(d.createdAt).toLocaleString()}</p><label>Testname (optional)</label><input id="testname-${d.id}" placeholder="z. B. Kardiologie Probe 1"><div class="field-row"><div><label>Fragen generieren</label><select id="count-${d.id}">${questionCountOptions(generateDefault)}</select></div><div><label>Testlänge</label><input id="testcount-${d.id}" type="number" min="1" max="100" step="1" value="${testDefault}"></div></div><div class="actions"><button onclick="generate(${d.id})">Generieren</button><a class="button" href="/pages/questions.html?id=${d.id}">Fragen ansehen</a><button class="primary" onclick="startTest(${d.id})">Test starten</button><button onclick="exportTxt(${d.id})">Export .txt</button><button class="danger" onclick="deleteDocument(${d.id}, '${esc(d.fileName).replace(/'/g, "&#39;")}')">Löschen</button></div></article>`).join('');
+  enhanceTooltips(box);
+}
+function newQuestionsHref(id, questionIds){return `/pages/questions.html?id=${id}&new=${encodeURIComponent((questionIds||[]).join(','))}`;}
+function showGeneratedLink(msg,id,r){
+  status(msg,`Fertig: ${r.added} neue Fragen, insgesamt ${r.total}.`,'status success');
+  const ids=Array.isArray(r.questionIds)?r.questionIds:[];
+  if(!ids.length) return;
+  const actions=document.createElement('div');
+  actions.className='actions';
+  const link=document.createElement('a');
+  link.className='button primary';
+  link.href=newQuestionsHref(id,ids);
+  link.textContent='Fragenpool mit neuen Fragen öffnen';
+  actions.appendChild(link);
+  msg.appendChild(actions);
+}
+async function generate(id){ const msg=document.getElementById('msg'); const count=Number(document.getElementById(`count-${id}`).value)||pageSettings.defaultGenerateQuestionCount||25; status(msg,`Generiere ${count} Fragen... Das kann mehrere Minuten dauern.`); try{const r=await api(`/api/documents/${id}/generate-questions`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({count})}); showGeneratedLink(msg,id,r); await loadDocs();}catch(e){status(msg,e.message,'status error');}}
+async function startTest(id){ const msg=document.getElementById('msg'); status(msg,'Starte Test...'); const testName=document.getElementById(`testname-${id}`)?.value?.trim()||null; const questionCount=Number(document.getElementById(`testcount-${id}`)?.value)||pageSettings.defaultTestQuestionCount||25; try{const t=await api('/api/tests/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({documentId:id,questionCount,testName})}); sessionStorage.setItem('currentTest',JSON.stringify(t)); location.href=`/pages/test.html?id=${t.testSessionId}`;}catch(e){status(msg,e.message,'status error');}}
+async function exportTxt(id){ try{await downloadApiFile(`/api/documents/${id}/export-txt`,'MediTest-Fragenexport.txt');}catch(e){status(document.getElementById('msg'),e.message,'status error');} }
+async function deleteDocument(id, name){ const msg=document.getElementById('msg'); if(!confirm(`Dokument wirklich löschen?\n\n${name}\n\nAlle Fragen und Tests dazu werden ebenfalls gelöscht.`)) return; status(msg,'Lösche Dokument...'); try{await api(`/api/documents/${id}`,{method:'DELETE'}); status(msg,'Dokument gelöscht.','status success'); await loadDocs();}catch(e){status(msg,e.message,'status error');}}
+
+document.getElementById('uploadForm').addEventListener('submit', async e=>{
+  e.preventDefault(); const msg=document.getElementById('msg'); status(msg,'Hochladen läuft...');
+  try{const fd=new FormData(e.target); const r=await api('/api/documents/upload',{method:'POST',body:fd}); status(msg,`Gespeichert: ${r.fileName} (${r.textLength} Zeichen extrahiert)`, 'status success'); e.target.reset(); await loadDocs();}
+  catch(err){status(msg,err.message,'status error');}
+});
+document.getElementById('importForm').addEventListener('submit', async e=>{
+  e.preventDefault(); const msg=document.getElementById('msg'); status(msg,'Import läuft...');
+  const file=document.getElementById('importFile').files[0]; if(!file){status(msg,'Bitte eine TXT-Datei auswählen.','status error'); return;}
+  const fd=new FormData(); fd.append('file',file); const name=document.getElementById('importName').value.trim(); if(name) fd.append('documentName',name);
+  try{const r=await api('/api/documents/import-txt',{method:'POST',body:fd}); status(msg,`Import fertig: ${r.importedQuestions} Fragen in „${r.documentName}“.`, 'status success'); document.getElementById('importForm').reset(); await loadDocs();}
+  catch(err){status(msg,err.message,'status error');}
+});
+loadDocs().catch(e=>status(document.getElementById('msg'),e.message,'status error'));
+</script>
+</body>
+</html>

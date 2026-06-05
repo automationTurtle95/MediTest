@@ -1,0 +1,95 @@
+# MediTest Firebase Backend
+
+Diese Firebase-Konfiguration enthält den KI-Proxy und die Firestore-Regeln für den MediTest-Katalog sowie die privaten Nutzerdaten. MediTest sendet das Firebase-ID-Token des angemeldeten Nutzers mit. Die Function prüft dieses Token und generiert die Fragen serverseitig mit Genkit und Gemini. Der geheime Gemini-Key liegt als `GEMINI_API_KEY` in Firebase Secret Manager.
+
+## Einmalige Einrichtung
+
+Wenn ein Gemini-Key versehentlich in Chat, Logs oder Screenshots gelandet ist, lösche ihn zuerst in der Google/Firebase Console und erstelle einen neuen Key.
+
+1. Firebase CLI installieren und anmelden:
+
+   ```powershell
+   npm install -g firebase-tools
+   firebase login
+   ```
+
+2. Firebase-Projekt verbinden:
+
+   ```powershell
+   cd firebase
+   Copy-Item .firebaserc.example .firebaserc
+   ```
+
+   In `.firebaserc` `DEIN_FIREBASE_PROJECT_ID` durch deine Firebase-Projekt-ID ersetzen.
+
+3. Abhängigkeiten installieren:
+
+   ```powershell
+   npm --prefix functions install
+   ```
+
+4. Gemini-Key als Firebase Secret speichern:
+
+   ```powershell
+   npx firebase-tools functions:secrets:set GEMINI_API_KEY
+   ```
+
+5. Function und Firestore-Regeln bereitstellen:
+
+   ```powershell
+   npx firebase-tools deploy --only functions,firestore:rules
+   ```
+
+## Genkit Monitoring
+
+Die Function aktiviert Firebase-Telemetrie für Genkit zur Laufzeit und nutzt den benannten Flow `meditestGenerateQuestions`. Nach einem erfolgreichen Request erscheinen Produktions-Traces und Messwerte in Firebase/Google Cloud Observability. Für die vollständige Anzeige müssen im Projekt die Observability-APIs aktiv sein und der Function-Service-Account Schreibrechte haben:
+
+```powershell
+gcloud auth login
+gcloud config set project meditest-12354
+gcloud services enable logging.googleapis.com cloudtrace.googleapis.com monitoring.googleapis.com
+gcloud projects add-iam-policy-binding meditest-12354 --member "serviceAccount:495645961863-compute@developer.gserviceaccount.com" --role "roles/logging.logWriter"
+gcloud projects add-iam-policy-binding meditest-12354 --member "serviceAccount:495645961863-compute@developer.gserviceaccount.com" --role "roles/cloudtrace.agent"
+gcloud projects add-iam-policy-binding meditest-12354 --member "serviceAccount:495645961863-compute@developer.gserviceaccount.com" --role "roles/monitoring.metricWriter"
+```
+
+Wenn `gcloud` nicht angemeldet ist, kann der Functions-Deploy trotzdem über `npx firebase-tools deploy --only functions,firestore:rules --project meditest-12354` laufen; die IAM/API-Schritte müssen dann in der Cloud Console oder nach `gcloud auth login` nachgezogen werden.
+
+## Admin-Konto für den Firestore-Katalog
+
+Firestore trennt Katalog und Nutzerdaten:
+
+- `catalogTests`: Angemeldete Nutzer dürfen lesen; schreiben darf nur ein Konto mit Firebase Custom Claim `admin=true`.
+- `users/{uid}/...`: Private Profil-, Dokument-, Fragen- und Testdaten; lesen und schreiben darf nur der jeweilige Firebase-Nutzer.
+- `thematicTests`: Legacy-Katalogpfad mit denselben Admin-Regeln, falls ältere Katalogdaten noch vorhanden sind.
+
+1. Admin-Benutzer in Firebase Authentication anlegen oder über MediTest registrieren.
+2. Custom Claim setzen. Das Skript nutzt das Firebase Admin SDK; lokal braucht es Application Default Credentials, z. B. über `gcloud auth application-default login` oder `GOOGLE_APPLICATION_CREDENTIALS` mit einem Service-Account.
+
+   ```powershell
+   cd firebase/functions
+   npm run admin:set -- admin@example.com
+   ```
+
+3. In MediTest abmelden und wieder anmelden, damit das neue Firebase-ID-Token den Claim enthält.
+
+## MediTest konfigurieren
+
+MediTest nutzt standardmäßig die Firebase Function:
+
+- KI-Anbieter: `Firebase Function`
+- KI-Modell: `gemini-2.5-flash`
+- API-Basis-URL: die bereitgestellte Function-URL, z. B. `https://europe-west3-DEIN_PROJEKT.cloudfunctions.net/meditestAi`
+- API-Key: keiner in MediTest
+
+Danach läuft die Fragegenerierung über Firebase. Der echte Gemini-Key liegt nicht mehr in MediTest.
+
+## Lizenz und Zahlungen
+
+MediTest V4.0.2 bereitet das Lizenzmodell vor:
+
+- 7 Tage Testphase pro Firebase-Nutzer
+- 5,99 EUR pro Monat für das Abo
+- Katalogzugang und Premium-Freischaltung per Code
+
+Produktive Zahlungen sollten serverseitig über einen Zahlungsanbieter laufen. Der Webhook muss nach erfolgreicher Zahlung den Abo-Status bzw. gekaufte Katalogtest-IDs unter `users/{uid}/billing/license` speichern oder passende Firebase Custom Claims setzen. Checkout-URLs werden in MediTest über `Billing:SubscriptionCheckoutUrl` und `Billing:CatalogCheckoutUrl` konfiguriert. Premium- und Admin-Konten haben Zugriff auf alle Katalogtests.

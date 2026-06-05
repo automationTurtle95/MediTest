@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Lizenz · MediTest</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+<header class="topbar"><a class="brand" href="/pages/documents.html">MediTest</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/catalog.html">Katalog</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
+<main>
+  <section class="card">
+    <p class="eyebrow">Lizenz</p>
+    <h1>Lizenz und Premium</h1>
+    <p class="muted">Verwalte Testphase, Abo und Premium-Freischaltung.</p>
+    <div id="msg" class="status">Lade Lizenzstatus...</div>
+  </section>
+  <section id="licenseBox" class="grid"></section>
+</main>
+<script src="/js/api.js"></script>
+<script>
+async function loadLicense(){
+  const statusBox=document.getElementById('msg');
+  const box=document.getElementById('licenseBox');
+  const s=await api('/api/license/status');
+  status(statusBox,s.message,s.accessActive?'status success':'status error');
+  const trialEnd=new Date(s.trialEndsAt).toLocaleDateString();
+  const isPremium=s.premiumActive||s.status==='premium';
+  box.innerHTML=`
+    <article class="card doc-card">
+      <span class="badge">${esc(s.status)}</span>
+      <h2>${esc(s.plan)}</h2>
+      <p class="muted">${isPremium?'Dauerhaft freigeschaltet':`Testphase bis ${trialEnd} · ${Number(s.trialDaysRemaining)||0} Tag(e) übrig`}</p>
+      <p>${isPremium?'Premium ist aktiv. MediTest und alle Katalogtests sind freigeschaltet.':`Nach der Testphase kostet MediTest <b>${priceLabel(s.monthlyPriceCents,s.currency)} pro Monat</b>.`}</p>
+      <div class="actions">${isPremium?'<a class="button primary" href="/pages/catalog.html">Katalog öffnen</a>':'<button class="primary" type="button" onclick="startSubscription()">Abo starten</button>'}</div>
+    </article>
+    <article class="card doc-card">
+      <span class="badge">Einzelzugang</span>
+      <h2>Katalogtests</h2>
+      <p class="muted">Themenspezifische Fragenpools können einzeln freigeschaltet werden.</p>
+      <p>Käufe werden nach erfolgreichem Checkout dem Firebase-Konto zugeordnet. Bereits freigeschaltete Tests bleiben im Katalog verfügbar und können erneut heruntergeladen werden.</p>
+      <div class="actions"><a class="button primary" href="/pages/catalog.html">Katalog öffnen</a></div>
+    </article>
+    <article class="card doc-card">
+      <span class="badge">Premium-Code</span>
+      <h2>Code einlösen</h2>
+      <p class="muted">Ein gültiger Code schaltet MediTest und alle Katalogtests kostenlos frei.</p>
+      <form id="premiumForm" onsubmit="redeemPremiumCode(event)">
+        <label for="premiumCode">Premium-Code</label>
+        <input id="premiumCode" autocomplete="off" placeholder="MT-PREMIUM-XXXX-XXXX-XXXX-XXXX" ${isPremium?'disabled':''}>
+        <div class="actions"><button class="primary" type="submit" ${isPremium?'disabled':''}>Code einlösen</button></div>
+      </form>
+    </article>`;
+  enhanceTooltips();
+}
+
+async function startSubscription(){
+  const msg=document.getElementById('msg');
+  status(msg,'Bereite Checkout vor...');
+  try{
+    const r=await api('/api/license/checkout/subscription',{method:'POST'});
+    if(r.available&&r.url) location.href=r.url;
+    else status(msg,r.message,'status error');
+  }catch(e){status(msg,e.message,'status error');}
+}
+
+async function redeemPremiumCode(e){
+  e.preventDefault();
+  const msg=document.getElementById('msg');
+  const input=document.getElementById('premiumCode');
+  const code=input.value.trim();
+  if(!code){status(msg,'Bitte gib einen Premium-Code ein.','status error');return;}
+  status(msg,'Prüfe Premium-Code...');
+  try{
+    const r=await api('/api/license/redeem-premium-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+    status(msg,r.message||'Premium wurde aktiviert.','status success');
+    await loadLicense();
+  }catch(e){status(msg,e.message,'status error');}
+}
+
+loadLicense().catch(e=>status(document.getElementById('msg'),e.message,'status error'));
+</script>
+</body>
+</html>
