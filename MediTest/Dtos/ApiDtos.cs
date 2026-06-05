@@ -3,7 +3,12 @@ namespace MediTest.Dtos;
 public sealed record DocumentDto(int Id, string FileName, DateTime CreatedAt, int QuestionCount, int TextLength);
 public sealed record GenerateQuestionsRequest(int Count);
 
-public sealed record CatalogListDto(bool CanPublish, List<CatalogTestDto> Tests);
+public sealed record CatalogListDto(
+    bool CanPublish,
+    bool FreeCatalogCreditAvailable,
+    bool FreeCatalogCreditRedeemed,
+    string FreeCatalogCreditRedeemedCatalogId,
+    List<CatalogTestDto> Tests);
 
 public sealed record CatalogTestDto(
     string Id,
@@ -232,9 +237,15 @@ public sealed record LicenseStatusDto(
     int CatalogPriceExampleQuestionCount,
     string Currency,
     bool CheckoutConfigured,
+    bool FreeCatalogCreditAvailable,
+    bool FreeCatalogCreditRedeemed,
+    string FreeCatalogCreditRedeemedCatalogId,
+    DateTime? FreeCatalogCreditGrantedAt,
+    DateTime? FreeCatalogCreditRedeemedAt,
     string Message);
 
 public sealed record RedeemPremiumCodeRequest(string? Code);
+public sealed record RedeemCatalogCodeRequest(string? Code);
 
 public sealed record CheckoutLinkDto(bool Available, string? Url, string Message);
 

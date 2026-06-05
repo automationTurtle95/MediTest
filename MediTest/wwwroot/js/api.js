@@ -455,6 +455,59 @@ function accountMetaLabel(value) {
   return text;
 }
 
+function updateSizeLabel(bytes) {
+  const value = Number(bytes) || 0;
+  if (!value) return '';
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1).replace('.', ',')} MB`;
+  if (value >= 1024) return `${Math.round(value / 1024)} KB`;
+  return `${value} B`;
+}
+
+function dismissUpdateModal() {
+  document.getElementById('updateModal')?.remove();
+  const redirect = window.mediTestPostUpdateRedirect;
+  if (redirect) {
+    window.mediTestPostUpdateRedirect = '';
+    location.href = redirect;
+  }
+}
+
+function renderUpdateModal(info) {
+  if (!info?.updateAvailable || document.getElementById('updateModal')) return;
+  const download = info.recommendedDownload;
+  const downloadUrl = download?.url || info.releaseUrl || '';
+  if (!downloadUrl) return;
+
+  const size = updateSizeLabel(download?.sizeBytes);
+  const modal = document.createElement('div');
+  modal.id = 'updateModal';
+  modal.className = 'modal-backdrop';
+  modal.innerHTML = `
+    <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="updateTitle">
+      <p class="eyebrow">Update verfügbar</p>
+      <h2 id="updateTitle">MediTest ${esc(info.latestVersion || '')}</h2>
+      <p>Du nutzt Version ${esc(info.currentVersion || '')}. Eine neuere Version ist verfügbar.</p>
+      <p class="muted">${esc(info.notes || info.message || 'Lade den passenden Installer herunter und installiere ihn über die bestehende Version.')}</p>
+      <div class="actions">
+        <a class="button primary" href="${esc(downloadUrl)}" target="_blank" rel="noopener">Update herunterladen${size ? ` · ${esc(size)}` : ''}</a>
+        ${info.releaseUrl ? `<a class="button" href="${esc(info.releaseUrl)}" target="_blank" rel="noopener">Release anzeigen</a>` : ''}
+        <button type="button" onclick="dismissUpdateModal()">Später</button>
+      </div>
+    </section>`;
+  document.body.appendChild(modal);
+  enhanceTooltips(modal);
+}
+
+async function checkForAppUpdatePopup() {
+  try {
+    const info = await api('/api/system/update');
+    renderUpdateModal(info);
+    return info;
+  } catch {
+    return null;
+  }
+}
+
 async function shutdownApp() {
   if (!confirm('MediTest wirklich schließen?')) return;
   try { await fetch('/api/system/shutdown', { method: 'POST' }); } catch {}

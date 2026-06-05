@@ -39,7 +39,7 @@
 </main>
 <script src="/js/api.js"></script>
 <script>
-let catalogState={canPublish:false,tests:[]};
+let catalogState={canPublish:false,freeCatalogCreditAvailable:false,freeCatalogCreditRedeemed:false,tests:[]};
 let localDocs=[];
 
 function dateLabel(value){return value?new Date(value).toLocaleDateString():'ohne Datum';}
@@ -57,15 +57,17 @@ async function loadCatalog(){
   }else{
     box.innerHTML=tests.map(t=>{
       const id=safeJsId(t.id);
+      const canUseFree=t.requiresPurchase&&!catalogState.canPublish&&!t.purchased&&catalogState.freeCatalogCreditAvailable;
+      const freeButton=canUseFree?`<button class="primary" type="button" onclick="downloadTest('${id}',true)">Gratis-Test verwenden</button>`:'';
       const buyButton=t.requiresPurchase&&!catalogState.canPublish&&!t.purchased?`<button type="button" onclick="buyTest('${id}')">Kaufen</button>`:'';
       const downloadButton=t.requiresPurchase&&!t.purchased?'':`<button class="primary" type="button" onclick="downloadTest('${id}')">Herunterladen</button>`;
-      const accessLabel=t.purchased?'Freigeschaltet':catalogState.canPublish?'Admin-Zugriff':t.requiresPurchase?'Einzelzugang':'Verfügbar';
+      const accessLabel=t.purchased?'Freigeschaltet':catalogState.canPublish?'Admin-Zugriff':canUseFree?'Gratis-Code verfügbar':t.requiresPurchase?'Einzelzugang':'Verfügbar';
       return `<article class="card doc-card">
         <div><span class="badge">${Number(t.questionCount)||0} Fragen</span> <span class="badge new-badge">${accessLabel}</span></div>
         <h2>${esc(t.title)}</h2>
         <p class="muted">${esc(t.topic||'Allgemein')} · ${esc(t.difficulty||'mittel')} · ${esc(t.version||'')} · ${dateLabel(t.publishedAt)}</p>
         ${t.description?`<p>${esc(t.description)}</p>`:''}
-        <div class="actions">${buyButton}${downloadButton}</div>
+        <div class="actions">${freeButton}${buyButton}${downloadButton}</div>
       </article>`;
     }).join('');
   }
@@ -99,16 +101,17 @@ async function buyTest(id){
   }catch(e){status(msg,e.message,'status error');}
 }
 
-async function downloadTest(id){
+async function downloadTest(id,usesFreeCode=false){
   const msg=document.getElementById('msg');
-  status(msg,'Lade Firestore-Test herunter...');
+  status(msg,usesFreeCode?'Lade Gratis-Test herunter und schalte ihn frei...':'Lade Firestore-Test herunter...');
   try{
     const r=await api(`/api/catalog/tests/${encodeURIComponent(id)}/download`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({documentName:null})});
-    status(msg,`Heruntergeladen: ${r.documentName} (${r.importedQuestions} Fragen).`,'status success');
+    status(msg,`${usesFreeCode?'Gratis-Test freigeschaltet und heruntergeladen':'Heruntergeladen'}: ${r.documentName} (${r.importedQuestions} Fragen).`,'status success');
     const actions=document.createElement('div');
     actions.className='actions';
     actions.innerHTML=`<a class="button primary" href="/pages/questions.html?id=${r.documentId}">Fragen ansehen</a><a class="button" href="/pages/documents.html">Dokumente öffnen</a>`;
     msg.appendChild(actions);
+    await loadCatalog();
   }catch(e){status(msg,e.message,'status error');}
 }
 

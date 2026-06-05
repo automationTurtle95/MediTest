@@ -67,6 +67,12 @@ public sealed class FirestoreUserDataStore
         var state = JsonSerializer.Deserialize<UserLicenseState>(FirestoreString(fields.Value, "dataJson"), JsonOptions) ?? new UserLicenseState();
         if (state.TrialStartedAt == default) state.TrialStartedAt = DateTime.UtcNow;
         if (state.TrialEndsAt == default) state.TrialEndsAt = state.TrialStartedAt.AddDays(trialDays);
+        state.SubscriptionProvider ??= string.Empty;
+        state.SubscriptionCustomerId ??= string.Empty;
+        state.PremiumProvider ??= string.Empty;
+        state.PremiumCodeHash ??= string.Empty;
+        state.FreeCatalogCreditCodeHash ??= string.Empty;
+        state.FreeCatalogCreditRedeemedCatalogId ??= string.Empty;
         state.PurchasedCatalogTestIds ??= [];
         return state;
     }
@@ -74,6 +80,13 @@ public sealed class FirestoreUserDataStore
     public async Task SaveLicenseStateAsync(UserLicenseState state, CancellationToken ct)
     {
         state.UpdatedAt = DateTime.UtcNow;
+        state.SubscriptionProvider ??= string.Empty;
+        state.SubscriptionCustomerId ??= string.Empty;
+        state.PremiumProvider ??= string.Empty;
+        state.PremiumCodeHash ??= string.Empty;
+        state.FreeCatalogCreditCodeHash ??= string.Empty;
+        state.FreeCatalogCreditRedeemedCatalogId ??= string.Empty;
+        state.PurchasedCatalogTestIds ??= [];
         state.PurchasedCatalogTestIds = state.PurchasedCatalogTestIds
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Distinct(StringComparer.OrdinalIgnoreCase)

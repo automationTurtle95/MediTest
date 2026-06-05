@@ -88,11 +88,11 @@ Importiert einen Fragenpool aus einer TXT-Datei.
 
 `GET /api/catalog/tests`
 
-Listet themenspezifische Tests aus der Firestore-Collection `catalogTests`. Für vorhandene V3-Katalogdaten wird zusätzlich der Legacy-Pfad `thematicTests` gelesen. Die Antwort enthält `canPublish`, damit die Oberfläche den Admin-Bereich nur für berechtigte Konten zeigt. Premium- und Admin-Konten erhalten Zugriff auf alle Katalogtests.
+Listet themenspezifische Tests aus der Firestore-Collection `catalogTests`. Für vorhandene V3-Katalogdaten wird zusätzlich der Legacy-Pfad `thematicTests` gelesen. Die Antwort enthält `canPublish` und `freeCatalogCreditAvailable`, damit die Oberfläche Admin-Bereich und Gratis-Test-Aktion nur für berechtigte Konten zeigt. Premium- und Admin-Konten erhalten Zugriff auf alle Katalogtests.
 
 `POST /api/catalog/tests/{catalogId}/download`
 
-Lädt einen Firestore-Test herunter und legt ihn als privaten Fragenpool unter `users/{uid}/documents` an. Normale Nutzer brauchen dafür einen gekauften Katalogtest; Admin-Konten dürfen ohne Kauf herunterladen.
+Lädt einen Firestore-Test herunter und legt ihn als privaten Fragenpool unter `users/{uid}/documents` an. Normale Nutzer brauchen dafür einen gekauften Katalogtest oder einen aktiven Gratis-Katalog-Code; Admin-Konten dürfen ohne Kauf herunterladen.
 
 Beispiel:
 
@@ -145,6 +145,10 @@ Bereitet den Checkout für das Monatsabo vor. Ohne konfigurierte `Billing:Subscr
 `POST /api/license/redeem-premium-code`
 
 Prüft einen Premium-Code aus `{ "code": "..." }`. Ein gültiger Code setzt den Nutzerstatus auf Premium und schaltet alle Katalogtests frei.
+
+`POST /api/license/redeem-catalog-code`
+
+Prüft einen Gratis-Katalog-Code aus `{ "code": "..." }`. Ein gültiger Code setzt einen offenen Gratis-Credit im Nutzerkonto. Der nächste gesperrte Katalogtest, den der Nutzer herunterlädt, wird damit dauerhaft freigeschaltet.
 
 `GET /api/questions/by-topic?topic={topic}`
 
@@ -262,15 +266,15 @@ Prüft die konfigurierte GitHub-Release-Quelle oder `latest.json` und liefert di
 ```json
 {
   "configured": true,
-  "currentVersion": "4.0.4",
+  "currentVersion": "4.0.5",
   "currentPlatform": "windows-x64",
-  "latestVersion": "4.0.4",
+  "latestVersion": "4.0.5",
   "updateAvailable": false,
-  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v4.0.4",
+  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v4.0.5",
   "recommendedDownload": {
     "platform": "windows-x64",
-    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v4.0.4/MediTest-Setup-4.0.4-win-x64.msi",
-    "fileName": "MediTest-Setup-4.0.4-win-x64.msi",
+    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v4.0.5/MediTest-Setup-4.0.5-win-x64.msi",
+    "fileName": "MediTest-Setup-4.0.5-win-x64.msi",
     "sha256": "...",
     "sizeBytes": 42400000
   }

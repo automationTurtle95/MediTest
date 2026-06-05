@@ -5,7 +5,7 @@
 Ein Release besteht aus frisch erzeugten, reproduzierbaren Artefakten unter:
 
 ```text
-dist/MediTest-4.0.4/
+dist/MediTest-4.0.5/
 ```
 
 Bestehende stabile Releases bleiben erhalten. Insbesondere darf `dist/MediTest-2.0.0/` nicht gelöscht werden, solange V2 als lauffähiges Produkt archiviert bleiben soll.
@@ -22,7 +22,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 Das Skript führt aus:
 
 1. die Version aus `MediTest.csproj` lesen, sofern `-Version` nicht explizit gesetzt wurde
-2. nur den Zielordner `dist/MediTest-4.0.4/` entfernen
+2. nur den Zielordner `dist/MediTest-4.0.5/` entfernen
 3. `dotnet restore`
 4. `dotnet build --configuration Release`
 5. self-contained Publish für `win-x64`, `osx-x64` und `osx-arm64`
@@ -36,12 +36,12 @@ Das Skript führt aus:
 ## Erwartete Artefakte
 
 ```text
-dist/MediTest-4.0.4/windows/MediTest-Setup-4.0.4-win-x64.msi
-dist/MediTest-4.0.4/windows/MediTest-4.0.4-win-x64-portable.zip
-dist/MediTest-4.0.4/macos/MediTest-4.0.4-macos-x64-setup.zip
-dist/MediTest-4.0.4/macos/MediTest-4.0.4-macos-arm64-setup.zip
-dist/MediTest-4.0.4/latest.json
-dist/MediTest-4.0.4/SHA256SUMS.txt
+dist/MediTest-4.0.5/windows/MediTest-Setup-4.0.5-win-x64.msi
+dist/MediTest-4.0.5/windows/MediTest-4.0.5-win-x64-portable.zip
+dist/MediTest-4.0.5/macos/MediTest-4.0.5-macos-x64-setup.zip
+dist/MediTest-4.0.5/macos/MediTest-4.0.5-macos-arm64-setup.zip
+dist/MediTest-4.0.5/latest.json
+dist/MediTest-4.0.5/SHA256SUMS.txt
 ```
 
 Wenn das Skript auf macOS mit verfügbarem `pkgbuild` läuft, werden zusätzlich native `.pkg`-Dateien erzeugt.
@@ -49,7 +49,7 @@ Wenn das Skript auf macOS mit verfügbarem `pkgbuild` läuft, werden zusätzlich
 Die macOS-Setup-ZIPs enthalten jeweils:
 
 ```text
-MediTest-4.0.4-macos-<arch>/
+MediTest-4.0.5-macos-<arch>/
   Install_MediTest_macOS.command
   MediTest.app/
 ```
@@ -63,15 +63,15 @@ cd MediTest
 powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1 -GitHubRepository "automationTurtle95/MediTest"
 ```
 
-Danach in GitHub einen Release mit dem Tag `v4.0.4` erstellen und folgende Dateien hochladen:
+Danach in GitHub einen Release mit dem Tag `v4.0.5` erstellen und folgende Dateien hochladen:
 
 ```text
-dist/MediTest-4.0.4/windows/MediTest-Setup-4.0.4-win-x64.msi
-dist/MediTest-4.0.4/windows/MediTest-4.0.4-win-x64-portable.zip
-dist/MediTest-4.0.4/macos/MediTest-4.0.4-macos-arm64-setup.zip
-dist/MediTest-4.0.4/macos/MediTest-4.0.4-macos-x64-setup.zip
-dist/MediTest-4.0.4/latest.json
-dist/MediTest-4.0.4/SHA256SUMS.txt
+dist/MediTest-4.0.5/windows/MediTest-Setup-4.0.5-win-x64.msi
+dist/MediTest-4.0.5/windows/MediTest-4.0.5-win-x64-portable.zip
+dist/MediTest-4.0.5/macos/MediTest-4.0.5-macos-arm64-setup.zip
+dist/MediTest-4.0.5/macos/MediTest-4.0.5-macos-x64-setup.zip
+dist/MediTest-4.0.5/latest.json
+dist/MediTest-4.0.5/SHA256SUMS.txt
 ```
 
 Die installierte App kann Updates direkt über die GitHub-Release-API prüfen, wenn in `appsettings.json` konfiguriert ist:
@@ -91,9 +91,9 @@ Alternativ kann `ManifestUrl` auf eine veröffentlichte `latest.json` zeigen. We
 Wenn das Repository auf GitHub liegt, kann `.github/workflows/release.yml` den Release automatisch bauen. Dafür die Version in `MediTest.csproj` erhöhen, committen und einen passenden Tag pushen:
 
 ```powershell
-git tag v4.0.4
+git tag v4.0.5
 git push origin main
-git push origin v4.0.4
+git push origin v4.0.5
 ```
 
 Der Workflow prüft, dass der Git-Tag zur Projektversion passt, baut die Artefakte und lädt sie in den GitHub Release hoch. Beim Build wird die veröffentlichte App automatisch auf `Updates:GitHubRepository = automationTurtle95/MediTest` konfiguriert.
@@ -113,14 +113,14 @@ Der Workflow prüft, dass der Git-Tag zur Projektversion passt, baut die Artefak
 ## Nach dem Build prüfen
 
 ```powershell
-Get-ChildItem .\dist\MediTest-4.0.4 -Recurse -File |
+Get-ChildItem .\dist\MediTest-4.0.5 -Recurse -File |
   Where-Object { $_.Name -match '\.pdb$|OPENAI_API_KEY|meditest\.db|start-name\.json' }
 ```
 
 Die Ausgabe muss leer sein.
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\dist\MediTest-4.0.4\windows\MediTest-Setup-4.0.4-win-x64.msi
+Get-FileHash -Algorithm SHA256 .\dist\MediTest-4.0.5\windows\MediTest-Setup-4.0.5-win-x64.msi
 ```
 
 Der Hash muss mit dem Eintrag in `SHA256SUMS.txt` übereinstimmen.

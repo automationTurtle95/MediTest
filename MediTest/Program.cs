@@ -147,7 +147,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     var url = app.Urls.FirstOrDefault(u => u.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase))
         ?? app.Urls.FirstOrDefault()
         ?? "http://127.0.0.1:55000";
-    OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=4040");
+    OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=4050");
 });
 
 static void OpenBrowser(string url)
@@ -622,6 +622,37 @@ app.MapPost("/api/license/redeem-premium-code", async (RedeemPremiumCodeRequest 
     return Results.Ok(ToLicenseStatusDto(state, context, cfg));
 });
 
+app.MapPost("/api/license/redeem-catalog-code", async (RedeemCatalogCodeRequest req, HttpContext context, IConfiguration cfg, FirestoreUserDataStore store, CancellationToken ct) =>
+{
+    var normalizedCode = NormalizePremiumCode(req.Code);
+    if (string.IsNullOrWhiteSpace(normalizedCode))
+        return Results.BadRequest(new { error = "Bitte gib einen Gratis-Katalog-Code ein." });
+
+    if (!BillingFreeCatalogCodesConfigured(cfg))
+    {
+        return Results.Json(new { error = "Gratis-Katalog-Codes sind noch nicht konfiguriert." }, statusCode: StatusCodes.Status501NotImplemented);
+    }
+
+    if (!BillingFreeCatalogCodeMatches(cfg, normalizedCode))
+    {
+        return Results.BadRequest(new { error = "Dieser Gratis-Katalog-Code ist ungültig." });
+    }
+
+    var state = await store.GetLicenseStateAsync(BillingTrialDays(cfg), ct);
+    if (!string.IsNullOrWhiteSpace(state.FreeCatalogCreditRedeemedCatalogId))
+    {
+        return Results.BadRequest(new { error = "Der Gratis-Katalog-Code wurde für dieses Konto bereits verwendet." });
+    }
+
+    var now = DateTime.UtcNow;
+    state.FreeCatalogCreditActive = true;
+    state.FreeCatalogCreditGrantedAt ??= now;
+    state.FreeCatalogCreditCodeHash = PremiumCodeHash(normalizedCode);
+    await store.SaveLicenseStateAsync(state, ct);
+
+    return Results.Ok(ToLicenseStatusDto(state, context, cfg));
+});
+
 app.MapPost("/api/license/checkout/subscription", async (IConfiguration cfg) =>
 {
     var url = (cfg["Billing:SubscriptionCheckoutUrl"] ?? string.Empty).Trim();
@@ -673,6 +704,8 @@ app.MapGet("/api/catalog/tests", async (HttpContext context, IConfiguration cfg,
     var currency = BillingCurrency(cfg);
     var enforcePurchases = BillingEnforcesCatalogPurchases(cfg);
     var canPublish = UserCanPublishCatalog(context, cfg);
+    var licenseState = await store.GetLicenseStateAsync(trialDays, ct);
+    var freeCatalogCreditAvailable = FreeCatalogCreditAvailable(licenseState);
 
     foreach (var collection in CatalogCollections())
     {
@@ -695,7 +728,7 @@ app.MapGet("/api/catalog/tests", async (HttpContext context, IConfiguration cfg,
             var questionCount = FirestoreInt(fields, "questionCount");
             if (questionCount <= 0) questionCount = DeserializeCatalogQuestions(FirestoreString(fields, "questionsJson")).Count;
             var priceCents = BillingCatalogTestPriceCents(cfg, questionCount);
-            var purchased = await store.HasCatalogPurchaseAsync(id, trialDays, ct);
+            var purchased = licenseState.PremiumActive || licenseState.PurchasedCatalogTestIds.Contains(id, StringComparer.OrdinalIgnoreCase);
 
             tests.Add(new CatalogTestDto(
                 id,
@@ -720,7 +753,12 @@ app.MapGet("/api/catalog/tests", async (HttpContext context, IConfiguration cfg,
         .ThenBy(t => t.Title)
         .ToList();
 
-    return Results.Ok(new CatalogListDto(canPublish, tests));
+    return Results.Ok(new CatalogListDto(
+        canPublish,
+        freeCatalogCreditAvailable,
+        !string.IsNullOrWhiteSpace(licenseState.FreeCatalogCreditRedeemedCatalogId),
+        licenseState.FreeCatalogCreditRedeemedCatalogId,
+        tests));
 });
 
 app.MapPost("/api/catalog/tests/{catalogId}/download", async (string catalogId, CatalogDownloadRequest req, HttpContext context, IConfiguration cfg, IHttpClientFactory httpClientFactory, FirestoreUserDataStore store, CancellationToken ct) =>
@@ -757,18 +795,27 @@ app.MapPost("/api/catalog/tests/{catalogId}/download", async (string catalogId, 
     if (questions.Count == 0) return Results.BadRequest(new { error = "Firestore-Test enthält keine gültigen Fragen." });
 
     var canPublish = UserCanPublishCatalog(context, cfg);
-    var purchased = await store.HasCatalogPurchaseAsync(catalogId, BillingTrialDays(cfg), ct);
+    var licenseState = await store.GetLicenseStateAsync(BillingTrialDays(cfg), ct);
+    var purchased = licenseState.PremiumActive || licenseState.PurchasedCatalogTestIds.Contains(catalogId, StringComparer.OrdinalIgnoreCase);
+    var consumeFreeCatalogCredit = false;
     if (BillingEnforcesCatalogPurchases(cfg) && !canPublish && !purchased)
     {
-        return Results.Json(
-            new
-            {
-                error = "Dieser Katalogtest muss zuerst gekauft werden.",
-                checkoutRequired = true,
-                priceCents = BillingCatalogTestPriceCents(cfg, questions.Count),
-                currency = BillingCurrency(cfg)
-            },
-            statusCode: StatusCodes.Status402PaymentRequired);
+        if (FreeCatalogCreditAvailable(licenseState))
+        {
+            consumeFreeCatalogCredit = true;
+        }
+        else
+        {
+            return Results.Json(
+                new
+                {
+                    error = "Dieser Katalogtest muss zuerst gekauft werden.",
+                    checkoutRequired = true,
+                    priceCents = BillingCatalogTestPriceCents(cfg, questions.Count),
+                    currency = BillingCurrency(cfg)
+                },
+                statusCode: StatusCodes.Status402PaymentRequired);
+        }
     }
 
     var documentName = TrimTo(req.DocumentName, 200);
@@ -798,6 +845,15 @@ app.MapPost("/api/catalog/tests/{catalogId}/download", async (string catalogId, 
             CreatedAt = DateTime.UtcNow,
             Options = item.Options.Select((text, index) => new AnswerOption { Text = text.Trim(), OptionIndex = index }).ToList()
         }, ct);
+    }
+
+    if (consumeFreeCatalogCredit)
+    {
+        licenseState.FreeCatalogCreditActive = false;
+        licenseState.FreeCatalogCreditRedeemedCatalogId = catalogId;
+        licenseState.FreeCatalogCreditRedeemedAt = DateTime.UtcNow;
+        licenseState.PurchasedCatalogTestIds.Add(catalogId);
+        await store.SaveLicenseStateAsync(licenseState, ct);
     }
 
     return Results.Ok(new CatalogDownloadResult(doc.Id, doc.FileName, questions.Count));
@@ -855,7 +911,7 @@ app.MapPost("/api/catalog/tests/publish", async (CatalogPublishRequest req, Http
             ["difficulty"] = FirestoreValue(difficulty),
             ["questionCount"] = FirestoreIntValue(questions.Count),
             ["schemaVersion"] = FirestoreIntValue(1),
-            ["appVersion"] = FirestoreValue("4.0.4"),
+            ["appVersion"] = FirestoreValue("4.0.5"),
             ["questionsJson"] = FirestoreValue(questionsJson),
             ["createdByUid"] = FirestoreValue(user.UserId),
             ["createdByEmail"] = FirestoreValue(user.Email),
@@ -1375,6 +1431,11 @@ static LicenseStatusDto ToLicenseStatusDto(UserLicenseState state, HttpContext c
         BillingCatalogExampleQuestionCount(cfg),
         BillingCurrency(cfg),
         checkoutConfigured,
+        FreeCatalogCreditAvailable(state),
+        !string.IsNullOrWhiteSpace(state.FreeCatalogCreditRedeemedCatalogId),
+        state.FreeCatalogCreditRedeemedCatalogId,
+        state.FreeCatalogCreditGrantedAt,
+        state.FreeCatalogCreditRedeemedAt,
         message);
 }
 
@@ -1461,6 +1522,29 @@ static bool BillingPremiumCodeMatches(IConfiguration cfg, string normalizedCode)
     return BillingConfigStrings(cfg, "Billing:PremiumCodeHashes")
         .Select(hash => hash.Trim())
         .Any(hash => string.Equals(hash, codeHash, StringComparison.OrdinalIgnoreCase));
+}
+
+static bool BillingFreeCatalogCodesConfigured(IConfiguration cfg)
+{
+    return BillingConfigStrings(cfg, "Billing:FreeCatalogCodes").Any() || BillingConfigStrings(cfg, "Billing:FreeCatalogCodeHashes").Any();
+}
+
+static bool BillingFreeCatalogCodeMatches(IConfiguration cfg, string normalizedCode)
+{
+    var codeMatches = BillingConfigStrings(cfg, "Billing:FreeCatalogCodes")
+        .Select(NormalizePremiumCode)
+        .Any(code => string.Equals(code, normalizedCode, StringComparison.OrdinalIgnoreCase));
+    if (codeMatches) return true;
+
+    var codeHash = PremiumCodeHash(normalizedCode);
+    return BillingConfigStrings(cfg, "Billing:FreeCatalogCodeHashes")
+        .Select(hash => hash.Trim())
+        .Any(hash => string.Equals(hash, codeHash, StringComparison.OrdinalIgnoreCase));
+}
+
+static bool FreeCatalogCreditAvailable(UserLicenseState state)
+{
+    return state.FreeCatalogCreditActive && string.IsNullOrWhiteSpace(state.FreeCatalogCreditRedeemedCatalogId);
 }
 
 static List<string> BillingConfigStrings(IConfiguration cfg, string key)

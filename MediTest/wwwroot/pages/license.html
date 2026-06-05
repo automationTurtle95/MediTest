@@ -26,6 +26,13 @@ async function loadLicense(){
   status(statusBox,s.message,s.accessActive?'status success':'status error');
   const trialEnd=new Date(s.trialEndsAt).toLocaleDateString();
   const isPremium=s.premiumActive||s.status==='premium';
+  const freeCreditAvailable=!!s.freeCatalogCreditAvailable;
+  const freeCreditRedeemed=!!s.freeCatalogCreditRedeemed;
+  const freeCreditText=freeCreditAvailable
+    ? 'Aktiv: Wähle im Katalog einen gesperrten Test und nutze „Gratis-Test verwenden“.'
+    : freeCreditRedeemed
+      ? `Bereits verwendet für Katalogtest ${esc(s.freeCatalogCreditRedeemedCatalogId||'')}.`
+      : 'Noch nicht aktiviert.';
   box.innerHTML=`
     <article class="card doc-card">
       <span class="badge">${esc(s.status)}</span>
@@ -40,6 +47,19 @@ async function loadLicense(){
       <p class="muted">Themenspezifische Fragenpools können einzeln freigeschaltet werden.</p>
       <p>Käufe werden nach erfolgreichem Checkout dem Firebase-Konto zugeordnet. Bereits freigeschaltete Tests bleiben im Katalog verfügbar und können erneut heruntergeladen werden.</p>
       <div class="actions"><a class="button primary" href="/pages/catalog.html">Katalog öffnen</a></div>
+    </article>
+    <article class="card doc-card">
+      <span class="badge">Gratis-Test</span>
+      <h2>Katalog-Code</h2>
+      <p class="muted">${freeCreditText}</p>
+      <p>Ein gültiger Gratis-Code schaltet genau einen Katalogtest deiner Wahl frei.</p>
+      <form id="catalogCodeForm" onsubmit="redeemCatalogCode(event)">
+        <label for="catalogCode">Gratis-Katalog-Code</label>
+        <input id="catalogCode" autocomplete="off" placeholder="MT-GRATIS-KATALOG-2026" ${freeCreditAvailable||freeCreditRedeemed?'disabled':''}>
+        <div class="actions">
+          ${freeCreditAvailable?'<a class="button primary" href="/pages/catalog.html">Gratis-Test auswählen</a>':`<button class="primary" type="submit" ${freeCreditRedeemed?'disabled':''}>Code einlösen</button>`}
+        </div>
+      </form>
     </article>
     <article class="card doc-card">
       <span class="badge">Premium-Code</span>
@@ -74,6 +94,20 @@ async function redeemPremiumCode(e){
   try{
     const r=await api('/api/license/redeem-premium-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
     status(msg,r.message||'Premium wurde aktiviert.','status success');
+    await loadLicense();
+  }catch(e){status(msg,e.message,'status error');}
+}
+
+async function redeemCatalogCode(e){
+  e.preventDefault();
+  const msg=document.getElementById('msg');
+  const input=document.getElementById('catalogCode');
+  const code=input.value.trim();
+  if(!code){status(msg,'Bitte gib einen Gratis-Katalog-Code ein.','status error');return;}
+  status(msg,'Prüfe Gratis-Katalog-Code...');
+  try{
+    const r=await api('/api/license/redeem-catalog-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+    status(msg,r.freeCatalogCreditAvailable?'Gratis-Test aktiviert. Wähle jetzt im Katalog einen Test aus.':'Gratis-Katalog-Code wurde verarbeitet.','status success');
     await loadLicense();
   }catch(e){status(msg,e.message,'status error');}
 }

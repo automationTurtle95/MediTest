@@ -5,7 +5,7 @@
 Empfohlen ist das MSI-Paket aus dem Release-Ordner:
 
 ```text
-dist/MediTest-4.0.4/windows/MediTest-Setup-4.0.4-win-x64.msi
+dist/MediTest-4.0.5/windows/MediTest-Setup-4.0.5-win-x64.msi
 ```
 
 Das MSI installiert MediTest benutzerbezogen nach:
@@ -23,8 +23,8 @@ Updates funktionieren über dasselbe MSI: Eine neuere `MediTest-Setup-<Version>-
 Auf diesem Windows-Buildhost wird für macOS je Architektur ein Setup-ZIP erzeugt:
 
 ```text
-dist/MediTest-4.0.4/macos/MediTest-4.0.4-macos-x64-setup.zip
-dist/MediTest-4.0.4/macos/MediTest-4.0.4-macos-arm64-setup.zip
+dist/MediTest-4.0.5/macos/MediTest-4.0.5-macos-x64-setup.zip
+dist/MediTest-4.0.5/macos/MediTest-4.0.5-macos-arm64-setup.zip
 ```
 
 `macos-x64` ist für Intel-Macs, `macos-arm64` für Apple-Silicon-Macs. Beide ZIPs enthalten eine `MediTest.app` und ein Installer-Skript.
@@ -48,7 +48,7 @@ Das Skript installiert nach:
 
 Zusätzlich wird auf dem Desktop ein `MediTest.app`-Link angelegt. Nach der Installation kann MediTest per Doppelklick gestartet werden; die App öffnet automatisch den Browser unter `http://127.0.0.1:55000`.
 
-Version 4.0.4 legt keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden von V4 ignoriert.
+Version 4.0.5 legt keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden von V4 ignoriert.
 
 Ein natives macOS-`.pkg` kann nur auf macOS mit Apples `pkgbuild` erzeugt werden. Das Release-Skript erkennt `pkgbuild` automatisch und erstellt `.pkg`-Dateien, wenn es auf macOS läuft. Diese installieren `MediTest.app` nach `/Applications`.
 
@@ -70,7 +70,7 @@ Windows-Updates laufen über das neue MSI. macOS-Updates laufen über das neue S
 
 ## Erster Start und Anmeldung
 
-Version 4.0.4 startet mit einer Anmeldeseite. Kontoerstellung, Anmeldung und Passwort-Reset laufen über Firebase Authentication. Angemeldete Nutzer können ihr Passwort in den Einstellungen ändern. Die Sitzung bleibt nur in der aktuellen Browser-Sitzung gespeichert. Nach erfolgreicher Anmeldung wird kurz eine Erfolgsanimation angezeigt.
+Version 4.0.5 startet mit einer Anmeldeseite. Kontoerstellung, Anmeldung und Passwort-Reset laufen über Firebase Authentication. Angemeldete Nutzer können ihr Passwort in den Einstellungen ändern. Die Sitzung bleibt nur in der aktuellen Browser-Sitzung gespeichert. Nach erfolgreicher Anmeldung wird kurz eine Erfolgsanimation angezeigt. Wenn eine neuere Version verfügbar ist, erscheint nach dem Login ein Update-Popup mit dem passenden Download.
 
 Vor dem ersten produktiven Test muss in Firebase unter `Authentication -> Sign-in method` der Anbieter `Email/Password` aktiviert sein. Die App erwartet folgende Auth-Konfiguration:
 
@@ -144,6 +144,7 @@ Die Standardkonfiguration ist in `appsettings.json` unter `Billing` hinterlegt:
     "CatalogPriceEndingCents": 9,
     "CatalogPriceExampleQuestionCount": 25,
     "PremiumCodeHashes": [],
+    "FreeCatalogCodeHashes": [],
     "EnforceCatalogPurchases": true,
     "SubscriptionCheckoutUrl": "",
     "CatalogCheckoutUrl": ""
@@ -151,4 +152,4 @@ Die Standardkonfiguration ist in `appsettings.json` unter `Billing` hinterlegt:
 }
 ```
 
-Die Testphase startet bei der ersten erfolgreichen Anmeldung des Firebase-Nutzers. Premium-Codes werden als SHA-256-Hashes unter `Billing:PremiumCodeHashes` hinterlegt; ein eingelöster Code speichert `premiumActive=true` im Firebase-Nutzerkonto und schaltet alle Katalogtests frei. Solange keine Checkout-URLs hinterlegt sind, zeigt MediTest das Lizenzmodell und bereitet Käufe vor, führt aber keine echten Zahlungen aus. Für produktiven Verkauf muss ein Zahlungsanbieter mit Webhook angebunden werden, der Abo-Status und Katalogkäufe in Firestore/Firebase aktualisiert.
+Die Testphase startet bei der ersten erfolgreichen Anmeldung des Firebase-Nutzers. Premium-Codes werden als SHA-256-Hashes unter `Billing:PremiumCodeHashes` hinterlegt; ein eingelöster Code speichert `premiumActive=true` im Firebase-Nutzerkonto und schaltet alle Katalogtests frei. Gratis-Katalog-Codes werden als SHA-256-Hashes unter `Billing:FreeCatalogCodeHashes` hinterlegt und schalten den ersten gesperrten Katalogtest frei, den der Nutzer danach herunterlädt. Solange keine Checkout-URLs hinterlegt sind, zeigt MediTest das Lizenzmodell und bereitet Käufe vor, führt aber keine echten Zahlungen aus. Für produktiven Verkauf muss ein Zahlungsanbieter mit Webhook angebunden werden, der Abo-Status und Katalogkäufe in Firestore/Firebase aktualisiert.

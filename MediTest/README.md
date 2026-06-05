@@ -1,6 +1,6 @@
 # MediTest
 
-MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choice-Fragen aus medizinischen Unterlagen. Version 4.0.4 nutzt Firebase Authentication und speichert alle Nutzerdaten getrennt vom Katalog in Firestore.
+MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choice-Fragen aus medizinischen Unterlagen. Version 4.0.5 nutzt Firebase Authentication und speichert alle Nutzerdaten getrennt vom Katalog in Firestore.
 
 ## Funktionen
 
@@ -16,7 +16,7 @@ MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choic
 - Themensprung: Fragen eines Themas direkt öffnen und gezielt wiederholen
 - Anmeldeseite mit Firebase-Kontoerstellung, Passwort-Reset und browserbasierter Sitzung
 - Firestore-Katalog für themenspezifische Tests mit Admin-Veröffentlichung
-- Lizenzmodell vorbereitet: 7 Tage Testphase, 5,99 EUR/Monat, Katalogzugang und Premium-Freischaltung per Code
+- Lizenzmodell vorbereitet: 7 Tage Testphase, 5,99 EUR/Monat, Katalogzugang, Gratis-Katalog-Code und Premium-Freischaltung per Code
 
 ## Technik
 
@@ -50,7 +50,7 @@ Alternativ unter Windows: `Start_MediTest.bat` doppelklicken. Die App läuft sta
 
 ## Anmeldung mit Firebase
 
-V4.0.4 speichert keine Nutzerdaten mehr in einer lokalen `meditest.db`. Registrierung, Anmeldung, Passwort-Reset und Passwortänderung laufen über Firebase Authentication. Im Browser werden ID-Token und Refresh-Token nur in `sessionStorage` gehalten und verschwinden beim Schließen der Browser-Sitzung.
+V4.0.5 speichert keine Nutzerdaten mehr in einer lokalen `meditest.db`. Registrierung, Anmeldung, Passwort-Reset und Passwortänderung laufen über Firebase Authentication. Im Browser werden ID-Token und Refresh-Token nur in `sessionStorage` gehalten und verschwinden beim Schließen der Browser-Sitzung.
 
 In Firebase muss unter `Authentication -> Sign-in method` der Anbieter `Email/Password` aktiviert sein. Die Firebase-Web-Konfiguration steht in `appsettings.json`:
 
@@ -91,8 +91,9 @@ Die Seite `Lizenz` zeigt Testphase, Abo-Status, Katalogzugang und Premium-Code-E
 - 7 Tage Testphase pro Firebase-Nutzer ab erster erfolgreicher Anmeldung
 - 5,99 EUR pro Monat für das MediTest-Abo
 - Premium-Codes werden serverseitig über `Billing:PremiumCodeHashes` konfiguriert und schalten alle Katalogtests frei
+- Gratis-Katalog-Codes werden über `Billing:FreeCatalogCodeHashes` konfiguriert und schalten genau einen Katalogtest pro Konto frei
 
-Die App enthält Checkout-Endpunkte und Konfiguration (`Billing:*`), aber keine echten Zahlungsdaten. Für produktiven Verkauf sollte ein Zahlungsanbieter wie Stripe Checkout genutzt werden; Webhooks müssen danach den Abo-Status bzw. gekaufte Katalogtest-IDs serverseitig in Firestore oder als Firebase Custom Claims setzen. Ein eingelöster Premium-Code wird im Firebase-Nutzerkonto unter `billing/license` gespeichert.
+Die App enthält Checkout-Endpunkte und Konfiguration (`Billing:*`), aber keine echten Zahlungsdaten. Für produktiven Verkauf sollte ein Zahlungsanbieter wie Stripe Checkout genutzt werden; Webhooks müssen danach den Abo-Status bzw. gekaufte Katalogtest-IDs serverseitig in Firestore oder als Firebase Custom Claims setzen. Eingelöste Premium- und Gratis-Katalog-Codes werden im Firebase-Nutzerkonto unter `billing/license` gespeichert.
 
 Der Gemini-Key gehört nicht in das Repository und nicht in die MediTest-Installation. Er wird als Firebase Secret `GEMINI_API_KEY` gespeichert. Ohne gültiges Secret funktioniert die App weiter, aber die KI-Fragengenerierung meldet einen Konfigurationsfehler.
 
@@ -105,7 +106,7 @@ cd MediTest
 powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 ```
 
-Die fertigen Artefakte liegen danach unter `dist/MediTest-4.0.4/`. Bestehende Releases wie `dist/MediTest-2.0.0/`, `dist/MediTest-3.0.0/`, `dist/MediTest-3.1.1/`, `dist/MediTest-3.1.2/`, `dist/MediTest-3.1.3/`, `dist/MediTest-4.0.0/` und `dist/MediTest-4.0.3/` bleiben erhalten.
+Die fertigen Artefakte liegen danach unter `dist/MediTest-4.0.5/`. Bestehende Releases wie `dist/MediTest-2.0.0/`, `dist/MediTest-3.0.0/`, `dist/MediTest-3.1.1/`, `dist/MediTest-3.1.2/`, `dist/MediTest-3.1.3/`, `dist/MediTest-4.0.0/`, `dist/MediTest-4.0.3/` und `dist/MediTest-4.0.4/` bleiben erhalten.
 
 Windows erhält ein MSI. macOS erhält Setup-ZIPs mit `MediTest.app` und `Install_MediTest_macOS.command`, damit die App nach der Installation wie auf Windows per Doppelklick gestartet werden kann.
 
@@ -115,4 +116,4 @@ Für GitHub-Releases kann das Release-Skript ein `latest.json` erzeugen und die 
 powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1 -GitHubRepository "automationTurtle95/MediTest"
 ```
 
-Weitere Details stehen in [docs/INSTALLATION.md](docs/INSTALLATION.md), [docs/API.md](docs/API.md) und [docs/RELEASE.md](docs/RELEASE.md).
+Weitere Details stehen in [docs/INSTALLATION.md](docs/INSTALLATION.md), [docs/API.md](docs/API.md), [docs/RELEASE.md](docs/RELEASE.md) und [docs/WEBSITE_DISTRIBUTION.md](docs/WEBSITE_DISTRIBUTION.md).
