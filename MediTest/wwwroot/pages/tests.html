@@ -7,7 +7,7 @@ function testActions(t){
   const rename=`<button type="button" onclick="renameTest(${t.testSessionId})">Umbenennen</button>`;
   const pdf=`<button type="button" onclick="downloadTestPdf(${t.testSessionId})">PDF herunterladen</button>`;
   if(t.submittedAt) return `<a class="button" href="/pages/review.html?id=${t.testSessionId}">Auswertung öffnen</a>${rename}${pdf}`;
-  return `<a class="button primary" href="/pages/test.html?id=${t.testSessionId}">Test fortsetzen</a>${rename}${pdf}`;
+  return `<a class="button primary" href="/pages/test.html?id=${t.testSessionId}">Test fortsetzen</a>${rename}<button class="danger" type="button" onclick="deleteOpenTest(${t.testSessionId})">Löschen</button>`;
 }
 async function downloadTestPdf(id){
   try{await downloadApiFile(`/api/tests/${id}/pdf`,`MediTest-${id}.pdf`);}
@@ -26,6 +26,17 @@ async function renameTest(id){
     await load();
   }catch(e){status(msg,e.message,'status error');}
 }
+async function deleteOpenTest(id){
+  const msg=document.getElementById('msg');
+  const current=testsCache.find(t=>t.testSessionId===id);
+  if(!current||current.submittedAt) return;
+  if(!confirm(`Angefangenen Test "${current.testName}" wirklich löschen?\n\nAbgeschlossene Tests und Fragenpools bleiben erhalten.`)) return;
+  try{
+    await api(`/api/tests/${id}`,{method:'DELETE'});
+    status(msg,'Angefangener Test gelöscht.','status success');
+    await load();
+  }catch(e){status(msg,e.message,'status error');}
+}
 function testStatus(t){
   if(t.submittedAt) return `Ergebnis: <b>${t.score}/${t.questionCount}</b> (${t.percent}%) · <b class="${t.passed?'success':'error'}">${t.passed?'Bestanden':'Nicht bestanden'}</b>`;
   return `<span class="badge">Offen</span> Noch nicht abgegeben`;
@@ -35,7 +46,7 @@ async function load(){
   const items=await api('/api/tests');
   testsCache=items;
   if(!items.length){box.innerHTML='<p class="muted">Noch keine Tests.</p>'; return;}
-  box.innerHTML=items.map(t=>`<article class="card"><p class="muted">${new Date(t.startedAt).toLocaleString()} · Dokument: ${esc(t.documentName)}</p><h2>${esc(t.testName)} <span class="muted">(#${t.testSessionId})</span></h2><p>${testStatus(t)}</p><div class="actions">${testActions(t)}</div></article>`).join('');
+  box.innerHTML=items.map(t=>`<article class="card"><p class="muted title-wrap">${new Date(t.startedAt).toLocaleString()} · Dokument: ${esc(t.documentName)}</p><h2 class="title-wrap">${esc(t.testName)} <span class="muted">(#${t.testSessionId})</span></h2><p>${testStatus(t)}</p><div class="actions">${testActions(t)}</div></article>`).join('');
   enhanceTooltips();
 }
 load().catch(e=>status(document.getElementById('msg'),e.message,'status error'));

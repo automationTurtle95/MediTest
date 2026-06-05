@@ -308,6 +308,16 @@ public sealed class FirestoreUserDataStore
         return (tests.Count, tests.Sum(t => t.Answers.Count));
     }
 
+    public async Task<int> DeleteOpenTestAsync(int id, CancellationToken ct)
+    {
+        var test = await GetTestAsync(id, ct) ?? throw new KeyNotFoundException("Test nicht gefunden.");
+        if (test.SubmittedAt != null)
+            throw new InvalidOperationException("Abgeschlossene Tests bleiben für Statistik und Auswertung erhalten.");
+
+        await DeleteDocAsync($"{UserRoot()}/testSessions/{id}", ct);
+        return test.Answers.Count;
+    }
+
     public async Task<TestSessionDto> StartTestAsync(StartTestRequest req, CancellationToken ct)
     {
         var settings = await GetSettingsAsync(ct);
@@ -483,21 +493,13 @@ public sealed class FirestoreUserDataStore
             .Take(10)
             .ToList();
 
+        var readiness = progress.TakeLast(5).Any() ? Math.Round(progress.TakeLast(5).Average(p => p.Percent), 1) : 0;
         var worstTopics = topicPerformance.Where(t => t.Errors > 0).OrderByDescending(t => t.Errors).Take(8).Select(t => new TopicErrorDto(t.Topic, t.Errors, t.Attempts)).ToList();
-        var recommendations = topicPerformance.Where(t => t.Errors > 0).Take(4).Select(t => new LearningRecommendationDto(
-            $"Thema wiederholen: {t.Topic}",
-            $"{t.Errors} Fehler bei {t.Attempts} Antworten. Trefferquote: {t.Percent:0.0} %. Öffne die Fragen dieses Themas und wiederhole zuerst die falsch beantworteten Inhalte.",
-            t.Topic,
-            t.QuestionCount,
-            t.Attempts,
-            t.Errors,
-            t.Attempts == 0 ? 0 : Math.Round(t.Errors * 100.0 / t.Attempts, 1),
-            $"/pages/questions.html?topic={Uri.EscapeDataString(t.Topic)}")).ToList();
+        var recommendations = BuildLearningRecommendations(topicPerformance, weakQuestions, progress, readiness).ToList();
 
         if (recommendations.Count == 0 && completed.Count > 0)
-            recommendations.Add(new LearningRecommendationDto("Aktuellen Stand halten", "In den ausgewerteten Antworten gibt es keine Fehlerschwerpunkte.", "", 0, totalAnswered, 0, 0, "/pages/documents.html"));
+            recommendations.Add(new LearningRecommendationDto("Aktuellen Stand halten", "In den ausgewerteten Antworten gibt es keine Fehlerschwerpunkte. Plane kurze gemischte Wiederholungen, damit der Stand stabil bleibt.", "", 0, totalAnswered, 0, 0, "/pages/documents.html"));
 
-        var readiness = progress.TakeLast(5).Any() ? Math.Round(progress.TakeLast(5).Average(p => p.Percent), 1) : 0;
         return new OverallStatsDto(
             sessions.Count,
             completed.Count,
@@ -519,6 +521,85 @@ public sealed class FirestoreUserDataStore
             progress,
             weakQuestions,
             recommendations);
+    }
+
+    private static IEnumerable<LearningRecommendationDto> BuildLearningRecommendations(
+        IReadOnlyCollection<TopicPerformanceDto> topics,
+        IReadOnlyCollection<QuestionWeakSpotDto> weakQuestions,
+        IReadOnlyList<TestProgressPointDto> progress,
+        double readiness)
+    {
+        var usedTopics = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<(double Score, LearningRecommendationDto Item)>();
+
+        foreach (var topic in topics.Where(t => t.Errors > 0))
+        {
+            var errorRate = topic.Attempts == 0 ? 0 : Math.Round(topic.Errors * 100.0 / topic.Attempts, 1);
+            var score = errorRate + Math.Min(30, topic.Errors * 4) + Math.Min(12, topic.Attempts);
+            var priority = errorRate >= 50 || topic.Errors >= 4 ? "Priorität hoch" : errorRate >= 25 ? "Priorität mittel" : "Gezielt festigen";
+            var questionHint = topic.QuestionCount > 0 ? $"{topic.QuestionCount} Fragen im Pool" : "Fragenpool öffnen";
+
+            result.Add((score, new LearningRecommendationDto(
+                $"{priority}: {topic.Topic}",
+                $"{topic.Errors} Fehler bei {topic.Attempts} Antworten, Fehlerquote {errorRate:0.0} %. Starte mit den schwachen Fragen, lies die Erklärung und wiederhole danach {questionHint}.",
+                topic.Topic,
+                topic.QuestionCount,
+                topic.Attempts,
+                topic.Errors,
+                errorRate,
+                $"/pages/questions.html?topic={Uri.EscapeDataString(topic.Topic)}")));
+        }
+
+        foreach (var question in weakQuestions.Take(3))
+        {
+            if (!usedTopics.Add(question.Topic)) continue;
+            var score = 90 + question.ErrorRate + question.Errors * 5;
+            result.Add((score, new LearningRecommendationDto(
+                $"Schlüsselfrage klären: {question.Topic}",
+                $"Eine Frage aus {question.DocumentName} wurde {question.Errors} von {question.Attempts} Mal falsch beantwortet. Öffne das Thema, suche diese Frage und lerne zuerst die Erklärung aktiv nach.",
+                question.Topic,
+                1,
+                question.Attempts,
+                question.Errors,
+                question.ErrorRate,
+                $"/pages/questions.html?topic={Uri.EscapeDataString(question.Topic)}#q-{question.QuestionId}")));
+        }
+
+        if (progress.Count >= 4)
+        {
+            var recent = progress.TakeLast(3).Average(p => p.Percent);
+            var previous = progress.Take(progress.Count - 3).TakeLast(3).DefaultIfEmpty().Average(p => p?.Percent ?? recent);
+            if (recent + 8 < previous)
+            {
+                result.Add((85, new LearningRecommendationDto(
+                    "Leistungstrend stabilisieren",
+                    $"Die letzten Tests liegen im Schnitt bei {recent:0.0} %, davor bei {previous:0.0} %. Wiederhole zuerst die Themen mit der höchsten Fehlerquote und starte danach einen kurzen gemischten Test.",
+                    "",
+                    0,
+                    progress.Count,
+                    0,
+                    Math.Round(Math.Max(0, previous - recent), 1),
+                    "/pages/documents.html")));
+            }
+        }
+
+        if (readiness is > 0 and < 60)
+        {
+            result.Add((70, new LearningRecommendationDto(
+                "Basis vor Tempo",
+                $"Der aktuelle Prüfungsstand liegt bei {readiness:0.0} %. Nimm dir zuerst die zwei schwächsten Themen vor und prüfe danach mit einem kurzen Test, ob die Fehlerquote sinkt.",
+                "",
+                0,
+                progress.Count,
+                0,
+                Math.Round(100 - readiness, 1),
+                "/pages/stats.html")));
+        }
+
+        return result
+            .OrderByDescending(r => r.Score)
+            .Select(r => r.Item)
+            .Take(4);
     }
 
     public async Task<TestSession> GetTestWithGraphAsync(int id, CancellationToken ct)

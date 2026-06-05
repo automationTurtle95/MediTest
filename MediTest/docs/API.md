@@ -205,6 +205,10 @@ Lädt ein PDF-Testprotokoll herunter. Der Kopf enthält die gespeicherten Profil
 
 Löscht gespeicherte Tests und Statistiken. Dokumente und Fragen bleiben erhalten.
 
+`DELETE /api/tests/{id}`
+
+Löscht einen noch nicht abgegebenen Test. Abgeschlossene Tests bleiben erhalten, damit Auswertung und Statistik nicht versehentlich verloren gehen.
+
 ## Statistik
 
 `GET /api/stats/overview`
@@ -258,10 +262,10 @@ Prüft die konfigurierte GitHub-Release-Quelle oder `latest.json` und liefert di
 ```json
 {
   "configured": true,
-  "currentVersion": "4.0.3",
+  "currentVersion": "4.0.4",
   "currentPlatform": "windows-x64",
   "latestVersion": "4.0.4",
-  "updateAvailable": true,
+  "updateAvailable": false,
   "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v4.0.4",
   "recommendedDownload": {
     "platform": "windows-x64",

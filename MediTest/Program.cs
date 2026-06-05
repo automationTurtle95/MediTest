@@ -147,7 +147,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     var url = app.Urls.FirstOrDefault(u => u.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase))
         ?? app.Urls.FirstOrDefault()
         ?? "http://127.0.0.1:55000";
-    OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=4030");
+    OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=4040");
 });
 
 static void OpenBrowser(string url)
@@ -855,7 +855,7 @@ app.MapPost("/api/catalog/tests/publish", async (CatalogPublishRequest req, Http
             ["difficulty"] = FirestoreValue(difficulty),
             ["questionCount"] = FirestoreIntValue(questions.Count),
             ["schemaVersion"] = FirestoreIntValue(1),
-            ["appVersion"] = FirestoreValue("4.0.3"),
+            ["appVersion"] = FirestoreValue("4.0.4"),
             ["questionsJson"] = FirestoreValue(questionsJson),
             ["createdByUid"] = FirestoreValue(user.UserId),
             ["createdByEmail"] = FirestoreValue(user.Email),
@@ -1200,6 +1200,23 @@ app.MapDelete("/api/tests", async (FirestoreUserDataStore store, CancellationTok
 {
     var (testsDeleted, answersDeleted) = await store.DeleteAllTestsAsync(ct);
     return Results.Ok(new { reset = true, testsDeleted, answersDeleted });
+});
+
+app.MapDelete("/api/tests/{id:int}", async (int id, FirestoreUserDataStore store, CancellationToken ct) =>
+{
+    try
+    {
+        var answersDeleted = await store.DeleteOpenTestAsync(id, ct);
+        return Results.Ok(new { deleted = true, testSessionId = id, answersDeleted });
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { error = "Test nicht gefunden." });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
 });
 
 app.MapGet("/api/stats/overview", async (int? testSessionId, FirestoreUserDataStore store, CancellationToken ct) =>

@@ -88,6 +88,7 @@ main:not(.auth-page){padding-bottom:82px}
 }
 h1{font-size:42px;line-height:1.08;margin:8px 0 16px}
 h2{margin:4px 0 10px;line-height:1.22}
+h1,h2,h3,.title-wrap{overflow-wrap:anywhere;word-break:normal;hyphens:auto}
 .muted{color:var(--muted)}
 .actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px}
 .button,button{
@@ -241,10 +242,18 @@ label{display:block;font-weight:800;margin:14px 0 7px}
 .recommendation-list{display:grid;gap:12px;margin-top:14px}
 .recommendation,.weak-question,.topic-row{border:1px solid var(--border);border-radius:12px;background:var(--field-alt);padding:14px}
 .recommendation h3,.weak-question h3,.topic-row h3{margin:0 0 6px;font-size:18px}
+.recommendation-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .topic-jump{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:12px;align-items:end;margin:12px 0 18px}
-.topic-list{display:grid;gap:10px}
+.topic-list,.topic-table{display:grid;gap:10px}
+.topic-overview{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 14px}
 .topic-row{display:flex;justify-content:space-between;gap:16px;align-items:center}
+.topic-main{min-width:0;flex:1}
 .topic-row-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.topic-meter{height:8px;border-radius:999px;background:color-mix(in srgb, var(--border) 72%, transparent);overflow:hidden;margin-top:10px}
+.topic-meter span{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#16a34a,#f59e0b,#ef4444)}
+.topic-risk-hoch{border-left:5px solid var(--danger)}
+.topic-risk-mittel{border-left:5px solid #f59e0b}
+.topic-risk-niedrig{border-left:5px solid var(--ok)}
 .weak-question{margin-top:10px}
 .progress-bars{height:220px;display:flex;align-items:flex-end;gap:10px;padding:16px 8px 4px;border-left:1px solid var(--border);border-bottom:1px solid var(--border)}
 .progress-bar{height:100%;min-width:42px;flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px;text-decoration:none;color:var(--muted);font-weight:800}

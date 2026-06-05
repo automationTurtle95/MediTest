@@ -24,6 +24,11 @@
   <section id="stats" class="grid"></section>
 
   <section class="card">
+    <h2>Testverlauf</h2>
+    <div id="progress"></div>
+  </section>
+
+  <section class="card">
     <h2>Visuelle Auswertung</h2>
     <div id="charts" class="chart-grid"></div>
   </section>
@@ -46,16 +51,23 @@
     <h2>Schwache Fragen</h2>
     <div id="weakQuestions"></div>
   </section>
-
-  <section class="card">
-    <h2>Verlauf</h2>
-    <div id="progress"></div>
-  </section>
 </main>
 <script src="/js/api.js"></script>
 <script>
+let weakQuestionCache=[];
 function percent(value){ return `${Number(value||0).toFixed(1).replace('.0','')}%`; }
 function topicHref(topic){ return `/pages/questions.html?topic=${encodeURIComponent(topic)}`; }
+function formatDate(value){
+  if(!value)return '-';
+  return new Date(value).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+function errorRate(item){ return item.attempts?Math.round((Number(item.errors)||0)*1000/item.attempts)/10:0; }
+function topicRisk(item){
+  const rate=errorRate(item);
+  if(item.errors>=4||rate>=50)return 'hoch';
+  if(item.errors>=2||rate>=25)return 'mittel';
+  return 'niedrig';
+}
 function pieHtml(label,value,detail,color='var(--primary)'){
   const v=Math.max(0,Math.min(100,Number(value)||0));
   return `<article class="chart-card"><div class="pie" style="--value:${v};--chart-color:${color}"><span>${percent(v)}</span></div><h3>${esc(label)}</h3><p class="muted">${esc(detail||'')}</p></article>`;
@@ -88,44 +100,84 @@ function renderCharts(s){
 function renderRecommendations(s){
   const items=s.learningRecommendations||[];
   document.getElementById('recommendations').innerHTML=items.length
-    ? items.map(r=>`<article class="recommendation"><h3>${esc(r.title)}</h3><p>${esc(r.description)}</p><a class="button" href="${esc(r.href)}">Fragen öffnen</a></article>`).join('')
+    ? items.map(r=>`<article class="recommendation">
+        <div class="recommendation-head">
+          <h3 class="title-wrap">${esc(r.title)}</h3>
+          <span class="pill">${percent(r.errorRate)} Fehlerquote</span>
+        </div>
+        <p>${esc(r.description)}</p>
+        <p class="muted">${Number(r.attempts)||0} Antworten · ${Number(r.errors)||0} Fehler${r.questionCount?` · ${r.questionCount} Fragen im Thema`:''}</p>
+        <a class="button" href="${esc(r.href)}">Fragen öffnen</a>
+      </article>`).join('')
     : '<p class="muted">Noch keine Lernempfehlung. Schließe zuerst einen Test ab.</p>';
 }
 function renderTopics(s){
   const topics=s.topicPerformance||[];
+  const ordered=[...topics].sort((a,b)=>(b.errors-a.errors)||(errorRate(b)-errorRate(a))||(b.attempts-a.attempts));
   const topicSelect=document.getElementById('topicSelect');
-  topicSelect.innerHTML='<option value="">Thema auswählen</option>'+topics.map(t=>`<option value="${esc(t.topic)}">${esc(t.topic)} · ${percent(t.percent)}</option>`).join('');
+  topicSelect.innerHTML='<option value="">Thema auswählen</option>'+ordered.map(t=>`<option value="${esc(t.topic)}">${esc(t.topic)} · ${t.errors} Fehler · ${percent(errorRate(t))}</option>`).join('');
   document.getElementById('topicTitle').textContent=s.scopeTestName?`Themenanalyse – ${s.scopeTestName}`:'Themenanalyse – alle Tests';
-  document.getElementById('topics').innerHTML=topics.length?`
-    <div class="topic-list">
-      ${topics.map(t=>`<article class="topic-row">
-        <div>
-          <h3>${esc(t.topic)}</h3>
-          <p class="muted">${t.questionCount} Fragen in ${t.documentCount} Pool(s) · ${t.correct}/${t.attempts} richtig · ${t.errors} Fehler</p>
+  const totalErrors=topics.reduce((sum,t)=>sum+(Number(t.errors)||0),0);
+  const totalAttempts=topics.reduce((sum,t)=>sum+(Number(t.attempts)||0),0);
+  document.getElementById('topics').innerHTML=ordered.length?`
+    <div class="topic-overview">
+      <span class="pill">${ordered.length} Themen</span>
+      <span class="pill">${totalErrors} Fehler</span>
+      <span class="pill">${percent(totalAttempts?100-totalErrors*100/totalAttempts:0)} Gesamtquote</span>
+    </div>
+    <div class="topic-table">
+      ${ordered.map(t=>{
+        const risk=topicRisk(t);
+        const rate=errorRate(t);
+        return `<article class="topic-row topic-risk-${risk}">
+        <div class="topic-main">
+          <h3 class="title-wrap">${esc(t.topic)}</h3>
+          <p class="muted">${t.questionCount} Fragen · ${t.documentCount} Pool(s) · ${t.correct}/${t.attempts} richtig</p>
+          <div class="topic-meter"><span style="width:${Math.max(3,Math.min(100,rate))}%"></span></div>
         </div>
         <div class="topic-row-actions">
-          <span class="pill">${percent(t.percent)}</span>
+          <span class="pill">${risk}</span>
+          <span class="pill">${t.errors} Fehler · ${percent(rate)}</span>
           <a class="button" href="${topicHref(t.topic)}">Fragen ansehen</a>
         </div>
-      </article>`).join('')}
+      </article>`;
+      }).join('')}
     </div>`:'<p class="muted">Keine Themendaten.</p>';
 }
 function renderWeakQuestions(s){
   const questions=s.weakQuestions||[];
-  document.getElementById('weakQuestions').innerHTML=questions.length?questions.map(q=>`
+  weakQuestionCache=questions;
+  if(!questions.length){
+    document.getElementById('weakQuestions').innerHTML='<p class="muted">Keine wiederholt falschen Fragen.</p>';
+    return;
+  }
+  document.getElementById('weakQuestions').innerHTML=`
+    <label for="weakQuestionSelect">Frage auswählen</label>
+    <select id="weakQuestionSelect" onchange="showWeakQuestion(this.value)">
+      ${questions.map((q,i)=>`<option value="${i}">${esc(q.topic)} · ${q.errors}/${q.attempts} falsch · ${esc(q.questionText.slice(0,90))}${q.questionText.length>90?'...':''}</option>`).join('')}
+    </select>
+    <div id="weakQuestionDetails"></div>`;
+  showWeakQuestion(0);
+}
+function showWeakQuestion(index){
+  const q=weakQuestionCache[Number(index)||0];
+  const box=document.getElementById('weakQuestionDetails');
+  if(!q||!box)return;
+  box.innerHTML=`
     <article class="weak-question">
-      <p class="muted">${esc(q.documentName)} · ${esc(q.topic)} · ${esc(q.difficulty)}</p>
-      <h3>${esc(q.questionText)}</h3>
+      <p class="muted">${esc(q.documentName)} · ${esc(q.topic)} · ${esc(q.difficulty)} · zuletzt ${formatDate(q.lastAnsweredAt)}</p>
+      <h3 class="title-wrap">${esc(q.questionText)}</h3>
       <p>${q.errors}/${q.attempts} falsch · Fehlerquote ${percent(q.errorRate)}</p>
       <a class="button" href="${topicHref(q.topic)}#q-${q.questionId}">Frage öffnen</a>
-    </article>`).join(''):'<p class="muted">Keine wiederholt falschen Fragen.</p>';
+    </article>`;
 }
 function renderProgress(s){
   const points=s.progress||[];
   if(!points.length){document.getElementById('progress').innerHTML='<p class="muted">Noch kein abgeschlossener Test.</p>';return;}
   document.getElementById('progress').innerHTML=`<div class="progress-bars">${points.slice(-12).map(p=>{
     const height=Math.max(8,Math.min(100,Number(p.percent)||0));
-    return `<a class="progress-bar" href="/pages/review.html?id=${p.testSessionId}" title="${esc(p.testName)} · ${percent(p.percent)}"><span style="height:${height}%"></span><small>${percent(p.percent)}</small></a>`;
+    const date=formatDate(p.submittedAt);
+    return `<a class="progress-bar" href="/pages/review.html?id=${p.testSessionId}" title="${esc(p.testName)} · ${date} · ${percent(p.percent)}"><span style="height:${height}%"></span><small>${percent(p.percent)}</small><small>${esc(date.split(',')[0]||date)}</small></a>`;
   }).join('')}</div>`;
 }
 async function loadStats(){
