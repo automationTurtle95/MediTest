@@ -147,7 +147,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     var url = app.Urls.FirstOrDefault(u => u.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase))
         ?? app.Urls.FirstOrDefault()
         ?? "http://127.0.0.1:55000";
-    OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=4050");
+    OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=4060");
 });
 
 static void OpenBrowser(string url)
@@ -911,7 +911,7 @@ app.MapPost("/api/catalog/tests/publish", async (CatalogPublishRequest req, Http
             ["difficulty"] = FirestoreValue(difficulty),
             ["questionCount"] = FirestoreIntValue(questions.Count),
             ["schemaVersion"] = FirestoreIntValue(1),
-            ["appVersion"] = FirestoreValue("4.0.5"),
+            ["appVersion"] = FirestoreValue("4.0.6"),
             ["questionsJson"] = FirestoreValue(questionsJson),
             ["createdByUid"] = FirestoreValue(user.UserId),
             ["createdByEmail"] = FirestoreValue(user.Email),
@@ -1116,21 +1116,19 @@ app.MapPost("/api/documents/import-txt", async (HttpRequest request, FirestoreUs
     };
     await store.SaveDocumentAsync(doc, ct);
 
-    foreach (var p in parsed)
+    var importedQuestions = parsed.Select(p => new Question
     {
-        await store.SaveQuestionAsync(doc.Id, new Question
-        {
-            UploadedDocumentId = doc.Id,
-            QuestionText = p.Question,
-            CorrectOptionIndex = p.Correct,
-            Explanation = p.Explanation,
-            Topic = p.Topic,
-            Difficulty = p.Difficulty,
-            IsAiGenerated = false,
-            CreatedAt = DateTime.UtcNow,
-            Options = p.Options.Select((o, i) => new AnswerOption { Text = o, OptionIndex = i }).ToList()
-        }, ct);
-    }
+        UploadedDocumentId = doc.Id,
+        QuestionText = p.Question,
+        CorrectOptionIndex = p.Correct,
+        Explanation = p.Explanation,
+        Topic = p.Topic,
+        Difficulty = p.Difficulty,
+        IsAiGenerated = false,
+        CreatedAt = DateTime.UtcNow,
+        Options = p.Options.Select((o, i) => new AnswerOption { Text = o, OptionIndex = i }).ToList()
+    }).ToList();
+    await store.SaveQuestionsAsync(doc.Id, importedQuestions, ct, finalQuestionCount: importedQuestions.Count);
 
     return Results.Ok(new { documentId = doc.Id, documentName = doc.FileName, importedQuestions = parsed.Count });
 });

@@ -34,7 +34,7 @@
         <input id="importFile" type="file" accept=".txt" required>
         <label for="importName">Fragenpool-Name (optional)</label>
         <input id="importName" placeholder="z. B. Innere Medizin Altfragen">
-        <div class="actions"><button type="submit">Importieren</button></div>
+        <div class="actions"><button type="submit" id="importBtn">Importieren</button></div>
       </form>
     </article>
   </section>
@@ -85,9 +85,11 @@ document.getElementById('uploadForm').addEventListener('submit', async e=>{
 document.getElementById('importForm').addEventListener('submit', async e=>{
   e.preventDefault(); const msg=document.getElementById('msg'); status(msg,'Import läuft...');
   const file=document.getElementById('importFile').files[0]; if(!file){status(msg,'Bitte eine TXT-Datei auswählen.','status error'); return;}
+  const importButton=document.getElementById('importBtn');
   const fd=new FormData(); fd.append('file',file); const name=document.getElementById('importName').value.trim(); if(name) fd.append('documentName',name);
-  try{const r=await api('/api/documents/import-txt',{method:'POST',body:fd}); status(msg,`Import fertig: ${r.importedQuestions} Fragen in „${r.documentName}“.`, 'status success'); document.getElementById('importForm').reset(); await loadDocs();}
+  try{importButton.disabled=true; importButton.setAttribute('aria-busy','true'); importButton.textContent='Import wird verarbeitet...'; const r=await api('/api/documents/import-txt',{method:'POST',body:fd}); status(msg,`Import fertig: ${r.importedQuestions} Fragen in „${r.documentName}“.`, 'status success'); document.getElementById('importForm').reset(); await loadDocs();}
   catch(err){status(msg,err.message,'status error');}
+  finally{importButton.disabled=false; importButton.setAttribute('aria-busy','false'); importButton.textContent='Importieren';}
 });
 loadDocs().catch(e=>status(document.getElementById('msg'),e.message,'status error'));
 </script>

@@ -12,6 +12,7 @@ namespace MediTest.Services;
 public sealed class FirestoreUserDataStore
 {
     private const int TextChunkChars = 200_000;
+    private const int BulkWriteConcurrency = 8;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IHttpContextAccessor _httpContextAccessor;
@@ -252,21 +253,32 @@ public sealed class FirestoreUserDataStore
 
     public async Task<Question> SaveQuestionAsync(int documentId, Question question, CancellationToken ct)
     {
-        if (question.Id <= 0) question.Id = NewId();
-        question.UploadedDocumentId = documentId;
-        question.Document = null;
-        question.CreatedAt = question.CreatedAt == default ? DateTime.UtcNow : question.CreatedAt;
-        for (var i = 0; i < question.Options.Count; i++)
-        {
-            question.Options[i].Question = null;
-            question.Options[i].QuestionId = question.Id;
-            question.Options[i].OptionIndex = i;
-            if (question.Options[i].Id <= 0) question.Options[i].Id = NewId();
-        }
-
+        PrepareQuestion(documentId, question);
         await SetJsonDocAsync($"{UserRoot()}/documents/{documentId}/questions/{question.Id}", question, ct);
         await UpdateDocumentQuestionCountAsync(documentId, ct);
         return question;
+    }
+
+    public async Task<List<Question>> SaveQuestionsAsync(
+        int documentId,
+        IEnumerable<Question> questions,
+        CancellationToken ct,
+        int? finalQuestionCount = null)
+    {
+        var prepared = questions.ToList();
+        foreach (var question in prepared)
+            PrepareQuestion(documentId, question);
+
+        await Parallel.ForEachAsync(
+            prepared,
+            new ParallelOptions { MaxDegreeOfParallelism = BulkWriteConcurrency, CancellationToken = ct },
+            async (question, token) =>
+            {
+                await SetJsonDocAsync($"{UserRoot()}/documents/{documentId}/questions/{question.Id}", question, token);
+            });
+
+        await UpdateDocumentQuestionCountAsync(documentId, ct, finalQuestionCount);
+        return prepared;
     }
 
     public async Task<int> CountQuestionsAsync(int documentId, CancellationToken ct)
@@ -747,16 +759,39 @@ public sealed class FirestoreUserDataStore
             .Select(c => FirestoreString(c.GetProperty("fields"), "text")));
     }
 
-    private async Task UpdateDocumentQuestionCountAsync(int documentId, CancellationToken ct)
+    private async Task UpdateDocumentQuestionCountAsync(int documentId, CancellationToken ct, int? knownCount = null)
     {
-        var doc = await GetDocumentAsync(documentId, ct, includeText: true);
-        if (doc == null) return;
-        var count = await CountQuestionsAsync(documentId, ct);
-        await SetJsonDocAsync($"{UserRoot()}/documents/{documentId}", ToDocMeta(doc, doc.ExtractedText.Length, count), ct, extraFields: new()
+        var fields = await GetDocAsync($"{UserRoot()}/documents/{documentId}", ct);
+        if (fields == null) return;
+
+        var doc = DeserializeDoc(fields.Value);
+        var textLength = FirestoreInt(fields.Value, "textLength");
+        if (textLength == 0)
         {
-            ["textLength"] = FsInt(doc.ExtractedText.Length),
+            var storedMeta = JsonSerializer.Deserialize<DocMeta>(FirestoreString(fields.Value, "dataJson"), JsonOptions);
+            textLength = storedMeta?.TextLength ?? 0;
+        }
+        var count = knownCount ?? await CountQuestionsAsync(documentId, ct);
+        await SetJsonDocAsync($"{UserRoot()}/documents/{documentId}", ToDocMeta(doc, textLength, count), ct, extraFields: new()
+        {
+            ["textLength"] = FsInt(textLength),
             ["questionCount"] = FsInt(count)
         });
+    }
+
+    private static void PrepareQuestion(int documentId, Question question)
+    {
+        if (question.Id <= 0) question.Id = NewId();
+        question.UploadedDocumentId = documentId;
+        question.Document = null;
+        question.CreatedAt = question.CreatedAt == default ? DateTime.UtcNow : question.CreatedAt;
+        for (var i = 0; i < question.Options.Count; i++)
+        {
+            question.Options[i].Question = null;
+            question.Options[i].QuestionId = question.Id;
+            question.Options[i].OptionIndex = i;
+            if (question.Options[i].Id <= 0) question.Options[i].Id = NewId();
+        }
     }
 
     private async Task<bool> DemoWasSeededAsync(CancellationToken ct)

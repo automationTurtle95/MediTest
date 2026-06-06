@@ -31,7 +31,16 @@
     <section class="card">
       <h2>Programm</h2>
       <label for="theme">Darstellung</label><select id="theme"><option value="system">System</option><option value="light">Hell</option><option value="dark">Dunkel</option></select>
-      <div class="actions"><button class="primary" type="submit">Speichern</button><button type="button" id="reloadBtn">Verwerfen</button></div>
+    </section>
+    <section class="card settings-savebar">
+      <div class="settings-save-copy">
+        <strong>Einstellungen speichern</strong>
+        <span id="settingsState" class="muted" aria-live="polite">Keine ungespeicherten Änderungen.</span>
+      </div>
+      <div class="actions">
+        <button type="button" id="reloadBtn" disabled>Änderungen verwerfen</button>
+        <button class="primary" type="submit" id="saveSettingsBtn" disabled>Änderungen speichern</button>
+      </div>
     </section>
   </form>
 
@@ -63,8 +72,24 @@
 <script>
 const profileFields=['displayName','matriculationNumber','studyProgram','university','semester','email'];
 let currentSettings=null;
+let savedSettingsSnapshot='';
+let settingsSaving=false;
 
 function setValue(id,value){const el=document.getElementById(id); if(!el)return; el.value=value??'';}
+function editableSettings(){
+  return Object.fromEntries([...profileFields,'theme'].map(id=>[id,document.getElementById(id)?.value?.trim()??'']));
+}
+function updateSettingsState(message){
+  const dirty=JSON.stringify(editableSettings())!==savedSettingsSnapshot;
+  const state=document.getElementById('settingsState');
+  const saveButton=document.getElementById('saveSettingsBtn');
+  const reloadButton=document.getElementById('reloadBtn');
+  state.textContent=message||(dirty?'Ungespeicherte Änderungen vorhanden.':'Alle Änderungen sind gespeichert.');
+  state.classList.toggle('settings-dirty',dirty);
+  saveButton.disabled=settingsSaving||!dirty;
+  reloadButton.disabled=settingsSaving||!dirty;
+  saveButton.setAttribute('aria-busy',settingsSaving?'true':'false');
+}
 function readSettings(){
   return {
     displayName:document.getElementById('displayName').value.trim(),
@@ -90,6 +115,8 @@ function render(settings){
   profileFields.forEach(id=>setValue(id,settings[id]));
   setValue('theme',settings.theme);
   applyTheme(settings.theme);
+  savedSettingsSnapshot=JSON.stringify(editableSettings());
+  updateSettingsState();
   enhanceTooltips();
 }
 function fileSizeLabel(bytes){
@@ -141,7 +168,33 @@ function wireUpdateButton(){
   if(btn)btn.onclick=checkForUpdates;
 }
 async function loadSettings(){const msg=document.getElementById('msg'); try{const settings=await getAppSettings(true); render(settings);}catch(e){status(msg,e.message,'status error');}}
-document.getElementById('settingsForm').addEventListener('submit',async e=>{e.preventDefault(); const msg=document.getElementById('msg'); try{const payload=readSettings(); status(msg,'Speichere Einstellungen...'); const saved=await api('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); sessionStorage.setItem(SETTINGS_CACHE_KEY,JSON.stringify(saved)); window.mediTestSettings=saved; render(saved); status(msg,'Einstellungen gespeichert.','status success');}catch(err){status(msg,err.message,'status error');}});
+document.getElementById('settingsForm').addEventListener('input',()=>updateSettingsState());
+document.getElementById('settingsForm').addEventListener('change',()=>updateSettingsState());
+document.getElementById('settingsForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const msg=document.getElementById('msg');
+  const saveButton=document.getElementById('saveSettingsBtn');
+  let saveFailed=false;
+  try{
+    settingsSaving=true;
+    saveButton.textContent='Wird gespeichert...';
+    updateSettingsState('Änderungen werden gespeichert...');
+    status(msg,'Speichere Einstellungen...');
+    const payload=readSettings();
+    const saved=await api('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    sessionStorage.setItem(SETTINGS_CACHE_KEY,JSON.stringify(saved));
+    window.mediTestSettings=saved;
+    render(saved);
+    status(msg,'Einstellungen gespeichert.','status success');
+  }catch(err){
+    saveFailed=true;
+    status(msg,err.message,'status error');
+  }finally{
+    settingsSaving=false;
+    saveButton.textContent='Änderungen speichern';
+    updateSettingsState(saveFailed?'Speichern fehlgeschlagen. Änderungen sind noch nicht gespeichert.':null);
+  }
+});
 document.getElementById('passwordForm').addEventListener('submit',async e=>{e.preventDefault(); const msg=document.getElementById('msg'); try{status(msg,'Ändere Passwort...'); const r=await changeFirebasePassword({currentPassword:document.getElementById('currentPassword').value,newPassword:document.getElementById('newPassword').value,confirmPassword:document.getElementById('confirmPassword').value}); document.getElementById('passwordForm').reset(); status(msg,r.message,'status success');}catch(err){status(msg,err.message,'status error');}});
 document.getElementById('reloadBtn').onclick=loadSettings;
 loadSettings();

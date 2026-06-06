@@ -145,6 +145,20 @@ label{display:block;font-weight:800;margin:14px 0 7px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px}
 .tool-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;align-items:start}
 .settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;align-items:start}
+.settings-savebar{
+  grid-column:1/-1;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:20px;
+  padding:20px 24px;
+  border-color:color-mix(in srgb,var(--primary) 35%,var(--border));
+}
+.settings-save-copy{display:flex;flex-direction:column;gap:4px}
+.settings-save-copy strong{font-size:18px}
+.settings-savebar .actions{margin-top:0;justify-content:flex-end}
+.settings-dirty{color:var(--primary-dark);font-weight:700}
+button:disabled,.button:disabled{cursor:not-allowed;opacity:.55;transform:none}
 .field-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
 .checkline{display:flex;align-items:flex-start;gap:10px;margin:14px 0;font-weight:700}
 .checkline input{width:auto;min-height:0;margin-top:4px}
@@ -402,6 +416,8 @@ label{display:block;font-weight:800;margin:14px 0 7px}
   .account-dock{right:12px;bottom:12px;left:12px;max-width:none}
   .account-dock-user{max-width:none;flex:1}
   .account-dock-logout{width:auto}
+  .settings-savebar{align-items:stretch;flex-direction:column}
+  .settings-savebar .actions{width:100%}
   .topic-jump{grid-template-columns:1fr}
   .topic-row{display:block}
   .topic-row-actions{justify-content:flex-start;margin-top:10px}
