@@ -147,7 +147,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     var url = app.Urls.FirstOrDefault(u => u.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase))
         ?? app.Urls.FirstOrDefault()
         ?? "http://127.0.0.1:55000";
-    OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=4060");
+    OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=4070");
 });
 
 static void OpenBrowser(string url)
@@ -911,7 +911,7 @@ app.MapPost("/api/catalog/tests/publish", async (CatalogPublishRequest req, Http
             ["difficulty"] = FirestoreValue(difficulty),
             ["questionCount"] = FirestoreIntValue(questions.Count),
             ["schemaVersion"] = FirestoreIntValue(1),
-            ["appVersion"] = FirestoreValue("4.0.6"),
+            ["appVersion"] = FirestoreValue("4.0.7"),
             ["questionsJson"] = FirestoreValue(questionsJson),
             ["createdByUid"] = FirestoreValue(user.UserId),
             ["createdByEmail"] = FirestoreValue(user.Email),

@@ -5,7 +5,7 @@
 Ein Release besteht aus frisch erzeugten, reproduzierbaren Artefakten unter:
 
 ```text
-dist/MediTest-4.0.6/
+dist/MediTest-4.0.7/
 ```
 
 Bestehende stabile Releases bleiben erhalten. Insbesondere darf `dist/MediTest-2.0.0/` nicht gelöscht werden, solange V2 als lauffähiges Produkt archiviert bleiben soll.
@@ -16,62 +16,57 @@ Alte Build-Zwischenstände gehören nicht ins Quellprojekt. `bin/`, `obj/`, `.wi
 
 ```powershell
 cd MediTest
-powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1 -WindowsOnly
 ```
 
 Das Skript führt aus:
 
 1. die Version aus `MediTest.csproj` lesen, sofern `-Version` nicht explizit gesetzt wurde
-2. nur den Zielordner `dist/MediTest-4.0.6/` entfernen
+2. nur den Zielordner `dist/MediTest-4.0.7/` entfernen
 3. `dotnet restore`
 4. `dotnet build --configuration Release`
-5. self-contained Publish für `win-x64`, `osx-x64` und `osx-arm64`
+5. self-contained Publish für `win-x64`
 6. Debug-Symbole, XML-Dokumentation, lokale Daten und temporäre Dateien aus den Publish-Ordnern entfernen
 7. Windows-Portable-ZIP erzeugen
 8. Windows-MSI mit WiX erzeugen, inklusive MediTest-Design und `assets/LicenseAgreement.rtf`
-9. macOS-Setup-ZIPs je Architektur erzeugen, jeweils mit `MediTest.app` und Installer-Skript
-10. Dokumentation in das Release kopieren
-11. `SHA256SUMS.txt` erzeugen
+9. Dokumentation in das Release kopieren
+10. `SHA256SUMS.txt` erzeugen
+
+Der offizielle GitHub-Workflow baut die macOS-Pakete getrennt auf einem macOS-Runner:
+
+1. self-contained Publish für `osx-x64` und `osx-arm64`
+2. native App-Bundles mit unsichtbarem Launcher erstellen
+3. alle Mach-O-Komponenten mit `Developer ID Application` signieren
+4. native PKG-Installer mit `Developer ID Installer` erstellen
+5. beide Pakete bei Apple notarisieren
+6. Notarisierungsticket anheften und Gatekeeper-Prüfung ausführen
 
 ## Erwartete Artefakte
 
 ```text
-dist/MediTest-4.0.6/windows/MediTest-Setup-4.0.6-win-x64.msi
-dist/MediTest-4.0.6/windows/MediTest-4.0.6-win-x64-portable.zip
-dist/MediTest-4.0.6/macos/MediTest-4.0.6-macos-x64-setup.zip
-dist/MediTest-4.0.6/macos/MediTest-4.0.6-macos-arm64-setup.zip
-dist/MediTest-4.0.6/latest.json
-dist/MediTest-4.0.6/SHA256SUMS.txt
+dist/MediTest-4.0.7/windows/MediTest-Setup-4.0.7-win-x64.msi
+dist/MediTest-4.0.7/windows/MediTest-4.0.7-win-x64-portable.zip
+MediTest-Setup-4.0.7-macos-x64.pkg
+MediTest-Setup-4.0.7-macos-arm64.pkg
+latest.json
+SHA256SUMS.txt
 ```
 
-Wenn das Skript auf macOS mit verfügbarem `pkgbuild` läuft, werden zusätzlich native `.pkg`-Dateien erzeugt.
-
-Die macOS-Setup-ZIPs enthalten jeweils:
-
-```text
-MediTest-4.0.6-macos-<arch>/
-  Install_MediTest_macOS.command
-  MediTest.app/
-```
+Die offiziellen macOS-PKGs entstehen ausschließlich im macOS-Job mit Apple-Signierung und erfolgreicher Notarisierung. Das lokale PowerShell-Skript kann weiterhin unsignierte ZIPs für interne technische Tests erzeugen; diese sind keine Kunden-Downloads.
 
 ## GitHub Releases
 
-Für GitHub-Releases kann das Release-Skript direkt passende Download-URLs in `latest.json` schreiben:
+`latest.json` und die abschließende `SHA256SUMS.txt` werden im GitHub-Release-Job aus den erfolgreich gebauten Windows- und macOS-Artefakten erzeugt.
 
-```powershell
-cd MediTest
-powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1 -GitHubRepository "automationTurtle95/MediTest"
-```
-
-Danach in GitHub einen Release mit dem Tag `v4.0.6` erstellen und folgende Dateien hochladen:
+Danach in GitHub einen Release mit dem Tag `v4.0.7` erstellen. Der Workflow veröffentlicht:
 
 ```text
-dist/MediTest-4.0.6/windows/MediTest-Setup-4.0.6-win-x64.msi
-dist/MediTest-4.0.6/windows/MediTest-4.0.6-win-x64-portable.zip
-dist/MediTest-4.0.6/macos/MediTest-4.0.6-macos-arm64-setup.zip
-dist/MediTest-4.0.6/macos/MediTest-4.0.6-macos-x64-setup.zip
-dist/MediTest-4.0.6/latest.json
-dist/MediTest-4.0.6/SHA256SUMS.txt
+MediTest-Setup-4.0.7-win-x64.msi
+MediTest-4.0.7-win-x64-portable.zip
+MediTest-Setup-4.0.7-macos-arm64.pkg
+MediTest-Setup-4.0.7-macos-x64.pkg
+latest.json
+SHA256SUMS.txt
 ```
 
 Die installierte App kann Updates direkt über die GitHub-Release-API prüfen, wenn in `appsettings.json` konfiguriert ist:
@@ -91,12 +86,12 @@ Alternativ kann `ManifestUrl` auf eine veröffentlichte `latest.json` zeigen. We
 Wenn das Repository auf GitHub liegt, kann `.github/workflows/release.yml` den Release automatisch bauen. Dafür die Version in `MediTest.csproj` erhöhen, committen und einen passenden Tag pushen:
 
 ```powershell
-git tag v4.0.6
+git tag v4.0.7
 git push origin main
-git push origin v4.0.6
+git push origin v4.0.7
 ```
 
-Der Workflow prüft, dass der Git-Tag zur Projektversion passt, baut die Artefakte und lädt sie in den GitHub Release hoch. Beim Build wird die veröffentlichte App automatisch auf `Updates:GitHubRepository = automationTurtle95/MediTest` konfiguriert.
+Der Workflow prüft, dass der Git-Tag zur Projektversion passt. Der Release-Job startet erst, wenn Windows-Build sowie macOS-Signierung und Apple-Notarisierung erfolgreich waren. Die benötigten GitHub-Secrets sind in [MACOS_SIGNING.md](MACOS_SIGNING.md) beschrieben.
 
 ## Release-Regeln
 
@@ -106,6 +101,8 @@ Der Workflow prüft, dass der Git-Tag zur Projektversion passt, baut die Artefak
 - Keine alten `release/v2.0`- oder `1.0.0`-Artefakte im Projekt.
 - `dist/MediTest-2.0.0/` bleibt als stabile V2-Linie erhalten.
 - Versionsnummern in `.csproj`, MSI und Dateinamen müssen übereinstimmen.
+- Kunden-Mac-Pakete müssen mit Developer ID signiert, von Apple notarisiert und als `.pkg` veröffentlicht sein.
+- Unsignierte macOS-ZIPs dürfen nicht als normaler Kunden-Download veröffentlicht werden.
 - Für neue Features immer die `<Version>` in `MediTest.csproj` erhöhen; das Release-Skript übernimmt diese Version automatisch.
 - Das MSI enthält ein Major-Upgrade mit konstantem `UpgradeCode`, damit eine neuere Version über eine bestehende Installation installiert werden kann.
 - Private Nutzerdaten werden unter `users/{uid}/...` in Firestore gespeichert; der Katalog liegt getrennt in `catalogTests`.
@@ -113,14 +110,14 @@ Der Workflow prüft, dass der Git-Tag zur Projektversion passt, baut die Artefak
 ## Nach dem Build prüfen
 
 ```powershell
-Get-ChildItem .\dist\MediTest-4.0.6 -Recurse -File |
+Get-ChildItem .\dist\MediTest-4.0.7 -Recurse -File |
   Where-Object { $_.Name -match '\.pdb$|OPENAI_API_KEY|meditest\.db|start-name\.json' }
 ```
 
 Die Ausgabe muss leer sein.
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\dist\MediTest-4.0.6\windows\MediTest-Setup-4.0.6-win-x64.msi
+Get-FileHash -Algorithm SHA256 .\dist\MediTest-4.0.7\windows\MediTest-Setup-4.0.7-win-x64.msi
 ```
 
 Der Hash muss mit dem Eintrag in `SHA256SUMS.txt` übereinstimmen.

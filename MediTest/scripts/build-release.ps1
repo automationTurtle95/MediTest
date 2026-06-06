@@ -2,7 +2,8 @@
     [string]$Version = "",
     [string]$Configuration = "Release",
     [string]$GitHubRepository = "",
-    [string]$ReleaseBaseUrl = ""
+    [string]$ReleaseBaseUrl = "",
+    [switch]$WindowsOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,8 +15,6 @@ $DistRoot = Join-Path $ProjectRoot "dist"
 $DocsSource = Join-Path $ProjectRoot "docs"
 $IconSource = Join-Path $ProjectRoot "assets\MediTest.ico"
 $LicenseSource = Join-Path $ProjectRoot "assets\LicenseAgreement.rtf"
-$IsRunningOnMac = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::OSX)
-
 if ([string]::IsNullOrWhiteSpace($Version)) {
     [xml]$projectXml = Get-Content -LiteralPath $ProjectFile
     $Version = [string]($projectXml.Project.PropertyGroup | Select-Object -First 1).Version
@@ -345,10 +344,6 @@ cp -R "`$SRC_APP" "`$TARGET_APP"
 chmod +x "`$TARGET_APP/Contents/MacOS/MediTest"
 chmod +x "`$TARGET_APP/Contents/Resources/app/MediTest"
 
-if command -v xattr >/dev/null 2>&1; then
-  xattr -dr com.apple.quarantine "`$TARGET_APP" 2>/dev/null || true
-fi
-
 if [ -d "`$HOME/Desktop" ]; then
   if [ -L "`$DESKTOP_APP" ]; then
     rm "`$DESKTOP_APP"
@@ -375,18 +370,6 @@ APP_DIR="$(cd "$(dirname "$0")/../Resources/app" && pwd)"
 APP_EXE="$APP_DIR/MediTest"
 
 chmod +x "$APP_EXE" 2>/dev/null || true
-
-if command -v osascript >/dev/null 2>&1; then
-  export MEDITEST_APP_DIR="$APP_DIR"
-  osascript <<'APPLESCRIPT'
-set appDir to system attribute "MEDITEST_APP_DIR"
-tell application "Terminal"
-  activate
-  do script "cd " & quoted form of appDir & " && export ASPNETCORE_URLS=http://127.0.0.1:55000 DOTNET_URLS=http://127.0.0.1:55000 && ./MediTest"
-end tell
-APPLESCRIPT
-  exit 0
-fi
 
 cd "$APP_DIR"
 export ASPNETCORE_URLS="${ASPNETCORE_URLS:-http://127.0.0.1:55000}"
@@ -568,48 +551,35 @@ Invoke-Native "wix" @("build", $WxsFile, "-ext", "WixToolset.UI.wixext", "-cultu
 Get-ChildItem -LiteralPath $WindowsDir -Filter *.wixpdb -File -ErrorAction SilentlyContinue |
     Remove-Item -Force
 
-Invoke-Step "Publish macOS x64 und arm64"
-$MacDir = Join-Path $ReleaseRoot "macos"
-foreach ($rid in @("osx-x64", "osx-arm64")) {
-    $arch = $rid.Replace("osx-", "")
-    $bundle = Join-Path $MacDir "MediTest-$Version-macos-$arch"
-    $publish = Join-Path $bundle "publish"
-    Publish-App $rid $publish
-    New-MacAppBundle (Join-Path $bundle "MediTest.app") $publish $rid
-    Remove-IfExists $publish
-    $installer = Join-Path $bundle "Install_MediTest_macOS.command"
-    New-MacInstaller $installer $rid
-    $zip = Join-Path $MacDir "MediTest-$Version-macos-$arch-setup.zip"
-    Compress-FolderWithRoot $bundle $zip
-}
-
-if ($IsRunningOnMac -and (Get-Command pkgbuild -ErrorAction SilentlyContinue)) {
-    Invoke-Step "Erzeuge native macOS PKG-Dateien"
+if (!$WindowsOnly) {
+    Invoke-Step "Publish macOS x64 und arm64"
+    $MacDir = Join-Path $ReleaseRoot "macos"
     foreach ($rid in @("osx-x64", "osx-arm64")) {
         $arch = $rid.Replace("osx-", "")
         $bundle = Join-Path $MacDir "MediTest-$Version-macos-$arch"
-        $appBundle = Join-Path $bundle "MediTest.app"
-        $pkgRoot = Join-Path $bundle "pkg-root"
-        $pkg = Join-Path $MacDir "MediTest-Setup-$Version-macos-$($rid.Replace('osx-', '')).pkg"
-        Remove-IfExists $pkgRoot
-        New-Item -ItemType Directory -Force -Path $pkgRoot | Out-Null
-        Copy-Item -LiteralPath $appBundle -Destination (Join-Path $pkgRoot "MediTest.app") -Recurse -Force
-        Invoke-Native "pkgbuild" @("--root", $pkgRoot, "--identifier", "de.meditest.app.$rid", "--version", $Version, "--install-location", "/Applications", $pkg)
-        Remove-IfExists $pkgRoot
+        $publish = Join-Path $bundle "publish"
+        Publish-App $rid $publish
+        New-MacAppBundle (Join-Path $bundle "MediTest.app") $publish $rid
+        Remove-IfExists $publish
+        $installer = Join-Path $bundle "Install_MediTest_macOS.command"
+        New-MacInstaller $installer $rid
+        $zip = Join-Path $MacDir "MediTest-$Version-macos-$arch-setup.zip"
+        Compress-FolderWithRoot $bundle $zip
     }
-}
-else {
+
     Write-Host ""
-    Write-Host "Hinweis: Native macOS .pkg-Dateien erfordern macOS mit pkgbuild. Auf diesem Host wurden macOS-Setup-ZIPs mit Installer-Skript erzeugt." -ForegroundColor Yellow
+    Write-Host "Hinweis: Diese macOS-ZIPs sind nur fuer interne Tests. Kunden-Releases werden auf macOS signiert, notarisiert und als PKG gebaut." -ForegroundColor Yellow
 }
 
 Invoke-Step "Entferne Packaging-Zwischenverzeichnisse"
 Remove-IfExists $WindowsApp
 Remove-IfExists $WxsFile
 Remove-IfExists (Join-Path $WindowsDir "installer-assets")
-foreach ($rid in @("osx-x64", "osx-arm64")) {
-    $arch = $rid.Replace("osx-", "")
-    Remove-IfExists (Join-Path $MacDir "MediTest-$Version-macos-$arch")
+if (!$WindowsOnly) {
+    foreach ($rid in @("osx-x64", "osx-arm64")) {
+        $arch = $rid.Replace("osx-", "")
+        Remove-IfExists (Join-Path $MacDir "MediTest-$Version-macos-$arch")
+    }
 }
 
 Invoke-Step "Kopiere Dokumentation"
@@ -620,8 +590,10 @@ if (Test-Path -LiteralPath $DocsSource) {
     Copy-Item -Path (Join-Path $DocsSource "*") -Destination $DistDocs -Recurse -Force
 }
 
-Invoke-Step "Erzeuge Update-Manifest"
-New-UpdateManifest (Join-Path $ReleaseRoot "latest.json")
+if (!$WindowsOnly) {
+    Invoke-Step "Erzeuge Update-Manifest"
+    New-UpdateManifest (Join-Path $ReleaseRoot "latest.json")
+}
 
 Invoke-Step "Erzeuge SHA256-Prüfsummen"
 $ChecksumFile = Join-Path $ReleaseRoot "SHA256SUMS.txt"

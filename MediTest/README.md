@@ -1,6 +1,6 @@
 # MediTest
 
-MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choice-Fragen aus medizinischen Unterlagen. Version 4.0.6 nutzt Firebase Authentication und speichert alle Nutzerdaten getrennt vom Katalog in Firestore.
+MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choice-Fragen aus medizinischen Unterlagen. Version 4.0.7 nutzt Firebase Authentication und speichert alle Nutzerdaten getrennt vom Katalog in Firestore.
 
 ## Funktionen
 
@@ -28,6 +28,7 @@ MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choic
 - UglyToad.PdfPig für PDF-Extraktion
 - Open XML SDK für PowerPoint-Extraktion
 - WiX Toolset für das Windows-MSI
+- Apple Developer ID, Hardened Runtime und Notarisierung für macOS-PKGs
 
 ## Lokal starten
 
@@ -50,7 +51,7 @@ Alternativ unter Windows: `Start_MediTest.bat` doppelklicken. Die App läuft sta
 
 ## Anmeldung mit Firebase
 
-V4.0.6 speichert keine Nutzerdaten mehr in einer lokalen `meditest.db`. Registrierung, Anmeldung, Passwort-Reset und Passwortänderung laufen über Firebase Authentication. Im Browser werden ID-Token und Refresh-Token nur in `sessionStorage` gehalten und verschwinden beim Schließen der Browser-Sitzung.
+V4.0.7 speichert keine Nutzerdaten mehr in einer lokalen `meditest.db`. Registrierung, Anmeldung, Passwort-Reset und Passwortänderung laufen über Firebase Authentication. Im Browser werden ID-Token und Refresh-Token nur in `sessionStorage` gehalten und verschwinden beim Schließen der Browser-Sitzung.
 
 In Firebase muss unter `Authentication -> Sign-in method` der Anbieter `Email/Password` aktiviert sein. Die Firebase-Web-Konfiguration steht in `appsettings.json`:
 
@@ -103,17 +104,15 @@ Voraussetzungen für Windows-MSI: .NET 8 SDK und WiX Toolset 5.
 
 ```powershell
 cd MediTest
-powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1 -WindowsOnly
 ```
 
-Die fertigen Artefakte liegen danach unter `dist/MediTest-4.0.6/`. Bestehende Releases wie `dist/MediTest-2.0.0/`, `dist/MediTest-3.0.0/`, `dist/MediTest-3.1.1/`, `dist/MediTest-3.1.2/`, `dist/MediTest-3.1.3/`, `dist/MediTest-4.0.0/`, `dist/MediTest-4.0.3/`, `dist/MediTest-4.0.4/` und `dist/MediTest-4.0.5/` bleiben erhalten.
+Die fertigen Artefakte liegen danach unter `dist/MediTest-4.0.7/`. Bestehende Releases wie `dist/MediTest-2.0.0/`, `dist/MediTest-3.0.0/`, `dist/MediTest-3.1.1/`, `dist/MediTest-3.1.2/`, `dist/MediTest-3.1.3/`, `dist/MediTest-4.0.0/`, `dist/MediTest-4.0.3/`, `dist/MediTest-4.0.4/`, `dist/MediTest-4.0.5/` und `dist/MediTest-4.0.6/` bleiben erhalten.
 
-Windows erhält ein MSI. macOS erhält Setup-ZIPs mit `MediTest.app` und `Install_MediTest_macOS.command`, damit die App nach der Installation wie auf Windows per Doppelklick gestartet werden kann.
+Windows erhält ein MSI. macOS erhält signierte und von Apple notarisierte PKG-Installer für Intel und Apple Silicon. Die PKGs installieren `MediTest.app` nach `/Applications`; beim Start wird kein Terminalfenster geöffnet.
 
-Für GitHub-Releases kann das Release-Skript ein `latest.json` erzeugen und die App kann auf der Seite `Einstellungen` nach neuen Versionen suchen:
+Der GitHub-Workflow erzeugt aus den erfolgreich gebauten Windows- und macOS-Artefakten automatisch `latest.json` und `SHA256SUMS.txt`. Die App kann auf der Seite `Einstellungen` nach neuen Versionen suchen.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1 -GitHubRepository "automationTurtle95/MediTest"
-```
+Ein Kunden-Release darf erst veröffentlicht werden, wenn der macOS-Job Signierung, Notarisierung und Gatekeeper-Prüfung erfolgreich abgeschlossen hat.
 
-Weitere Details stehen in [docs/INSTALLATION.md](docs/INSTALLATION.md), [docs/API.md](docs/API.md), [docs/RELEASE.md](docs/RELEASE.md) und [docs/WEBSITE_DISTRIBUTION.md](docs/WEBSITE_DISTRIBUTION.md).
+Weitere Details stehen in [docs/INSTALLATION.md](docs/INSTALLATION.md), [docs/MACOS_SIGNING.md](docs/MACOS_SIGNING.md), [docs/API.md](docs/API.md), [docs/RELEASE.md](docs/RELEASE.md) und [docs/WEBSITE_DISTRIBUTION.md](docs/WEBSITE_DISTRIBUTION.md).

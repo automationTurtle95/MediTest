@@ -5,7 +5,7 @@
 Empfohlen ist das MSI-Paket aus dem Release-Ordner:
 
 ```text
-dist/MediTest-4.0.6/windows/MediTest-Setup-4.0.6-win-x64.msi
+dist/MediTest-4.0.7/windows/MediTest-Setup-4.0.7-win-x64.msi
 ```
 
 Das MSI installiert MediTest benutzerbezogen nach:
@@ -20,37 +20,33 @@ Updates funktionieren über dasselbe MSI: Eine neuere `MediTest-Setup-<Version>-
 
 ## macOS
 
-Auf diesem Windows-Buildhost wird für macOS je Architektur ein Setup-ZIP erzeugt:
+Für Kunden werden zwei native, mit Apple Developer ID signierte und von Apple notarisierte Installer veröffentlicht:
 
 ```text
-dist/MediTest-4.0.6/macos/MediTest-4.0.6-macos-x64-setup.zip
-dist/MediTest-4.0.6/macos/MediTest-4.0.6-macos-arm64-setup.zip
+MediTest-Setup-4.0.7-macos-x64.pkg
+MediTest-Setup-4.0.7-macos-arm64.pkg
 ```
 
-`macos-x64` ist für Intel-Macs, `macos-arm64` für Apple-Silicon-Macs. Beide ZIPs enthalten eine `MediTest.app` und ein Installer-Skript.
+`macos-x64` ist für Intel-Macs, `macos-arm64` für Apple-Silicon-Macs.
 
 Installation:
 
-1. Passendes ZIP entpacken.
-2. `Install_MediTest_macOS.command` ausführen.
-3. Falls macOS die Ausführung blockiert, im Terminal ausführen:
-
-```bash
-chmod +x Install_MediTest_macOS.command
-./Install_MediTest_macOS.command
-```
-
-Das Skript installiert nach:
+1. Passendes `.pkg` herunterladen.
+2. Das Paket doppelklicken.
+3. Die Installation im normalen macOS-Installer bestätigen.
+4. MediTest anschließend aus `/Applications` oder über Spotlight starten.
 
 ```text
-~/Applications/MediTest.app
+/Applications/MediTest.app
 ```
 
-Zusätzlich wird auf dem Desktop ein `MediTest.app`-Link angelegt. Nach der Installation kann MediTest per Doppelklick gestartet werden; die App öffnet automatisch den Browser unter `http://127.0.0.1:55000`.
+Die App startet ohne sichtbares Terminalfenster und öffnet automatisch den Browser unter `http://127.0.0.1:55000`.
 
-Version 4.0.6 legt keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden von V4 ignoriert.
+Der Kunden-Installer wird auf einem macOS-GitHub-Runner erstellt. Dabei werden App und native .NET-Komponenten mit einer `Developer ID Application` signiert, das PKG mit einer `Developer ID Installer` signiert, durch Apples Notarisierungsdienst geprüft und das Notarisierungsticket an das Paket angeheftet. Dadurch kann Gatekeeper den Herausgeber und die Integrität des Pakets prüfen.
 
-Ein natives macOS-`.pkg` kann nur auf macOS mit Apples `pkgbuild` erzeugt werden. Das Release-Skript erkennt `pkgbuild` automatisch und erstellt `.pkg`-Dateien, wenn es auf macOS läuft. Diese installieren `MediTest.app` nach `/Applications`.
+Version 4.0.7 legt keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden von V4 ignoriert.
+
+Die Einrichtung der benötigten Apple-Zertifikate und GitHub-Secrets steht in [MACOS_SIGNING.md](MACOS_SIGNING.md).
 
 ## Updates
 
@@ -66,11 +62,11 @@ Wenn Updates in `appsettings.json` aktiviert sind, prüft MediTest auf der Seite
 }
 ```
 
-Windows-Updates laufen über das neue MSI. macOS-Updates laufen über das neue Setup-ZIP bzw. später über ein natives `.pkg`, wenn der Release-Build auf macOS mit `pkgbuild` erstellt wird.
+Windows-Updates laufen über das neue MSI. macOS-Updates laufen über das neue signierte und notarisierte PKG.
 
 ## Erster Start und Anmeldung
 
-Version 4.0.6 startet mit einer Anmeldeseite. Kontoerstellung, Anmeldung und Passwort-Reset laufen über Firebase Authentication. Angemeldete Nutzer können ihr Passwort in den Einstellungen ändern. Die Sitzung bleibt nur in der aktuellen Browser-Sitzung gespeichert. Nach erfolgreicher Anmeldung wird kurz eine Erfolgsanimation angezeigt. Wenn eine neuere Version verfügbar ist, erscheint nach dem Login ein Update-Popup mit dem passenden Download.
+Version 4.0.7 startet mit einer Anmeldeseite. Kontoerstellung, Anmeldung und Passwort-Reset laufen über Firebase Authentication. Angemeldete Nutzer können ihr Passwort in den Einstellungen ändern. Die Sitzung bleibt nur in der aktuellen Browser-Sitzung gespeichert. Nach erfolgreicher Anmeldung wird kurz eine Erfolgsanimation angezeigt. Wenn eine neuere Version verfügbar ist, erscheint nach dem Login ein Update-Popup mit dem passenden Download.
 
 Vor dem ersten produktiven Test muss in Firebase unter `Authentication -> Sign-in method` der Anbieter `Email/Password` aktiviert sein. Die App erwartet folgende Auth-Konfiguration:
 

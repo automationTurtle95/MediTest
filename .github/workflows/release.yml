@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  windows:
     runs-on: windows-latest
 
     steps:
@@ -28,7 +28,7 @@ jobs:
           dotnet tool install --global wix --version 5.0.2
           "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Build release artifacts
+      - name: Validate version
         shell: pwsh
         working-directory: MediTest
         run: |
@@ -43,40 +43,203 @@ jobs:
             throw "Git-Tag $env:GITHUB_REF_NAME passt nicht zur Projektversion $version. Erwartet: $expectedTag"
           }
 
-          .\scripts\build-release.ps1 -GitHubRepository "${{ github.repository }}"
+      - name: Build Windows artifacts
+        shell: pwsh
+        working-directory: MediTest
+        run: .\scripts\build-release.ps1 -GitHubRepository "${{ github.repository }}" -WindowsOnly
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          if-no-files-found: error
+          path: |
+            MediTest/dist/MediTest-*/windows/MediTest-Setup-*-win-x64.msi
+            MediTest/dist/MediTest-*/windows/MediTest-*-win-x64-portable.zip
+
+  macos:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Validate Apple release secrets
+        shell: bash
+        env:
+          APP_CERTIFICATE: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_P12_BASE64 }}
+          INSTALLER_CERTIFICATE: ${{ secrets.APPLE_DEVELOPER_ID_INSTALLER_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          NOTARY_KEY: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+          NOTARY_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          for value in APP_CERTIFICATE INSTALLER_CERTIFICATE CERTIFICATE_PASSWORD NOTARY_KEY NOTARY_KEY_ID NOTARY_ISSUER_ID; do
+            if [[ -z "${!value}" ]]; then
+              echo "GitHub Secret fuer $value fehlt." >&2
+              exit 1
+            fi
+          done
+
+      - name: Import Developer ID certificates
+        shell: bash
+        env:
+          APP_CERTIFICATE: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_P12_BASE64 }}
+          INSTALLER_CERTIFICATE: ${{ secrets.APPLE_DEVELOPER_ID_INSTALLER_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PASSWORD="${KEYCHAIN_PASSWORD:-$(openssl rand -hex 24)}"
+          KEYCHAIN_PATH="$RUNNER_TEMP/meditest-signing.keychain-db"
+          APP_CERTIFICATE_PATH="$RUNNER_TEMP/developer-id-application.p12"
+          INSTALLER_CERTIFICATE_PATH="$RUNNER_TEMP/developer-id-installer.p12"
+
+          printf '%s' "$APP_CERTIFICATE" | base64 -D > "$APP_CERTIFICATE_PATH"
+          printf '%s' "$INSTALLER_CERTIFICATE" | base64 -D > "$INSTALLER_CERTIFICATE_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$APP_CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security import "$INSTALLER_CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/productbuild -T /usr/bin/productsign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+
+          APP_IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' | head -n 1)"
+          INSTALLER_IDENTITY="$(security find-identity -v "$KEYCHAIN_PATH" | sed -n 's/.*"\(Developer ID Installer:[^"]*\)".*/\1/p' | head -n 1)"
+          if [[ -z "$APP_IDENTITY" || -z "$INSTALLER_IDENTITY" ]]; then
+            echo "Developer-ID-Zertifikate konnten nicht aus dem Keychain gelesen werden." >&2
+            security find-identity -v "$KEYCHAIN_PATH"
+            exit 1
+          fi
+
+          echo "APPLE_DEVELOPER_ID_APPLICATION=$APP_IDENTITY" >> "$GITHUB_ENV"
+          echo "APPLE_DEVELOPER_ID_INSTALLER=$INSTALLER_IDENTITY" >> "$GITHUB_ENV"
+          echo "APPLE_SIGNING_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Prepare notarization API key
+        shell: bash
+        env:
+          NOTARY_KEY: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+          NOTARY_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          NOTARY_KEY_FILE="$RUNNER_TEMP/AuthKey_${NOTARY_KEY_ID}.p8"
+          printf '%s' "$NOTARY_KEY" | base64 -D > "$NOTARY_KEY_FILE"
+          chmod 600 "$NOTARY_KEY_FILE"
+          echo "APPLE_API_KEY_FILE=$NOTARY_KEY_FILE" >> "$GITHUB_ENV"
+          echo "APPLE_API_KEY_ID=$NOTARY_KEY_ID" >> "$GITHUB_ENV"
+          echo "APPLE_API_ISSUER_ID=$NOTARY_ISSUER_ID" >> "$GITHUB_ENV"
+
+      - name: Build, sign and notarize macOS installers
+        shell: bash
+        working-directory: MediTest
+        run: bash ./scripts/build-macos-release.sh
+
+      - name: Upload macOS installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release
+          if-no-files-found: error
+          path: MediTest/dist/MediTest-*/macos/MediTest-Setup-*-macos-*.pkg
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - windows
+      - macos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded-artifacts
+          merge-multiple: true
+
+      - name: Create update manifest and checksums
+        shell: pwsh
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          [xml]$project = Get-Content ./MediTest/MediTest.csproj
+          $version = [string]($project.Project.PropertyGroup | Select-Object -First 1).Version
+          $downloadRoot = Resolve-Path ./downloaded-artifacts
+          $assetRoot = New-Item -ItemType Directory -Force -Path ./release-assets
+
+          $files = [ordered]@{
+            windows = "MediTest-Setup-$version-win-x64.msi"
+            windowsPortable = "MediTest-$version-win-x64-portable.zip"
+            macArm64 = "MediTest-Setup-$version-macos-arm64.pkg"
+            macX64 = "MediTest-Setup-$version-macos-x64.pkg"
+          }
+
+          foreach ($file in $files.Values) {
+            $matches = @(Get-ChildItem -LiteralPath $downloadRoot -Recurse -File -Filter $file)
+            if ($matches.Count -ne 1) {
+              throw "Release-Datei fehlt: $file"
+            }
+            Copy-Item -LiteralPath $matches[0].FullName -Destination (Join-Path $assetRoot $file)
+          }
+
+          function New-Download($platform, $fileName) {
+            $path = Join-Path $assetRoot $fileName
+            $item = Get-Item -LiteralPath $path
+            return [ordered]@{
+              platform = $platform
+              fileName = $fileName
+              url = "https://github.com/$env:REPOSITORY/releases/download/v$version/$fileName"
+              sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash
+              sizeBytes = $item.Length
+            }
+          }
+
+          $manifest = [ordered]@{
+            version = $version
+            releaseDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd")
+            releaseUrl = "https://github.com/$env:REPOSITORY/releases/tag/v$version"
+            notes = "MediTest $version"
+            downloads = [ordered]@{
+              "windows-x64" = New-Download "windows-x64" $files.windows
+              "macos-arm64" = New-Download "macos-arm64" $files.macArm64
+              "macos-x64" = New-Download "macos-x64" $files.macX64
+            }
+          }
+
+          $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $assetRoot "latest.json") -Encoding utf8
+          Get-ChildItem -LiteralPath $assetRoot -File |
+            Where-Object Name -ne "SHA256SUMS.txt" |
+            Sort-Object Name |
+            ForEach-Object {
+              "$((Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash)  $($_.Name)"
+            } | Set-Content -LiteralPath (Join-Path $assetRoot "SHA256SUMS.txt") -Encoding ascii
 
       - name: Publish GitHub release
         shell: pwsh
-        working-directory: MediTest
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $false
-
-          [xml]$project = Get-Content .\MediTest.csproj
+          [xml]$project = Get-Content ./MediTest/MediTest.csproj
           $version = [string]($project.Project.PropertyGroup | Select-Object -First 1).Version
           $tag = "v$version"
-          $releaseRoot = "dist/MediTest-$version"
-          $files = @(
-            "$releaseRoot/windows/MediTest-Setup-$version-win-x64.msi",
-            "$releaseRoot/windows/MediTest-$version-win-x64-portable.zip",
-            "$releaseRoot/macos/MediTest-$version-macos-arm64-setup.zip",
-            "$releaseRoot/macos/MediTest-$version-macos-x64-setup.zip",
-            "$releaseRoot/latest.json",
-            "$releaseRoot/SHA256SUMS.txt"
-          )
-
-          foreach ($file in $files) {
-            if (!(Test-Path -LiteralPath $file)) {
-              throw "Release-Datei fehlt: $file"
-            }
-          }
+          $files = Get-ChildItem ./release-assets -File | Select-Object -ExpandProperty FullName
 
           $null = gh release view $tag 2>$null
-          $releaseExists = $LASTEXITCODE -eq 0
-
-          if ($releaseExists) {
+          if ($LASTEXITCODE -eq 0) {
             gh release upload $tag @files --clobber
           }
           else {
