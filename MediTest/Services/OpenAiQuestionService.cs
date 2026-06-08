@@ -56,8 +56,12 @@ public sealed class OpenAiQuestionService : IQuestionGenerationService
         if (string.IsNullOrWhiteSpace(chatUrl))
             throw new InvalidOperationException("Für den ausgewählten KI-Anbieter fehlt die API-Basis-URL.");
 
-        var models = AiProviderCatalog.GetModelFallbacks(provider, primaryModel);
-        var limits = count <= 10 ? new[] { 22000, 14000 } : new[] { 36000, 24000, 16000 };
+        var models = provider == AiProviderCatalog.FirebaseProvider
+            ? new List<string> { primaryModel }
+            : AiProviderCatalog.GetModelFallbacks(provider, primaryModel);
+        var limits = provider == AiProviderCatalog.FirebaseProvider
+            ? new[] { count <= 10 ? 22000 : 36000 }
+            : count <= 10 ? new[] { 22000, 14000 } : new[] { 36000, 24000, 16000 };
         var allowLocalFallback = _configuration.GetValue<bool>("OpenAI:AllowLocalFallback");
 
         var lastError = "";
@@ -66,7 +70,7 @@ public sealed class OpenAiQuestionService : IQuestionGenerationService
             foreach (var maxChars in limits)
             {
                 var prompt = BuildPrompt(sourceText, count, maxChars);
-                var (ok, questions, errorMessage, retryable) = await TryGenerateViaAiProvider(provider, chatUrl, authToken, model, prompt, cancellationToken);
+                var (ok, questions, errorMessage, retryable) = await TryGenerateViaAiProvider(provider, chatUrl, authToken, model, prompt, count, cancellationToken);
                 if (ok && questions.Count > 0)
                     return questions.Take(count).ToList();
 
@@ -106,11 +110,11 @@ public sealed class OpenAiQuestionService : IQuestionGenerationService
             : string.Empty;
     }
 
-    private async Task<(bool ok, List<GeneratedQuestion> questions, string errorMessage, bool retryable)> TryGenerateViaAiProvider(string provider, string chatUrl, string apiKey, string model, string prompt, CancellationToken cancellationToken)
+    private async Task<(bool ok, List<GeneratedQuestion> questions, string errorMessage, bool retryable)> TryGenerateViaAiProvider(string provider, string chatUrl, string apiKey, string model, string prompt, int questionCount, CancellationToken cancellationToken)
     {
-        var result = await SendChatRequest(provider, chatUrl, apiKey, model, prompt, includeResponseFormat: true, cancellationToken);
+        var result = await SendChatRequest(provider, chatUrl, apiKey, model, prompt, questionCount, includeResponseFormat: true, cancellationToken);
         if (!result.ok && result.errorMessage.Contains("response_format", StringComparison.OrdinalIgnoreCase))
-            return await SendChatRequest(provider, chatUrl, apiKey, model, prompt, includeResponseFormat: false, cancellationToken);
+            return await SendChatRequest(provider, chatUrl, apiKey, model, prompt, questionCount, includeResponseFormat: false, cancellationToken);
 
         return result;
     }
@@ -121,6 +125,7 @@ public sealed class OpenAiQuestionService : IQuestionGenerationService
         string apiKey,
         string model,
         string prompt,
+        int questionCount,
         bool includeResponseFormat,
         CancellationToken cancellationToken)
     {
@@ -143,6 +148,7 @@ public sealed class OpenAiQuestionService : IQuestionGenerationService
             {
                 model,
                 temperature = 0.2,
+                questionCount,
                 response_format = new { type = "json_object" },
                 messages
             })
@@ -150,6 +156,7 @@ public sealed class OpenAiQuestionService : IQuestionGenerationService
             {
                 model,
                 temperature = 0.2,
+                questionCount,
                 messages
             });
 

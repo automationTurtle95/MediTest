@@ -15,6 +15,7 @@ public static class AiProviderCatalog
     public const string DefaultModel = "gemini-2.5-flash";
     public const string FirebaseProvider = "firebase";
     public const string FirebaseFunctionUrl = "https://europe-west3-meditest-12354.cloudfunctions.net/meditestAi";
+    public const string FirebaseUsageFunctionUrl = "https://europe-west3-meditest-12354.cloudfunctions.net/meditestAiUsage";
 
     private static readonly AiProviderOption[] ProviderOptions =
     [

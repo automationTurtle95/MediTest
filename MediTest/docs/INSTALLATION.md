@@ -5,7 +5,7 @@
 Empfohlen ist das MSI-Paket aus dem Release-Ordner:
 
 ```text
-dist/MediTest-4.0.9/windows/MediTest-Setup-4.0.9-win-x64.msi
+dist/MediTest-4.1.0/windows/MediTest-Setup-4.1.0-win-x64.msi
 ```
 
 Das MSI installiert MediTest benutzerbezogen nach:
@@ -23,8 +23,8 @@ Updates funktionieren über dasselbe MSI: Eine neuere `MediTest-Setup-<Version>-
 Solange die Apple-Signing-Secrets noch nicht eingerichtet sind, werden zwei unsignierte Setup-ZIPs veröffentlicht:
 
 ```text
-MediTest-4.0.9-macos-x64-setup.zip
-MediTest-4.0.9-macos-arm64-setup.zip
+MediTest-4.1.0-macos-x64-setup.zip
+MediTest-4.1.0-macos-arm64-setup.zip
 ```
 
 `macos-x64` ist für Intel-Macs, `macos-arm64` für Apple-Silicon-Macs.
@@ -40,7 +40,7 @@ Die App öffnet automatisch den Browser unter `http://127.0.0.1:55000`.
 
 Sobald die Apple-Secrets eingerichtet sind, veröffentlicht derselbe Workflow stattdessen native, signierte und notarisierte PKGs. Diese lassen sich ohne den vorläufigen ZIP-Installationsweg über den normalen macOS-Installer installieren.
 
-Version 4.0.9 legt keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden von V4 ignoriert.
+Version 4.1.0 legt keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden von V4 ignoriert.
 
 Die Einrichtung der benötigten Apple-Zertifikate und GitHub-Secrets steht in [MACOS_SIGNING.md](MACOS_SIGNING.md).
 
@@ -62,7 +62,7 @@ Windows-Updates laufen über das neue MSI. macOS-Updates laufen vorerst über da
 
 ## Erster Start und Anmeldung
 
-Version 4.0.9 startet mit einer Anmeldeseite. Kontoerstellung, Anmeldung und Passwort-Reset laufen über Firebase Authentication. Angemeldete Nutzer können ihr Passwort in den Einstellungen ändern. Die Sitzung bleibt nur in der aktuellen Browser-Sitzung gespeichert. Nach erfolgreicher Anmeldung wird kurz eine Erfolgsanimation angezeigt. Wenn eine neuere Version verfügbar ist, erscheint nach dem Login ein Update-Popup mit dem passenden Download.
+Version 4.1.0 startet mit einer Anmeldeseite. Kontoerstellung, Anmeldung und Passwort-Reset laufen über Firebase Authentication. Angemeldete Nutzer können ihr Passwort in den Einstellungen ändern. Die Sitzung bleibt nur in der aktuellen Browser-Sitzung gespeichert. Nach erfolgreicher Anmeldung wird kurz eine Erfolgsanimation angezeigt. Wenn eine neuere Version verfügbar ist, erscheint nach dem Login ein Update-Popup mit dem passenden Download.
 
 Vor dem ersten produktiven Test muss in Firebase unter `Authentication -> Sign-in method` der Anbieter `Email/Password` aktiviert sein. Die App erwartet folgende Auth-Konfiguration:
 
@@ -105,6 +105,17 @@ Danach in MediTest abmelden und wieder anmelden, damit das neue Token den Admin-
 Die KI-Generierung läuft über die Firebase Function. Dabei bleibt der echte KI-API-Key in Firebase Secret Manager und wird nicht in MediTest gespeichert. Die Firebase-Function-Vorlage liegt im Repository unter `firebase`.
 
 Der Gemini-Key wird einmalig als Firebase Secret `GEMINI_API_KEY` gesetzt. In MediTest selbst gibt es keine API-Key-Eingabe mehr; die App nutzt fest Firebase mit Gemini.
+
+Die Firebase Function erzwingt standardmäßig folgende Kontingente pro Nutzer:
+
+- maximal 25 Fragen pro Generierung
+- maximal 50 angeforderte Fragen pro UTC-Tag
+- maximal 500 angeforderte Fragen pro UTC-Monat
+- maximal 10 Generierungsanfragen pro UTC-Tag
+- 30 Sekunden Mindestabstand zwischen akzeptierten Anfragen
+- maximal 50.000 Prompt-Zeichen pro Anfrage
+
+Die Werte werden als parametrisierte Firebase-Konfiguration mit den Namen `AI_MAX_QUESTIONS_PER_REQUEST`, `AI_DAILY_QUESTION_LIMIT`, `AI_MONTHLY_QUESTION_LIMIT`, `AI_DAILY_REQUEST_LIMIT`, `AI_COOLDOWN_SECONDS` und `AI_MAX_PROMPT_CHARS` verwaltet. Details zur Anpassung und zum Nutzungsprotokoll stehen in `firebase/README.md`. Admins mit Custom Claim `admin=true` sehen die Auswertung im Katalog unter `KI-Nutzung`.
 
 Die Einstellungsseite speichert Profilangaben und Darstellung.
 

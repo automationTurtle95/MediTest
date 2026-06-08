@@ -911,7 +911,7 @@ app.MapPost("/api/catalog/tests/publish", async (CatalogPublishRequest req, Http
             ["difficulty"] = FirestoreValue(difficulty),
             ["questionCount"] = FirestoreIntValue(questions.Count),
             ["schemaVersion"] = FirestoreIntValue(1),
-            ["appVersion"] = FirestoreValue("4.0.9"),
+            ["appVersion"] = FirestoreValue("4.1.0"),
             ["questionsJson"] = FirestoreValue(questionsJson),
             ["createdByUid"] = FirestoreValue(user.UserId),
             ["createdByEmail"] = FirestoreValue(user.Email),
@@ -1133,11 +1133,12 @@ app.MapPost("/api/documents/import-txt", async (HttpRequest request, FirestoreUs
     return Results.Ok(new { documentId = doc.Id, documentName = doc.FileName, importedQuestions = parsed.Count });
 });
 
-app.MapPost("/api/documents/{id:int}/generate-questions", async (int id, GenerateQuestionsRequest req, FirestoreUserDataStore store, IQuestionGenerationService generator, CancellationToken ct) =>
+app.MapPost("/api/documents/{id:int}/generate-questions", async (int id, GenerateQuestionsRequest req, IConfiguration cfg, FirestoreUserDataStore store, IQuestionGenerationService generator, CancellationToken ct) =>
 {
     var settings = await store.GetSettingsAsync(ct);
     var defaultCount = settings.DefaultGenerateQuestionCount;
-    var count = Math.Clamp(req.Count <= 0 ? defaultCount : req.Count, 1, 100);
+    var maxCount = Math.Clamp(cfg.GetValue<int?>("AI:MaxQuestionsPerGeneration") ?? 25, 1, 100);
+    var count = Math.Clamp(req.Count <= 0 ? defaultCount : req.Count, 1, maxCount);
     var doc = await store.GetDocumentAsync(id, ct, includeText: true);
     if (doc == null) return Results.NotFound(new { error = "Dokument nicht gefunden." });
 
@@ -1174,6 +1175,24 @@ app.MapPost("/api/documents/{id:int}/generate-questions", async (int id, Generat
         total = await store.CountQuestionsAsync(id, ct),
         questionIds = addedQuestions.Select(q => q.Id).ToList()
     });
+});
+
+app.MapGet("/api/admin/ai-usage", async (HttpContext context, IConfiguration cfg, IHttpClientFactory httpClientFactory, CancellationToken ct) =>
+{
+    if (!UserCanPublishCatalog(context, cfg))
+        return Results.Json(new { error = "Nur Administratoren dürfen die KI-Nutzung einsehen." }, statusCode: StatusCodes.Status403Forbidden);
+
+    var token = FirebaseBearerToken(context);
+    if (string.IsNullOrWhiteSpace(token)) return Results.Unauthorized();
+
+    var usageUrl = cfg["AI:FirebaseUsageFunctionUrl"];
+    if (string.IsNullOrWhiteSpace(usageUrl)) usageUrl = AiProviderCatalog.FirebaseUsageFunctionUrl;
+
+    using var request = new HttpRequestMessage(HttpMethod.Get, usageUrl);
+    request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {token}");
+    using var response = await httpClientFactory.CreateClient().SendAsync(request, ct);
+    var raw = await response.Content.ReadAsStringAsync(ct);
+    return Results.Content(raw, "application/json; charset=utf-8", Encoding.UTF8, (int)response.StatusCode);
 });
 
 app.MapGet("/api/tests", async (FirestoreUserDataStore store, CancellationToken ct) =>

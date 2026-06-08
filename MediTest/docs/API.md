@@ -66,7 +66,7 @@ Löscht ein Dokument inklusive Fragen und zugehöriger Tests.
 
 `POST /api/documents/{id}/generate-questions`
 
-Generiert neue Fragen aus dem extrahierten Dokumenttext.
+Generiert neue Fragen aus dem extrahierten Dokumenttext. Die lokale API begrenzt eine Generierung standardmäßig auf 25 Fragen; die Firebase Function erzwingt zusätzlich Tages-, Monats- und Anfragekontingente pro Nutzer.
 
 Beispiel:
 
@@ -83,6 +83,12 @@ Exportiert den Fragenpool als TXT-Datei.
 `POST /api/documents/import-txt`
 
 Importiert einen Fragenpool aus einer TXT-Datei.
+
+## KI-Nutzungsübersicht
+
+`GET /api/admin/ai-usage`
+
+Liefert die konfigurierten KI-Kontingente, kumulierte Nutzerstände und die letzten Generierungsversuche. Der Endpunkt leitet die Anfrage an die geschützte Firebase Function `meditestAiUsage` weiter und erfordert den Firebase Custom Claim `admin=true`. Skripttexte und Prompts sind nicht Teil der Antwort.
 
 ## Firestore-Katalog
 
@@ -266,15 +272,15 @@ Prüft die konfigurierte GitHub-Release-Quelle oder `latest.json` und liefert di
 ```json
 {
   "configured": true,
-  "currentVersion": "4.0.9",
+  "currentVersion": "4.1.0",
   "currentPlatform": "windows-x64",
-  "latestVersion": "4.0.9",
+  "latestVersion": "4.1.0",
   "updateAvailable": false,
-  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v4.0.9",
+  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v4.1.0",
   "recommendedDownload": {
     "platform": "windows-x64",
-    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v4.0.9/MediTest-Setup-4.0.9-win-x64.msi",
-    "fileName": "MediTest-Setup-4.0.9-win-x64.msi",
+    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v4.1.0/MediTest-Setup-4.1.0-win-x64.msi",
+    "fileName": "MediTest-Setup-4.1.0-win-x64.msi",
     "sha256": "...",
     "sizeBytes": 42400000
   }

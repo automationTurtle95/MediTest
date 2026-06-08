@@ -36,6 +36,22 @@
       <div class="actions"><button class="primary" type="submit">Veröffentlichen</button></div>
     </form>
   </section>
+
+  <section id="aiUsagePanel" class="card hidden">
+    <div class="recommendation-head">
+      <div>
+        <h2>KI-Nutzung</h2>
+        <p class="muted">Kontingente, Nutzerstände und die letzten Generierungsversuche. Skripttexte und Prompts werden nicht protokolliert.</p>
+      </div>
+      <button type="button" onclick="loadAiUsage()">Aktualisieren</button>
+    </div>
+    <div id="aiUsageMsg" class="hidden"></div>
+    <div id="aiUsageLimits" class="topic-overview"></div>
+    <h3>Nutzer</h3>
+    <div id="aiUsageUsers" class="grid"></div>
+    <h3>Letzte Vorgänge</h3>
+    <div id="aiUsageEvents" class="recommendation-list"></div>
+  </section>
 </main>
 <script src="/js/api.js"></script>
 <script>
@@ -52,6 +68,7 @@ async function loadCatalog(){
   const tests=catalogState.tests||[];
   document.getElementById('adminIntro').classList.add('hidden');
   document.getElementById('adminPanel').classList.add('hidden');
+  document.getElementById('aiUsagePanel').classList.add('hidden');
   if(!tests.length){
     box.innerHTML='<p class="muted">Noch keine Firestore-Tests veröffentlicht.</p>';
   }else{
@@ -74,9 +91,65 @@ async function loadCatalog(){
   if(catalogState.canPublish){
     document.getElementById('adminIntro').classList.remove('hidden');
     document.getElementById('adminPanel').classList.remove('hidden');
-    await loadLocalDocs();
+    document.getElementById('aiUsagePanel').classList.remove('hidden');
+    await Promise.all([loadLocalDocs(),loadAiUsage()]);
   }
   enhanceTooltips();
+}
+
+function usageDate(value){return value?new Date(value).toLocaleString():'-';}
+function usageStatus(value){
+  const labels={started:'läuft',success:'erfolgreich',failed:'fehlgeschlagen',rejected:'abgelehnt'};
+  return labels[value]||value||'-';
+}
+
+async function loadAiUsage(){
+  const msg=document.getElementById('aiUsageMsg');
+  const limitsBox=document.getElementById('aiUsageLimits');
+  const usersBox=document.getElementById('aiUsageUsers');
+  const eventsBox=document.getElementById('aiUsageEvents');
+  status(msg,'Lade KI-Nutzung...');
+  try{
+    const data=await api('/api/admin/ai-usage');
+    const limits=data.limits||{};
+    limitsBox.innerHTML=[
+      `${limits.maxQuestionsPerRequest||0} pro Generierung`,
+      `${limits.dailyQuestionLimit||0} Fragen pro Tag`,
+      `${limits.monthlyQuestionLimit||0} Fragen pro Monat`,
+      `${limits.dailyRequestLimit||0} Anfragen pro Tag`,
+      `${limits.cooldownSeconds||0} Sek. Wartezeit`,
+      `${limits.maxPromptChars||0} max. Prompt-Zeichen`
+    ].map(text=>`<span class="badge">${esc(text)}</span>`).join('');
+
+    const today=new Date().toISOString().slice(0,10);
+    const month=today.slice(0,7);
+    const users=data.users||[];
+    usersBox.innerHTML=users.length?users.map(u=>{
+      const dayQuestions=u.currentDayKey===today?Number(u.currentDayRequestedQuestions)||0:0;
+      const monthQuestions=u.currentMonthKey===month?Number(u.currentMonthRequestedQuestions)||0:0;
+      return `<article class="card doc-card">
+        <span class="badge">${usageStatus(u.lastStatus)}</span>
+        <h3>${esc(u.displayName||u.email||u.uid)}</h3>
+        <p class="muted">${esc(u.email||u.uid)}</p>
+        <p><strong>Heute:</strong> ${dayQuestions} Fragen · <strong>Monat:</strong> ${monthQuestions} Fragen</p>
+        <p><strong>Gesamt:</strong> ${Number(u.totalGeneratedQuestions)||0} erzeugt · ${Number(u.totalRejectedRequests)||0} abgelehnt</p>
+        <p class="muted">Letzte Nutzung: ${usageDate(u.lastRequestedAt)}</p>
+      </article>`;
+    }).join(''):'<p class="muted">Noch keine KI-Nutzung protokolliert.</p>';
+
+    const events=data.events||[];
+    eventsBox.innerHTML=events.length?events.map(e=>`<article class="recommendation">
+      <div class="recommendation-head"><strong>${esc(e.email||e.uid)}</strong><span class="badge">${esc(usageStatus(e.status))}</span></div>
+      <p>${Number(e.requestedQuestions)||0} angefordert · ${Number(e.generatedQuestions)||0} erzeugt · ${esc(e.model||'')}</p>
+      <p class="muted">${usageDate(e.createdAt)}${e.reason?` · ${esc(e.reason)}`:''}${e.durationMs?` · ${Math.round(Number(e.durationMs)/1000)} Sek.`:''}</p>
+    </article>`).join(''):'<p class="muted">Noch keine Vorgänge vorhanden.</p>';
+    status(msg,'KI-Nutzung ist aktuell.','status success');
+  }catch(e){
+    limitsBox.innerHTML='';
+    usersBox.innerHTML='';
+    eventsBox.innerHTML='';
+    status(msg,e.message,'status error');
+  }
 }
 
 async function loadLocalDocs(){

@@ -47,7 +47,7 @@
 <script src="/js/api.js"></script>
 <script>
 let pageSettings={defaultGenerateQuestionCount:25,defaultTestQuestionCount:25};
-function questionCountOptions(selected){const counts=[10,25,50,75,100]; if(!counts.includes(selected))counts.unshift(selected); return counts.map(c=>`<option value="${c}" ${c===selected?'selected':''}>${c}</option>`).join('');}
+function questionCountOptions(selected){const counts=[5,10,15,25]; selected=Math.min(25,Math.max(1,Number(selected)||25)); if(!counts.includes(selected))counts.unshift(selected); return counts.map(c=>`<option value="${c}" ${c===selected?'selected':''}>${c}</option>`).join('');}
 async function loadDocs(){
   const box=document.getElementById('docs');
   const [docs,settings]=await Promise.all([api('/api/documents'),getAppSettings().catch(()=>null)]);

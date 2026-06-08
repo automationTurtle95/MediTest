@@ -40,6 +40,55 @@ Wenn ein Gemini-Key versehentlich in Chat, Logs oder Screenshots gelandet ist, l
    npx firebase-tools deploy --only functions,firestore:rules
    ```
 
+## KI-Nutzung begrenzen
+
+Die Function erzwingt die Kontingente serverseitig und schreibt die Reservierung atomar in Firestore. Dadurch können parallele Anfragen ein Kontingent nicht mehrfach verbrauchen. Standardwerte:
+
+| Parameter | Standard | Bedeutung |
+| --- | ---: | --- |
+| `AI_MAX_QUESTIONS_PER_REQUEST` | 25 | Maximale Fragen pro Generierung |
+| `AI_DAILY_QUESTION_LIMIT` | 50 | Maximale angeforderte Fragen pro Nutzer und UTC-Tag |
+| `AI_MONTHLY_QUESTION_LIMIT` | 500 | Maximale angeforderte Fragen pro Nutzer und UTC-Monat |
+| `AI_DAILY_REQUEST_LIMIT` | 10 | Maximale Generierungsanfragen pro Nutzer und UTC-Tag |
+| `AI_COOLDOWN_SECONDS` | 30 | Mindestabstand zwischen zwei akzeptierten Anfragen |
+| `AI_USAGE_RETENTION_DAYS` | 90 | Aufbewahrungsziel für einzelne Nutzungsereignisse |
+| `AI_MAX_PROMPT_CHARS` | 50000 | Maximale Prompt-Länge pro Anfrage |
+
+Abweichende Werte können vor dem Deploy in `functions/.env.meditest-12354` hinterlegt werden:
+
+```dotenv
+AI_MAX_QUESTIONS_PER_REQUEST=25
+AI_DAILY_QUESTION_LIMIT=50
+AI_MONTHLY_QUESTION_LIMIT=500
+AI_DAILY_REQUEST_LIMIT=10
+AI_COOLDOWN_SECONDS=30
+AI_USAGE_RETENTION_DAYS=90
+AI_MAX_PROMPT_CHARS=50000
+```
+
+Anschließend die Functions erneut bereitstellen:
+
+```powershell
+npx firebase-tools deploy --only functions --project meditest-12354
+```
+
+## KI-Nutzung überwachen
+
+Die Function speichert keine Skripttexte und keine Prompts. Gespeichert werden Nutzer-ID, E-Mail, Zeit, Modell, angeforderte und erzeugte Fragen, Laufzeit und Ergebnisstatus:
+
+- `aiUsage/{uid}`: kumulierter Nutzerstand
+- `aiUsage/{uid}/days/{YYYY-MM-DD}`: Tagesstand
+- `aiUsage/{uid}/months/{YYYY-MM}`: Monatsstand
+- `aiGenerationEvents/{eventId}`: einzelne Generierungsversuche
+
+Admins mit Firebase Custom Claim `admin=true` sehen diese Daten in MediTest unter `Katalog -> KI-Nutzung`. Die Admin-Function `meditestAiUsage` liefert dafür eine geschützte Übersicht. Strukturierte Laufzeitprotokolle sind außerdem in Cloud Logging und über folgenden Befehl verfügbar:
+
+```powershell
+npx firebase-tools functions:log --only meditestAi
+```
+
+Für das automatische Löschen alter Ereignisse kann in Firestore eine TTL-Richtlinie für das Feld `expiresAt` der Collection Group `aiGenerationEvents` aktiviert werden.
+
 ## Genkit Monitoring
 
 Die Function aktiviert Firebase-Telemetrie für Genkit zur Laufzeit und nutzt den benannten Flow `meditestGenerateQuestions`. Nach einem erfolgreichen Request erscheinen Produktions-Traces und Messwerte in Firebase/Google Cloud Observability. Für die vollständige Anzeige müssen im Projekt die Observability-APIs aktiv sein und der Function-Service-Account Schreibrechte haben:
