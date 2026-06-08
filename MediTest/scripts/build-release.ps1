@@ -568,7 +568,7 @@ if (!$WindowsOnly) {
     }
 
     Write-Host ""
-    Write-Host "Hinweis: Diese macOS-ZIPs sind nur fuer interne Tests. Kunden-Releases werden auf macOS signiert, notarisiert und als PKG gebaut." -ForegroundColor Yellow
+    Write-Host "Hinweis: Diese macOS-ZIPs sind nicht mit Apple Developer ID signiert oder notarisiert. Der GitHub-Release muss sie entsprechend kennzeichnen." -ForegroundColor Yellow
 }
 
 Invoke-Step "Entferne Packaging-Zwischenverzeichnisse"

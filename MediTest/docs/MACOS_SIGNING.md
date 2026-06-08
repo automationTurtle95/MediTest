@@ -71,9 +71,9 @@ Wenn `APPLE_KEYCHAIN_PASSWORD` fehlt, erzeugt der Workflow ein temporäres Passw
 Beim Push eines Versionstags:
 
 ```bash
-git tag v4.0.7
+git tag v4.0.8
 git push origin main
-git push origin v4.0.7
+git push origin v4.0.8
 ```
 
 führt GitHub Actions folgende Schritte aus:
@@ -88,14 +88,14 @@ führt GitHub Actions folgende Schritte aus:
 8. Signatur und Gatekeeper-Freigabe prüfen.
 9. Erst danach den GitHub Release veröffentlichen.
 
-Fehlt ein Secret oder lehnt Apple die Notarisierung ab, wird kein Release veröffentlicht.
+Fehlen die Apple-Secrets, veröffentlicht der Workflow vorerst die unsignierten macOS-ZIPs aus dem plattformübergreifenden Fallback-Build. Sobald alle Secrets vorhanden sind, werden sie automatisch durch signierte und notarisierte PKGs ersetzt. Lehnt Apple bei konfigurierten Secrets die Signierung oder Notarisierung ab, schlägt der Release weiterhin fehl.
 
 ## Manuelle Kontrolle auf einem Mac
 
 ```bash
-pkgutil --check-signature MediTest-Setup-4.0.7-macos-arm64.pkg
-xcrun stapler validate MediTest-Setup-4.0.7-macos-arm64.pkg
-spctl --assess --type install --verbose=4 MediTest-Setup-4.0.7-macos-arm64.pkg
+pkgutil --check-signature MediTest-Setup-4.0.8-macos-arm64.pkg
+xcrun stapler validate MediTest-Setup-4.0.8-macos-arm64.pkg
+spctl --assess --type install --verbose=4 MediTest-Setup-4.0.8-macos-arm64.pkg
 ```
 
 Die abschließende Praxiskontrolle sollte auf einem Mac erfolgen, auf dem MediTest zuvor noch nie installiert oder manuell freigegeben wurde.

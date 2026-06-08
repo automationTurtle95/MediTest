@@ -5,7 +5,7 @@
 Empfohlen ist das MSI-Paket aus dem Release-Ordner:
 
 ```text
-dist/MediTest-4.0.7/windows/MediTest-Setup-4.0.7-win-x64.msi
+dist/MediTest-4.0.8/windows/MediTest-Setup-4.0.8-win-x64.msi
 ```
 
 Das MSI installiert MediTest benutzerbezogen nach:
@@ -20,31 +20,27 @@ Updates funktionieren über dasselbe MSI: Eine neuere `MediTest-Setup-<Version>-
 
 ## macOS
 
-Für Kunden werden zwei native, mit Apple Developer ID signierte und von Apple notarisierte Installer veröffentlicht:
+Solange die Apple-Signing-Secrets noch nicht eingerichtet sind, werden zwei unsignierte Setup-ZIPs veröffentlicht:
 
 ```text
-MediTest-Setup-4.0.7-macos-x64.pkg
-MediTest-Setup-4.0.7-macos-arm64.pkg
+MediTest-4.0.8-macos-x64-setup.zip
+MediTest-4.0.8-macos-arm64-setup.zip
 ```
 
 `macos-x64` ist für Intel-Macs, `macos-arm64` für Apple-Silicon-Macs.
 
 Installation:
 
-1. Passendes `.pkg` herunterladen.
-2. Das Paket doppelklicken.
-3. Die Installation im normalen macOS-Installer bestätigen.
-4. MediTest anschließend aus `/Applications` oder über Spotlight starten.
+1. Passendes ZIP herunterladen und entpacken.
+2. `Install_MediTest_macOS.command` ausführen.
+3. Die Sicherheitsabfrage von macOS für die nicht signierte App bestätigen.
+4. MediTest anschließend aus `~/Applications` oder über die Desktop-Verknüpfung starten.
 
-```text
-/Applications/MediTest.app
-```
+Die App öffnet automatisch den Browser unter `http://127.0.0.1:55000`.
 
-Die App startet ohne sichtbares Terminalfenster und öffnet automatisch den Browser unter `http://127.0.0.1:55000`.
+Sobald die Apple-Secrets eingerichtet sind, veröffentlicht derselbe Workflow stattdessen native, signierte und notarisierte PKGs. Diese lassen sich ohne den vorläufigen ZIP-Installationsweg über den normalen macOS-Installer installieren.
 
-Der Kunden-Installer wird auf einem macOS-GitHub-Runner erstellt. Dabei werden App und native .NET-Komponenten mit einer `Developer ID Application` signiert, das PKG mit einer `Developer ID Installer` signiert, durch Apples Notarisierungsdienst geprüft und das Notarisierungsticket an das Paket angeheftet. Dadurch kann Gatekeeper den Herausgeber und die Integrität des Pakets prüfen.
-
-Version 4.0.7 legt keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden von V4 ignoriert.
+Version 4.0.8 legt keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden von V4 ignoriert.
 
 Die Einrichtung der benötigten Apple-Zertifikate und GitHub-Secrets steht in [MACOS_SIGNING.md](MACOS_SIGNING.md).
 
@@ -62,11 +58,11 @@ Wenn Updates in `appsettings.json` aktiviert sind, prüft MediTest auf der Seite
 }
 ```
 
-Windows-Updates laufen über das neue MSI. macOS-Updates laufen über das neue signierte und notarisierte PKG.
+Windows-Updates laufen über das neue MSI. macOS-Updates laufen vorerst über das neue Setup-ZIP und später automatisch über das signierte und notarisierte PKG.
 
 ## Erster Start und Anmeldung
 
-Version 4.0.7 startet mit einer Anmeldeseite. Kontoerstellung, Anmeldung und Passwort-Reset laufen über Firebase Authentication. Angemeldete Nutzer können ihr Passwort in den Einstellungen ändern. Die Sitzung bleibt nur in der aktuellen Browser-Sitzung gespeichert. Nach erfolgreicher Anmeldung wird kurz eine Erfolgsanimation angezeigt. Wenn eine neuere Version verfügbar ist, erscheint nach dem Login ein Update-Popup mit dem passenden Download.
+Version 4.0.8 startet mit einer Anmeldeseite. Kontoerstellung, Anmeldung und Passwort-Reset laufen über Firebase Authentication. Angemeldete Nutzer können ihr Passwort in den Einstellungen ändern. Die Sitzung bleibt nur in der aktuellen Browser-Sitzung gespeichert. Nach erfolgreicher Anmeldung wird kurz eine Erfolgsanimation angezeigt. Wenn eine neuere Version verfügbar ist, erscheint nach dem Login ein Update-Popup mit dem passenden Download.
 
 Vor dem ersten produktiven Test muss in Firebase unter `Authentication -> Sign-in method` der Anbieter `Email/Password` aktiviert sein. Die App erwartet folgende Auth-Konfiguration:
 
