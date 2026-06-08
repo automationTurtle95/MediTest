@@ -449,6 +449,7 @@ const TOOLTIP_BY_TEXT = new Map([
   ['Zur Übersicht', 'Zur Dokumentenübersicht zurückkehren.'],
   ['Importieren', 'Fragen aus der ausgewählten TXT-Datei importieren.'],
   ['Generieren', 'Neue Fragen erzeugen.'],
+  ['Dokument ansehen', 'Gespeicherten Inhalt des hochgeladenen Dokuments anzeigen.'],
   ['Fragen ansehen', 'Fragenliste öffnen und Fragen bearbeiten.'],
   ['Test starten', 'Aus diesem Fragenpool einen neuen Test starten.'],
   ['Export .txt', 'Fragenpool als TXT-Datei exportieren.'],

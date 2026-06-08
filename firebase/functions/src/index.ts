@@ -91,7 +91,7 @@ export const meditestAi = onRequest(
 
     const idToken = readBearerToken(req.header("authorization") ?? "");
     if (!idToken) {
-      res.status(401).json({ error: { message: "Firebase-ID-Token fehlt." } });
+      res.status(401).json({ error: { message: "Anmeldetoken fehlt." } });
       return;
     }
 
@@ -99,7 +99,7 @@ export const meditestAi = onRequest(
     try {
       user = await getAuth().verifyIdToken(idToken);
     } catch {
-      res.status(401).json({ error: { message: "Firebase-ID-Token ist ungültig oder abgelaufen." } });
+      res.status(401).json({ error: { message: "Anmeldetoken ist ungültig oder abgelaufen." } });
       return;
     }
 
@@ -160,7 +160,7 @@ export const meditestAi = onRequest(
     try {
       const output = await generateQuestions(request);
       if (!output) {
-        throw new Error("Gemini hat keine verwertbaren Fragen geliefert.");
+        throw new Error("Der KI-Dienst hat keine verwertbaren Fragen geliefert.");
       }
 
       await finalizeUsage(reservation, "success", output.questions.length);
@@ -187,7 +187,12 @@ export const meditestAi = onRequest(
         requestedQuestions,
         message
       });
-      res.status(502).json({ error: { code: "generation_failed", message } });
+      res.status(502).json({
+        error: {
+          code: "generation_failed",
+          message: "Die KI-Generierung konnte nicht abgeschlossen werden. Bitte versuche es später erneut oder wähle weniger Fragen."
+        }
+      });
     }
   }
 );
@@ -206,7 +211,7 @@ export const meditestAiUsage = onRequest(
 
     const idToken = readBearerToken(req.header("authorization") ?? "");
     if (!idToken) {
-      res.status(401).json({ error: { message: "Firebase-ID-Token fehlt." } });
+      res.status(401).json({ error: { message: "Anmeldetoken fehlt." } });
       return;
     }
 
@@ -217,7 +222,7 @@ export const meditestAiUsage = onRequest(
         return;
       }
     } catch {
-      res.status(401).json({ error: { message: "Firebase-ID-Token ist ungültig oder abgelaufen." } });
+      res.status(401).json({ error: { message: "Anmeldetoken ist ungültig oder abgelaufen." } });
       return;
     }
 
@@ -249,7 +254,7 @@ export const meditestAiStatus = onRequest(
 
     const idToken = readBearerToken(req.header("authorization") ?? "");
     if (!idToken) {
-      res.status(401).json({ error: { message: "Firebase-ID-Token fehlt." } });
+      res.status(401).json({ error: { message: "Anmeldetoken fehlt." } });
       return;
     }
 
@@ -257,7 +262,7 @@ export const meditestAiStatus = onRequest(
     try {
       user = await getAuth().verifyIdToken(idToken);
     } catch {
-      res.status(401).json({ error: { message: "Firebase-ID-Token ist ungültig oder abgelaufen." } });
+      res.status(401).json({ error: { message: "Anmeldetoken ist ungültig oder abgelaufen." } });
       return;
     }
 
@@ -596,7 +601,7 @@ Liefere höchstens ${expectedQuestions} Fragen im vorgegebenen JSON-Schema. Igno
         });
 
         if (!response.output) {
-          throw new Error("Gemini hat keine verwertbaren Fragen geliefert.");
+          throw new Error("Der KI-Dienst hat keine verwertbaren Fragen geliefert.");
         }
 
         return {

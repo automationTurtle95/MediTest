@@ -43,7 +43,7 @@ public sealed class OpenAiQuestionService : IQuestionGenerationService
             authToken.Equals("sk-...", StringComparison.OrdinalIgnoreCase))
         {
             var message = provider == "firebase"
-                ? "Firebase-Token fehlt. Melde dich erneut an, damit MediTest die Firebase Function aufrufen kann."
+                ? "Anmeldedaten fehlen. Melde dich erneut an, damit die KI-Generierung gestartet werden kann."
                 : "KI-Zugangsdaten fehlen oder sind ungültig.";
             throw new InvalidOperationException(message);
         }
@@ -54,7 +54,7 @@ public sealed class OpenAiQuestionService : IQuestionGenerationService
             customApiBaseUrl = AiProviderCatalog.FirebaseFunctionUrl;
         var chatUrl = AiProviderCatalog.BuildChatCompletionsUrl(provider, customApiBaseUrl);
         if (string.IsNullOrWhiteSpace(chatUrl))
-            throw new InvalidOperationException("Für den ausgewählten KI-Anbieter fehlt die API-Basis-URL.");
+            throw new InvalidOperationException("Der KI-Dienst ist nicht vollständig konfiguriert.");
 
         var models = provider == AiProviderCatalog.FirebaseProvider
             ? new List<string> { primaryModel }
@@ -171,11 +171,11 @@ public sealed class OpenAiQuestionService : IQuestionGenerationService
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return (false, new List<GeneratedQuestion>(), "Zeitlimit erreicht: Der KI-Anbieter hat nicht innerhalb von 5 Minuten geantwortet. Versuche weniger Fragen oder ein schnelleres Modell.", false);
+            return (false, new List<GeneratedQuestion>(), "Zeitlimit erreicht: Der KI-Dienst hat nicht innerhalb von 5 Minuten geantwortet. Versuche weniger Fragen.", false);
         }
-        catch (HttpRequestException ex)
+        catch (HttpRequestException)
         {
-            return (false, new List<GeneratedQuestion>(), "Verbindung zum KI-Anbieter fehlgeschlagen: " + ex.Message, true);
+            return (false, new List<GeneratedQuestion>(), "Verbindung zum KI-Dienst fehlgeschlagen. Bitte versuche es später erneut.", true);
         }
 
         using (response)

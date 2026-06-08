@@ -401,6 +401,22 @@ button:disabled,.button:disabled{cursor:not-allowed;opacity:.55;transform:none}
   animation:aiGenerationSpin .8s linear infinite;
 }
 @keyframes aiGenerationSpin{to{transform:rotate(360deg)}}
+.document-preview-modal{width:min(940px,100%);height:min(86vh,900px);display:flex;flex-direction:column}
+.document-preview-modal>.recommendation-head{margin-bottom:4px}
+.document-preview-content{
+  flex:1;
+  min-height:280px;
+  margin:12px 0 0;
+  padding:20px;
+  overflow:auto;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--field-alt);
+  color:var(--text);
+  font:15px/1.65 "Segoe UI",Arial,sans-serif;
+}
 .question-image{
   margin:16px 0;
   border:1px solid var(--border);

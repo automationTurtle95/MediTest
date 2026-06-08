@@ -30,8 +30,10 @@ public sealed partial class TextExtractionService : ITextExtractionService
     {
         var sb = new StringBuilder();
         using var document = PdfDocument.Open(stream);
+        var pageNumber = 0;
         foreach (var page in document.GetPages())
         {
+            sb.AppendLine($"=== Seite {++pageNumber} ===");
             var words = page.GetWords()
                 .OrderByDescending(w => Math.Round(w.BoundingBox.Bottom / 3) * 3)
                 .ThenBy(w => w.BoundingBox.Left)
@@ -72,8 +74,10 @@ public sealed partial class TextExtractionService : ITextExtractionService
         var part = presentation.PresentationPart;
         if (part?.Presentation?.SlideIdList == null) return string.Empty;
 
+        var slideNumber = 0;
         foreach (var slideId in part.Presentation.SlideIdList.Elements<SlideId>())
         {
+            sb.AppendLine($"=== Folie {++slideNumber} ===");
             var relationshipId = slideId.RelationshipId?.Value;
             if (string.IsNullOrWhiteSpace(relationshipId)) continue;
             var rel = part.GetPartById(relationshipId);

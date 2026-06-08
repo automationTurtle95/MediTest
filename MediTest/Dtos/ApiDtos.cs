@@ -1,6 +1,6 @@
 namespace MediTest.Dtos;
 
-public sealed record DocumentDto(int Id, string FileName, DateTime CreatedAt, int QuestionCount, int TextLength);
+public sealed record DocumentDto(int Id, string FileName, string ContentType, DateTime CreatedAt, int QuestionCount, int TextLength);
 public sealed record GenerateQuestionsRequest(int Count);
 
 public sealed record CatalogListDto(

@@ -1,14 +1,16 @@
 # MediTest
 
-MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choice-Fragen aus medizinischen Unterlagen. Version 4.1.1 nutzt Firebase Authentication und speichert alle Nutzerdaten getrennt vom Katalog in Firestore.
+MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choice-Fragen aus medizinischen Unterlagen. Version 4.1.2 nutzt Firebase Authentication und speichert alle Nutzerdaten getrennt vom Katalog in Firestore.
 
 ## Funktionen
 
 - Hochladen von PDF, PPTX und TXT
 - Text-Extraktion aus den hochgeladenen Unterlagen
+- Dokumentansicht für den gespeicherten Inhalt hochgeladener PDF-, PPTX- und TXT-Dateien
 - KI-gestützte Generierung prüfungsnaher MC-Fragen
 - Serverseitige KI-Kontingente mit Tages-/Monatslimit und Admin-Nutzungsübersicht
 - KI-Startfenster mit Auftragsübersicht, persönlichem Restkontingent, Fortschritt und Ergebnislink
+- Anbieterneutrale KI-Hinweise und dauerhaft sichtbare Fehlermeldung mit erneutem Start
 - Manuelles Anlegen, Bearbeiten, Importieren und Exportieren von Fragen, inklusive optionalem Bild pro Frage
 - Tests mit zufällig gemischten Fragen und Antwortoptionen
 - Fortsetzen noch nicht abgegebener Tests
@@ -53,7 +55,7 @@ Alternativ unter Windows: `Start_MediTest.bat` doppelklicken. Die App läuft sta
 
 ## Anmeldung mit Firebase
 
-V4.1.1 speichert keine Nutzerdaten mehr in einer lokalen `meditest.db`. Registrierung, Anmeldung, Passwort-Reset und Passwortänderung laufen über Firebase Authentication. Im Browser werden ID-Token und Refresh-Token nur in `sessionStorage` gehalten und verschwinden beim Schließen der Browser-Sitzung.
+V4.1.2 speichert keine Nutzerdaten mehr in einer lokalen `meditest.db`. Registrierung, Anmeldung, Passwort-Reset und Passwortänderung laufen über Firebase Authentication. Im Browser werden ID-Token und Refresh-Token nur in `sessionStorage` gehalten und verschwinden beim Schließen der Browser-Sitzung.
 
 In Firebase muss unter `Authentication -> Sign-in method` der Anbieter `Email/Password` aktiviert sein. Die Firebase-Web-Konfiguration steht in `appsettings.json`:
 
@@ -111,7 +113,7 @@ cd MediTest
 powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 ```
 
-Die fertigen Artefakte liegen danach unter `dist/MediTest-4.1.1/`. Bestehende Releases wie `dist/MediTest-2.0.0/`, `dist/MediTest-3.0.0/`, `dist/MediTest-3.1.1/`, `dist/MediTest-3.1.2/`, `dist/MediTest-3.1.3/`, `dist/MediTest-4.0.0/`, `dist/MediTest-4.0.3/`, `dist/MediTest-4.0.4/`, `dist/MediTest-4.0.5/`, `dist/MediTest-4.0.6/`, `dist/MediTest-4.0.7/`, `dist/MediTest-4.0.8/`, `dist/MediTest-4.0.9/` und `dist/MediTest-4.1.0/` bleiben erhalten.
+Die fertigen Artefakte liegen danach unter `dist/MediTest-4.1.2/`. Bestehende Releases wie `dist/MediTest-2.0.0/`, `dist/MediTest-3.0.0/`, `dist/MediTest-3.1.1/`, `dist/MediTest-3.1.2/`, `dist/MediTest-3.1.3/`, `dist/MediTest-4.0.0/`, `dist/MediTest-4.0.3/`, `dist/MediTest-4.0.4/`, `dist/MediTest-4.0.5/`, `dist/MediTest-4.0.6/`, `dist/MediTest-4.0.7/`, `dist/MediTest-4.0.8/`, `dist/MediTest-4.0.9/`, `dist/MediTest-4.1.0/` und `dist/MediTest-4.1.1/` bleiben erhalten.
 
 Ohne `-WindowsOnly` entstehen zusätzlich vorläufige, unsignierte macOS-Setup-ZIPs für Intel und Apple Silicon. Sind die Apple-Secrets in GitHub eingerichtet, ersetzt der Release-Workflow diese automatisch durch signierte und notarisierte PKG-Installer.
 

@@ -694,6 +694,22 @@ app.MapGet("/api/documents", async (FirestoreUserDataStore store, CancellationTo
     return Results.Ok(await store.ListDocumentsAsync(ct));
 });
 
+app.MapGet("/api/documents/{id:int}/preview", async (int id, FirestoreUserDataStore store, CancellationToken ct) =>
+{
+    var doc = await store.GetDocumentAsync(id, ct, includeText: true);
+    if (doc == null) return Results.NotFound(new { error = "Dokument nicht gefunden." });
+
+    return Results.Ok(new
+    {
+        doc.Id,
+        doc.FileName,
+        doc.ContentType,
+        doc.CreatedAt,
+        textLength = doc.ExtractedText.Length,
+        text = doc.ExtractedText
+    });
+});
+
 app.MapGet("/api/catalog/tests", async (HttpContext context, IConfiguration cfg, IHttpClientFactory httpClientFactory, FirestoreUserDataStore store, CancellationToken ct) =>
 {
     var client = httpClientFactory.CreateClient();
@@ -911,7 +927,7 @@ app.MapPost("/api/catalog/tests/publish", async (CatalogPublishRequest req, Http
             ["difficulty"] = FirestoreValue(difficulty),
             ["questionCount"] = FirestoreIntValue(questions.Count),
             ["schemaVersion"] = FirestoreIntValue(1),
-            ["appVersion"] = FirestoreValue("4.1.1"),
+            ["appVersion"] = FirestoreValue("4.1.2"),
             ["questionsJson"] = FirestoreValue(questionsJson),
             ["createdByUid"] = FirestoreValue(user.UserId),
             ["createdByEmail"] = FirestoreValue(user.Email),

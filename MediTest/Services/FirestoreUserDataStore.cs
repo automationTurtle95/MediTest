@@ -113,7 +113,7 @@ public sealed class FirestoreUserDataStore
 
         return docs
             .OrderByDescending(d => d.CreatedAt)
-            .Select(d => new DocumentDto(d.Id, d.FileName, d.CreatedAt, d.QuestionCount, d.TextLength))
+            .Select(d => new DocumentDto(d.Id, d.FileName, d.ContentType, d.CreatedAt, d.QuestionCount, d.TextLength))
             .ToList();
     }
 

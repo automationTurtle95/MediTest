@@ -56,6 +56,10 @@ Lädt eine Datei hoch und extrahiert Text. Erlaubt sind `.pdf`, `.pptx` und `.tx
 
 Gibt alle gespeicherten Dokumente bzw. Fragenpools zurück.
 
+`GET /api/documents/{id}/preview`
+
+Liefert Dateiname, Dateityp und den gespeicherten Dokumentinhalt für die Vorschau. Bei PDF- und PPTX-Dateien wird der extrahierte Text angezeigt; das ursprüngliche Seitenlayout kann vereinfacht sein.
+
 `GET /api/documents/{id}/questions`
 
 Gibt alle Fragen eines Dokuments inklusive Antwortoptionen und richtiger Antwort zurück.
@@ -276,15 +280,15 @@ Prüft die konfigurierte GitHub-Release-Quelle oder `latest.json` und liefert di
 ```json
 {
   "configured": true,
-  "currentVersion": "4.1.1",
+  "currentVersion": "4.1.2",
   "currentPlatform": "windows-x64",
-  "latestVersion": "4.1.1",
+  "latestVersion": "4.1.2",
   "updateAvailable": false,
-  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v4.1.1",
+  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v4.1.2",
   "recommendedDownload": {
     "platform": "windows-x64",
-    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v4.1.1/MediTest-Setup-4.1.1-win-x64.msi",
-    "fileName": "MediTest-Setup-4.1.1-win-x64.msi",
+    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v4.1.2/MediTest-Setup-4.1.2-win-x64.msi",
+    "fileName": "MediTest-Setup-4.1.2-win-x64.msi",
     "sha256": "...",
     "sizeBytes": 42400000
   }
