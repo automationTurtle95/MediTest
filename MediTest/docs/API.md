@@ -266,15 +266,15 @@ Prüft die konfigurierte GitHub-Release-Quelle oder `latest.json` und liefert di
 ```json
 {
   "configured": true,
-  "currentVersion": "4.0.8",
+  "currentVersion": "4.0.9",
   "currentPlatform": "windows-x64",
-  "latestVersion": "4.0.8",
+  "latestVersion": "4.0.9",
   "updateAvailable": false,
-  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v4.0.8",
+  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v4.0.9",
   "recommendedDownload": {
     "platform": "windows-x64",
-    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v4.0.8/MediTest-Setup-4.0.8-win-x64.msi",
-    "fileName": "MediTest-Setup-4.0.8-win-x64.msi",
+    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v4.0.9/MediTest-Setup-4.0.9-win-x64.msi",
+    "fileName": "MediTest-Setup-4.0.9-win-x64.msi",
     "sha256": "...",
     "sizeBytes": 42400000
   }

@@ -71,9 +71,9 @@ Wenn `APPLE_KEYCHAIN_PASSWORD` fehlt, erzeugt der Workflow ein temporäres Passw
 Beim Push eines Versionstags:
 
 ```bash
-git tag v4.0.8
+git tag v4.0.9
 git push origin main
-git push origin v4.0.8
+git push origin v4.0.9
 ```
 
 führt GitHub Actions folgende Schritte aus:
@@ -93,9 +93,9 @@ Fehlen die Apple-Secrets, veröffentlicht der Workflow vorerst die unsignierten 
 ## Manuelle Kontrolle auf einem Mac
 
 ```bash
-pkgutil --check-signature MediTest-Setup-4.0.8-macos-arm64.pkg
-xcrun stapler validate MediTest-Setup-4.0.8-macos-arm64.pkg
-spctl --assess --type install --verbose=4 MediTest-Setup-4.0.8-macos-arm64.pkg
+pkgutil --check-signature MediTest-Setup-4.0.9-macos-arm64.pkg
+xcrun stapler validate MediTest-Setup-4.0.9-macos-arm64.pkg
+spctl --assess --type install --verbose=4 MediTest-Setup-4.0.9-macos-arm64.pkg
 ```
 
 Die abschließende Praxiskontrolle sollte auf einem Mac erfolgen, auf dem MediTest zuvor noch nie installiert oder manuell freigegeben wurde.

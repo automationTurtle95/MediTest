@@ -5,7 +5,7 @@
 Empfohlen ist das MSI-Paket aus dem Release-Ordner:
 
 ```text
-dist/MediTest-4.0.8/windows/MediTest-Setup-4.0.8-win-x64.msi
+dist/MediTest-4.0.9/windows/MediTest-Setup-4.0.9-win-x64.msi
 ```
 
 Das MSI installiert MediTest benutzerbezogen nach:
@@ -14,7 +14,7 @@ Das MSI installiert MediTest benutzerbezogen nach:
 %LOCALAPPDATA%\Programs\MediTest
 ```
 
-Es legt Verknüpfungen auf dem Desktop und im Startmenü an. Die Anwendung öffnet beim Start automatisch den Browser unter `http://127.0.0.1:55000`.
+Es legt Verknüpfungen auf dem Desktop und im Startmenü an. Die Anwendung läuft im Hintergrund ohne sichtbares Konsolenfenster und öffnet beim Start automatisch den Browser unter `http://127.0.0.1:55000`.
 
 Updates funktionieren über dasselbe MSI: Eine neuere `MediTest-Setup-<Version>-win-x64.msi` einfach ausführen. Das Setup erkennt die bestehende benutzerbezogene Installation, ersetzt die Programmdateien und behält die Firestore-Nutzerdaten im Firebase-Konto bei. MediTest sollte vor dem Update geschlossen sein, damit Windows die laufende `.exe` ersetzen kann.
 
@@ -23,8 +23,8 @@ Updates funktionieren über dasselbe MSI: Eine neuere `MediTest-Setup-<Version>-
 Solange die Apple-Signing-Secrets noch nicht eingerichtet sind, werden zwei unsignierte Setup-ZIPs veröffentlicht:
 
 ```text
-MediTest-4.0.8-macos-x64-setup.zip
-MediTest-4.0.8-macos-arm64-setup.zip
+MediTest-4.0.9-macos-x64-setup.zip
+MediTest-4.0.9-macos-arm64-setup.zip
 ```
 
 `macos-x64` ist für Intel-Macs, `macos-arm64` für Apple-Silicon-Macs.
@@ -40,7 +40,7 @@ Die App öffnet automatisch den Browser unter `http://127.0.0.1:55000`.
 
 Sobald die Apple-Secrets eingerichtet sind, veröffentlicht derselbe Workflow stattdessen native, signierte und notarisierte PKGs. Diese lassen sich ohne den vorläufigen ZIP-Installationsweg über den normalen macOS-Installer installieren.
 
-Version 4.0.8 legt keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden von V4 ignoriert.
+Version 4.0.9 legt keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden von V4 ignoriert.
 
 Die Einrichtung der benötigten Apple-Zertifikate und GitHub-Secrets steht in [MACOS_SIGNING.md](MACOS_SIGNING.md).
 
@@ -62,7 +62,7 @@ Windows-Updates laufen über das neue MSI. macOS-Updates laufen vorerst über da
 
 ## Erster Start und Anmeldung
 
-Version 4.0.8 startet mit einer Anmeldeseite. Kontoerstellung, Anmeldung und Passwort-Reset laufen über Firebase Authentication. Angemeldete Nutzer können ihr Passwort in den Einstellungen ändern. Die Sitzung bleibt nur in der aktuellen Browser-Sitzung gespeichert. Nach erfolgreicher Anmeldung wird kurz eine Erfolgsanimation angezeigt. Wenn eine neuere Version verfügbar ist, erscheint nach dem Login ein Update-Popup mit dem passenden Download.
+Version 4.0.9 startet mit einer Anmeldeseite. Kontoerstellung, Anmeldung und Passwort-Reset laufen über Firebase Authentication. Angemeldete Nutzer können ihr Passwort in den Einstellungen ändern. Die Sitzung bleibt nur in der aktuellen Browser-Sitzung gespeichert. Nach erfolgreicher Anmeldung wird kurz eine Erfolgsanimation angezeigt. Wenn eine neuere Version verfügbar ist, erscheint nach dem Login ein Update-Popup mit dem passenden Download.
 
 Vor dem ersten produktiven Test muss in Firebase unter `Authentication -> Sign-in method` der Anbieter `Email/Password` aktiviert sein. Die App erwartet folgende Auth-Konfiguration:
 
