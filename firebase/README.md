@@ -81,7 +81,7 @@ Die Function speichert keine Skripttexte und keine Prompts. Gespeichert werden N
 - `aiUsage/{uid}/months/{YYYY-MM}`: Monatsstand
 - `aiGenerationEvents/{eventId}`: einzelne Generierungsversuche
 
-Admins mit Firebase Custom Claim `admin=true` sehen diese Daten in MediTest unter `Katalog -> KI-Nutzung`. Die Admin-Function `meditestAiUsage` liefert dafür eine geschützte Übersicht. Strukturierte Laufzeitprotokolle sind außerdem in Cloud Logging und über folgenden Befehl verfügbar:
+Angemeldete Nutzer erhalten ihr persönliches Restkontingent über `meditestAiStatus`; MediTest zeigt diese Werte im KI-Startfenster vor der Generierung. Admins mit Firebase Custom Claim `admin=true` sehen die gesammelten Daten in MediTest unter `Katalog -> KI-Nutzung`. Die Admin-Function `meditestAiUsage` liefert dafür eine geschützte Übersicht. Strukturierte Laufzeitprotokolle sind außerdem in Cloud Logging und über folgenden Befehl verfügbar:
 
 ```powershell
 npx firebase-tools functions:log --only meditestAi

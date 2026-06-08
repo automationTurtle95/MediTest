@@ -47,15 +47,18 @@
 <script src="/js/api.js"></script>
 <script>
 let pageSettings={defaultGenerateQuestionCount:25,defaultTestQuestionCount:25};
+let pageDocuments=[];
+let aiGenerationContext=null;
 function questionCountOptions(selected){const counts=[5,10,15,25]; selected=Math.min(25,Math.max(1,Number(selected)||25)); if(!counts.includes(selected))counts.unshift(selected); return counts.map(c=>`<option value="${c}" ${c===selected?'selected':''}>${c}</option>`).join('');}
 async function loadDocs(){
   const box=document.getElementById('docs');
   const [docs,settings]=await Promise.all([api('/api/documents'),getAppSettings().catch(()=>null)]);
+  pageDocuments=docs;
   if(settings) pageSettings=settings;
   if(!docs.length){box.innerHTML='<p class="muted">Noch keine Dokumente. Nutze oben den Hochladen-Bereich oder importiere eine TXT-Fragenliste.</p>'; return;}
   const generateDefault=Number(pageSettings.defaultGenerateQuestionCount)||25;
   const testDefault=Number(pageSettings.defaultTestQuestionCount)||25;
-  box.innerHTML=docs.map(d=>`<article class="card doc-card"><span class="badge">${d.questionCount} Fragen</span><h2>${esc(d.fileName)}</h2><p class="muted">${d.textLength} Zeichen · ${new Date(d.createdAt).toLocaleString()}</p><label>Testname (optional)</label><input id="testname-${d.id}" placeholder="z. B. Kardiologie Probe 1"><div class="field-row"><div><label>Fragen generieren</label><select id="count-${d.id}">${questionCountOptions(generateDefault)}</select></div><div><label>Testlänge</label><input id="testcount-${d.id}" type="number" min="1" max="100" step="1" value="${testDefault}"></div></div><div class="actions"><button onclick="generate(${d.id})">Generieren</button><a class="button" href="/pages/questions.html?id=${d.id}">Fragen ansehen</a><button class="primary" onclick="startTest(${d.id})">Test starten</button><button onclick="exportTxt(${d.id})">Export .txt</button><button class="danger" onclick="deleteDocument(${d.id}, '${esc(d.fileName).replace(/'/g, "&#39;")}')">Löschen</button></div></article>`).join('');
+  box.innerHTML=docs.map(d=>`<article class="card doc-card"><span class="badge">${d.questionCount} Fragen</span><h2>${esc(d.fileName)}</h2><p class="muted">${d.textLength} Zeichen · ${new Date(d.createdAt).toLocaleString()}</p><label>Testname (optional)</label><input id="testname-${d.id}" placeholder="z. B. Kardiologie Probe 1"><div class="field-row"><div><label>Fragen generieren</label><select id="count-${d.id}">${questionCountOptions(generateDefault)}</select></div><div><label>Testlänge</label><input id="testcount-${d.id}" type="number" min="1" max="100" step="1" value="${testDefault}"></div></div><div class="actions"><button onclick="openAiGenerationModal(${d.id})">Generieren</button><a class="button" href="/pages/questions.html?id=${d.id}">Fragen ansehen</a><button class="primary" onclick="startTest(${d.id})">Test starten</button><button onclick="exportTxt(${d.id})">Export .txt</button><button class="danger" onclick="deleteDocument(${d.id}, '${esc(d.fileName).replace(/'/g, "&#39;")}')">Löschen</button></div></article>`).join('');
   enhanceTooltips(box);
 }
 function newQuestionsHref(id, questionIds){return `/pages/questions.html?id=${id}&new=${encodeURIComponent((questionIds||[]).join(','))}`;}
@@ -72,7 +75,188 @@ function showGeneratedLink(msg,id,r){
   actions.appendChild(link);
   msg.appendChild(actions);
 }
-async function generate(id){ const msg=document.getElementById('msg'); const count=Number(document.getElementById(`count-${id}`).value)||pageSettings.defaultGenerateQuestionCount||25; status(msg,`Generiere ${count} Fragen... Das kann mehrere Minuten dauern.`); try{const r=await api(`/api/documents/${id}/generate-questions`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({count})}); showGeneratedLink(msg,id,r); await loadDocs();}catch(e){status(msg,e.message,'status error');}}
+function aiSourceSize(chars){
+  const value=Number(chars)||0;
+  return value>=1000?`${(value/1000).toFixed(1).replace('.',',')} Tsd. Zeichen`:`${value} Zeichen`;
+}
+function closeAiGenerationModal(){
+  if(aiGenerationContext?.running)return;
+  if(aiGenerationContext?.cooldownTimer)clearInterval(aiGenerationContext.cooldownTimer);
+  document.getElementById('aiGenerationModal')?.remove();
+  document.removeEventListener('keydown',handleAiGenerationKeydown);
+  aiGenerationContext=null;
+}
+function handleAiGenerationKeydown(event){
+  if(event.key==='Escape')closeAiGenerationModal();
+}
+function aiGenerationBlockReason(){
+  const context=aiGenerationContext;
+  if(!context?.quota)return '';
+  const count=Number(document.getElementById('aiGenerationCount')?.value)||context.count;
+  const limits=context.quota.limits||{};
+  const usage=context.quota.usage||{};
+  if(count>Number(limits.maxQuestionsPerRequest||25))return `Pro Generierung sind höchstens ${limits.maxQuestionsPerRequest} Fragen erlaubt.`;
+  if(Number(usage.cooldownRemainingSeconds)>0)return `Noch ${usage.cooldownRemainingSeconds} Sekunden Wartezeit.`;
+  if(Number(usage.dailyRequestsRemaining)<1)return 'Das tägliche Anfragekontingent ist aufgebraucht.';
+  if(Number(usage.dailyQuestionsRemaining)<count)return `Heute sind nur noch ${usage.dailyQuestionsRemaining} KI-Fragen verfügbar.`;
+  if(Number(usage.monthlyQuestionsRemaining)<count)return `In diesem Monat sind nur noch ${usage.monthlyQuestionsRemaining} KI-Fragen verfügbar.`;
+  return '';
+}
+function updateAiGenerationOverview(){
+  const context=aiGenerationContext;
+  if(!context)return;
+  const count=Number(document.getElementById('aiGenerationCount')?.value)||context.count;
+  context.count=count;
+  const requested=document.getElementById('aiGenerationRequested');
+  if(requested)requested.textContent=String(count);
+  const quotaBox=document.getElementById('aiGenerationQuota');
+  const warning=document.getElementById('aiGenerationWarning');
+  const startButton=document.getElementById('aiGenerationStart');
+  if(context.loadingQuota){
+    quotaBox.innerHTML='<span class="badge">Kontingent wird geladen...</span>';
+    startButton.disabled=true;
+    return;
+  }
+  if(context.quota){
+    const limits=context.quota.limits||{};
+    const usage=context.quota.usage||{};
+    quotaBox.innerHTML=`
+      <div class="ai-generation-metric"><strong>${Number(usage.dailyQuestionsRemaining)||0}</strong><span>Fragen heute verfügbar</span></div>
+      <div class="ai-generation-metric"><strong>${Number(usage.monthlyQuestionsRemaining)||0}</strong><span>Fragen diesen Monat</span></div>
+      <div class="ai-generation-metric"><strong>${Number(usage.dailyRequestsRemaining)||0}</strong><span>Anfragen heute</span></div>
+      <div class="ai-generation-metric"><strong>${Number(limits.maxQuestionsPerRequest)||25}</strong><span>Maximum pro Start</span></div>`;
+  }else{
+    quotaBox.innerHTML='<span class="badge">Kontingentstatus derzeit nicht abrufbar</span>';
+  }
+  const reason=aiGenerationBlockReason();
+  warning.textContent=reason||'Die Erstellung wird erst nach Klick auf „KI-Generierung starten“ ausgeführt.';
+  warning.className=reason?'status error':'status';
+  startButton.disabled=Boolean(reason)||context.running;
+}
+async function loadAiGenerationQuota(){
+  if(!aiGenerationContext)return;
+  aiGenerationContext.loadingQuota=true;
+  updateAiGenerationOverview();
+  try{aiGenerationContext.quota=await api('/api/ai/status');}
+  catch{aiGenerationContext.quota=null;}
+  finally{
+    if(!aiGenerationContext)return;
+    aiGenerationContext.loadingQuota=false;
+    updateAiGenerationOverview();
+    if(aiGenerationContext.cooldownTimer)clearInterval(aiGenerationContext.cooldownTimer);
+    if(Number(aiGenerationContext.quota?.usage?.cooldownRemainingSeconds)>0){
+      aiGenerationContext.cooldownTimer=setInterval(()=>{
+        const usage=aiGenerationContext?.quota?.usage;
+        if(!usage)return;
+        usage.cooldownRemainingSeconds=Math.max(0,Number(usage.cooldownRemainingSeconds)-1);
+        updateAiGenerationOverview();
+        if(!usage.cooldownRemainingSeconds&&aiGenerationContext?.cooldownTimer){
+          clearInterval(aiGenerationContext.cooldownTimer);
+          aiGenerationContext.cooldownTimer=null;
+        }
+      },1000);
+    }
+  }
+}
+function openAiGenerationModal(id){
+  if(document.getElementById('aiGenerationModal'))return;
+  const doc=pageDocuments.find(item=>Number(item.id)===Number(id));
+  if(!doc)return;
+  const selectedCount=Number(document.getElementById(`count-${id}`)?.value)||pageSettings.defaultGenerateQuestionCount||25;
+  aiGenerationContext={id:Number(id),doc,count:selectedCount,quota:null,loadingQuota:true,running:false,cooldownTimer:null};
+  const modal=document.createElement('div');
+  modal.id='aiGenerationModal';
+  modal.className='modal-backdrop';
+  modal.addEventListener('click',event=>{if(event.target===modal)closeAiGenerationModal();});
+  modal.innerHTML=`
+    <section class="modal-panel ai-generation-modal" role="dialog" aria-modal="true" aria-labelledby="aiGenerationTitle">
+      <p class="eyebrow">KI-Fragengenerierung</p>
+      <h2 id="aiGenerationTitle">Generierung vorbereiten</h2>
+      <p class="muted">Prüfe die Übersicht. Die KI wird erst mit dem Start-Button aufgerufen.</p>
+      <div class="ai-generation-document">
+        <div><span class="muted">Fragenpool</span><strong>${esc(doc.fileName)}</strong></div>
+        <div><span class="muted">Quelltext</span><strong>${aiSourceSize(doc.textLength)}</strong></div>
+        <div><span class="muted">Vorhanden</span><strong>${Number(doc.questionCount)||0} Fragen</strong></div>
+      </div>
+      <label for="aiGenerationCount">Anzahl neuer KI-Fragen</label>
+      <select id="aiGenerationCount" onchange="updateAiGenerationOverview()">${questionCountOptions(selectedCount)}</select>
+      <div class="ai-generation-request">
+        <span>Geplanter Auftrag</span>
+        <strong><span id="aiGenerationRequested">${selectedCount}</span> neue Multiple-Choice-Fragen</strong>
+      </div>
+      <h3>Dein aktuelles Kontingent</h3>
+      <div id="aiGenerationQuota" class="ai-generation-metrics"><span class="badge">Kontingent wird geladen...</span></div>
+      <h3>So läuft die Erstellung ab</h3>
+      <ol class="ai-generation-steps">
+        <li>Der Dokumenttext wird an die geschützte Firebase Function übertragen.</li>
+        <li>Gemini erstellt prüfungsnahe Fragen mit jeweils fünf Antwortmöglichkeiten.</li>
+        <li>Die Antworten werden geprüft und anschließend im Fragenpool gespeichert.</li>
+      </ol>
+      <p class="muted">Die Nutzungsstatistik speichert Anzahl, Zeitpunkt und Ergebnis, jedoch keine Skripttexte oder Prompts.</p>
+      <div id="aiGenerationWarning" class="status">Die Erstellung wird erst nach dem Start ausgeführt.</div>
+      <div id="aiGenerationProgress" class="ai-generation-progress hidden" aria-live="polite">
+        <span class="ai-generation-spinner" aria-hidden="true"></span>
+        <div><strong>KI-Fragen werden erstellt</strong><span>Das kann mehrere Minuten dauern. Bitte lasse dieses Fenster geöffnet.</span></div>
+      </div>
+      <div id="aiGenerationResult" class="hidden"></div>
+      <div class="actions">
+        <button id="aiGenerationStart" class="primary" type="button" onclick="startAiGeneration()" disabled>KI-Generierung starten</button>
+        <button id="aiGenerationCancel" type="button" onclick="closeAiGenerationModal()">Abbrechen</button>
+      </div>
+    </section>`;
+  document.body.appendChild(modal);
+  document.addEventListener('keydown',handleAiGenerationKeydown);
+  enhanceTooltips(modal);
+  document.getElementById('aiGenerationStart')?.focus();
+  loadAiGenerationQuota();
+}
+async function startAiGeneration(){
+  const context=aiGenerationContext;
+  if(!context||context.running)return;
+  updateAiGenerationOverview();
+  const reason=aiGenerationBlockReason();
+  if(reason)return;
+  const count=Number(document.getElementById('aiGenerationCount')?.value)||context.count;
+  context.running=true;
+  const startButton=document.getElementById('aiGenerationStart');
+  const cancelButton=document.getElementById('aiGenerationCancel');
+  const countSelect=document.getElementById('aiGenerationCount');
+  const progress=document.getElementById('aiGenerationProgress');
+  const warning=document.getElementById('aiGenerationWarning');
+  startButton.disabled=true;
+  cancelButton.disabled=true;
+  countSelect.disabled=true;
+  progress.classList.remove('hidden');
+  warning.classList.add('hidden');
+  const msg=document.getElementById('msg');
+  status(msg,`Generiere ${count} Fragen... Das kann mehrere Minuten dauern.`);
+  try{
+    const result=await api(`/api/documents/${context.id}/generate-questions`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({count})});
+    context.running=false;
+    progress.classList.add('hidden');
+    await loadDocs();
+    showGeneratedLink(msg,context.id,result);
+    const ids=Array.isArray(result.questionIds)?result.questionIds:[];
+    const resultBox=document.getElementById('aiGenerationResult');
+    resultBox.className='status success';
+    resultBox.innerHTML=`<strong>Generierung abgeschlossen</strong><p>${Number(result.added)||0} neue Fragen wurden gespeichert. Der Fragenpool enthält jetzt ${Number(result.total)||0} Fragen.</p>${ids.length?`<div class="actions"><a class="button primary" href="${newQuestionsHref(context.id,ids)}">Neue Fragen ansehen</a></div>`:''}`;
+    document.getElementById('aiGenerationTitle').textContent='Generierung abgeschlossen';
+    startButton.classList.add('hidden');
+    cancelButton.disabled=false;
+    cancelButton.textContent='Schließen';
+    cancelButton.setAttribute('aria-label','Schließen');
+    cancelButton.title='Fenster schließen';
+  }catch(error){
+    context.running=false;
+    progress.classList.add('hidden');
+    countSelect.disabled=false;
+    cancelButton.disabled=false;
+    warning.textContent=error.message;
+    warning.className='status error';
+    status(msg,error.message,'status error');
+    await loadAiGenerationQuota();
+  }
+}
 async function startTest(id){ const msg=document.getElementById('msg'); status(msg,'Starte Test...'); const testName=document.getElementById(`testname-${id}`)?.value?.trim()||null; const questionCount=Number(document.getElementById(`testcount-${id}`)?.value)||pageSettings.defaultTestQuestionCount||25; try{const t=await api('/api/tests/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({documentId:id,questionCount,testName})}); sessionStorage.setItem('currentTest',JSON.stringify(t)); location.href=`/pages/test.html?id=${t.testSessionId}`;}catch(e){status(msg,e.message,'status error');}}
 async function exportTxt(id){ try{await downloadApiFile(`/api/documents/${id}/export-txt`,'MediTest-Fragenexport.txt');}catch(e){status(document.getElementById('msg'),e.message,'status error');} }
 async function deleteDocument(id, name){ const msg=document.getElementById('msg'); if(!confirm(`Dokument wirklich löschen?\n\n${name}\n\nAlle Fragen und Tests dazu werden ebenfalls gelöscht.`)) return; status(msg,'Lösche Dokument...'); try{await api(`/api/documents/${id}`,{method:'DELETE'}); status(msg,'Dokument gelöscht.','status success'); await loadDocs();}catch(e){status(msg,e.message,'status error');}}

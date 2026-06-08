@@ -911,7 +911,7 @@ app.MapPost("/api/catalog/tests/publish", async (CatalogPublishRequest req, Http
             ["difficulty"] = FirestoreValue(difficulty),
             ["questionCount"] = FirestoreIntValue(questions.Count),
             ["schemaVersion"] = FirestoreIntValue(1),
-            ["appVersion"] = FirestoreValue("4.1.0"),
+            ["appVersion"] = FirestoreValue("4.1.1"),
             ["questionsJson"] = FirestoreValue(questionsJson),
             ["createdByUid"] = FirestoreValue(user.UserId),
             ["createdByEmail"] = FirestoreValue(user.Email),
@@ -1189,6 +1189,21 @@ app.MapGet("/api/admin/ai-usage", async (HttpContext context, IConfiguration cfg
     if (string.IsNullOrWhiteSpace(usageUrl)) usageUrl = AiProviderCatalog.FirebaseUsageFunctionUrl;
 
     using var request = new HttpRequestMessage(HttpMethod.Get, usageUrl);
+    request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {token}");
+    using var response = await httpClientFactory.CreateClient().SendAsync(request, ct);
+    var raw = await response.Content.ReadAsStringAsync(ct);
+    return Results.Content(raw, "application/json; charset=utf-8", Encoding.UTF8, (int)response.StatusCode);
+});
+
+app.MapGet("/api/ai/status", async (HttpContext context, IConfiguration cfg, IHttpClientFactory httpClientFactory, CancellationToken ct) =>
+{
+    var token = FirebaseBearerToken(context);
+    if (string.IsNullOrWhiteSpace(token)) return Results.Unauthorized();
+
+    var statusUrl = cfg["AI:FirebaseStatusFunctionUrl"];
+    if (string.IsNullOrWhiteSpace(statusUrl)) statusUrl = AiProviderCatalog.FirebaseStatusFunctionUrl;
+
+    using var request = new HttpRequestMessage(HttpMethod.Get, statusUrl);
     request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {token}");
     using var response = await httpClientFactory.CreateClient().SendAsync(request, ct);
     var raw = await response.Content.ReadAsStringAsync(ct);

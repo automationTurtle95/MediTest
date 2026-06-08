@@ -16,6 +16,7 @@ public static class AiProviderCatalog
     public const string FirebaseProvider = "firebase";
     public const string FirebaseFunctionUrl = "https://europe-west3-meditest-12354.cloudfunctions.net/meditestAi";
     public const string FirebaseUsageFunctionUrl = "https://europe-west3-meditest-12354.cloudfunctions.net/meditestAiUsage";
+    public const string FirebaseStatusFunctionUrl = "https://europe-west3-meditest-12354.cloudfunctions.net/meditestAiStatus";
 
     private static readonly AiProviderOption[] ProviderOptions =
     [

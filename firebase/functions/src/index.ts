@@ -235,6 +235,71 @@ export const meditestAiUsage = onRequest(
   }
 );
 
+export const meditestAiStatus = onRequest(
+  {
+    invoker: "public",
+    memory: "256MiB",
+    timeoutSeconds: 30
+  },
+  async (req, res) => {
+    if (req.method !== "GET") {
+      res.set("Allow", "GET").status(405).json({ error: { message: "Nur GET-Anfragen sind erlaubt." } });
+      return;
+    }
+
+    const idToken = readBearerToken(req.header("authorization") ?? "");
+    if (!idToken) {
+      res.status(401).json({ error: { message: "Firebase-ID-Token fehlt." } });
+      return;
+    }
+
+    let user;
+    try {
+      user = await getAuth().verifyIdToken(idToken);
+    } catch {
+      res.status(401).json({ error: { message: "Firebase-ID-Token ist ungültig oder abgelaufen." } });
+      return;
+    }
+
+    const limits = getLimitConfiguration();
+    const now = Timestamp.now();
+    const dayKey = now.toDate().toISOString().slice(0, 10);
+    const monthKey = dayKey.slice(0, 7);
+    const summaryRef = db.collection("aiUsage").doc(user.uid);
+    const [summarySnapshot, daySnapshot, monthSnapshot] = await Promise.all([
+      summaryRef.get(),
+      summaryRef.collection("days").doc(dayKey).get(),
+      summaryRef.collection("months").doc(monthKey).get()
+    ]);
+    const summary = summarySnapshot.data() ?? {};
+    const day = daySnapshot.data() ?? {};
+    const month = monthSnapshot.data() ?? {};
+    const dailyQuestionsUsed = numberField(day, "requestedQuestions");
+    const dailyRequestsUsed = numberField(day, "requestCount");
+    const monthlyQuestionsUsed = numberField(month, "requestedQuestions");
+    const lastAcceptedAtMs = timestampMillis(summary.lastAcceptedAt);
+    const cooldownRemainingSeconds = lastAcceptedAtMs
+      ? Math.max(0, Math.ceil((lastAcceptedAtMs + limits.cooldownSeconds * 1000 - now.toMillis()) / 1000))
+      : 0;
+
+    res.status(200).json({
+      limits,
+      usage: {
+        dailyQuestionsUsed,
+        dailyQuestionsRemaining: Math.max(0, limits.dailyQuestionLimit - dailyQuestionsUsed),
+        dailyRequestsUsed,
+        dailyRequestsRemaining: Math.max(0, limits.dailyRequestLimit - dailyRequestsUsed),
+        monthlyQuestionsUsed,
+        monthlyQuestionsRemaining: Math.max(0, limits.monthlyQuestionLimit - monthlyQuestionsUsed),
+        cooldownRemainingSeconds,
+        totalGeneratedQuestions: numberField(summary, "totalGeneratedQuestions"),
+        lastStatus: typeof summary.lastStatus === "string" ? summary.lastStatus : "",
+        updatedAt: serializeFirestoreValue(summary.updatedAt)
+      }
+    });
+  }
+);
+
 async function reserveUsage(
   user: { uid: string; email?: string; name?: string },
   request: GenerateQuestionsRequest,

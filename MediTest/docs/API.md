@@ -66,7 +66,7 @@ Löscht ein Dokument inklusive Fragen und zugehöriger Tests.
 
 `POST /api/documents/{id}/generate-questions`
 
-Generiert neue Fragen aus dem extrahierten Dokumenttext. Die lokale API begrenzt eine Generierung standardmäßig auf 25 Fragen; die Firebase Function erzwingt zusätzlich Tages-, Monats- und Anfragekontingente pro Nutzer.
+Generiert neue Fragen aus dem extrahierten Dokumenttext. Die lokale API begrenzt eine Generierung standardmäßig auf 25 Fragen; die Firebase Function erzwingt zusätzlich Tages-, Monats- und Anfragekontingente pro Nutzer. In der Oberfläche wird vorher ein KI-Startfenster mit Auftrag, persönlichem Kontingent und Startbutton angezeigt.
 
 Beispiel:
 
@@ -85,6 +85,10 @@ Exportiert den Fragenpool als TXT-Datei.
 Importiert einen Fragenpool aus einer TXT-Datei.
 
 ## KI-Nutzungsübersicht
+
+`GET /api/ai/status`
+
+Liefert das persönliche KI-Restkontingent des angemeldeten Nutzers für das Startfenster der KI-Generierung. Der Endpunkt leitet die Anfrage an die geschützte Firebase Function `meditestAiStatus` weiter.
 
 `GET /api/admin/ai-usage`
 
@@ -272,15 +276,15 @@ Prüft die konfigurierte GitHub-Release-Quelle oder `latest.json` und liefert di
 ```json
 {
   "configured": true,
-  "currentVersion": "4.1.0",
+  "currentVersion": "4.1.1",
   "currentPlatform": "windows-x64",
-  "latestVersion": "4.1.0",
+  "latestVersion": "4.1.1",
   "updateAvailable": false,
-  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v4.1.0",
+  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v4.1.1",
   "recommendedDownload": {
     "platform": "windows-x64",
-    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v4.1.0/MediTest-Setup-4.1.0-win-x64.msi",
-    "fileName": "MediTest-Setup-4.1.0-win-x64.msi",
+    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v4.1.1/MediTest-Setup-4.1.1-win-x64.msi",
+    "fileName": "MediTest-Setup-4.1.1-win-x64.msi",
     "sha256": "...",
     "sizeBytes": 42400000
   }
