@@ -315,6 +315,114 @@ function qs(name){ return new URLSearchParams(location.search).get(name); }
 function status(el, msg, type='status'){ el.className = type; el.textContent = msg; el.classList.remove('hidden'); }
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+const HELP_BY_HEADING = new Map([
+  ['Multiple-Choice-Tests aus Skripten, PDFs und Folien.', 'MediTest erstellt aus deinen Unterlagen Fragenpools. Daraus kannst du Tests starten, Ergebnisse auswerten und schwierige Themen gezielt wiederholen.'],
+  ['Dokumente & Fragenpools', 'Hier verwaltest du alle Lernunterlagen und Fragenpools. Du kannst Dateien hochladen, Fragen importieren oder generieren und anschließend einen Test starten.'],
+  ['Unterlage hochladen', 'Wähle eine PDF-, PPTX- oder TXT-Datei. MediTest extrahiert den Text und legt daraus einen neuen Fragenpool an.'],
+  ['Fragen aus TXT importieren', 'Importiere bereits vorbereitete Multiple-Choice-Fragen aus einer TXT-Datei. Der optionale Name wird als Name des Fragenpools verwendet.'],
+  ['Gespeicherte Dokumente', 'Jede Karte ist ein Fragenpool. Lege die Anzahl der Fragen fest, generiere neue Fragen, bearbeite den Pool oder starte direkt einen Test.'],
+  ['Frage manuell erstellen', 'Erstelle eine eigene Frage mit fünf Antwortmöglichkeiten. Wähle die richtige Antwort und ergänze bei Bedarf Thema, Erklärung und Bild.'],
+  ['Gespeicherte Tests', 'Hier findest du offene und abgeschlossene Tests. Offene Tests lassen sich fortsetzen, abgeschlossene Tests können erneut ausgewertet werden.'],
+  ['Gesamtstatistik', 'Die Statistik fasst deine abgeschlossenen Tests zusammen. Über die Auswahl kannst du alle Ergebnisse oder nur einen bestimmten Test anzeigen.'],
+  ['Testverlauf', 'Der Verlauf zeigt die Ergebnisse deiner letzten Tests. Ein Klick auf einen Balken öffnet die jeweilige Auswertung.'],
+  ['Visuelle Auswertung', 'Die Diagramme zeigen Bestehensquote, Antwortgenauigkeit, Prüfungsstand und Leistung nach Schwierigkeitsgrad.'],
+  ['Lernempfehlung', 'MediTest erkennt Themen mit erhöhter Fehlerquote und schlägt passende Fragen für die Wiederholung vor.'],
+  ['Themenanalyse', 'Hier werden Antworten nach Themen gruppiert. Eine hohe Fehlerquote weist auf Themen hin, die du gezielt wiederholen solltest.'],
+  ['Schwache Fragen', 'Hier erscheinen Fragen, die wiederholt falsch beantwortet wurden. Öffne sie, um Inhalt und Erklärung noch einmal zu prüfen.'],
+  ['Einstellungen', 'Passe Profildaten und Darstellung an, prüfe auf Updates oder ändere dein Passwort.'],
+  ['Profil', 'Diese Angaben werden für dein Profil gespeichert und unter anderem im exportierten Testprotokoll verwendet.'],
+  ['Programm', 'Wähle eine helle, dunkle oder automatisch an dein Betriebssystem angepasste Darstellung.'],
+  ['Updates', 'Prüfe, ob eine neuere MediTest-Version verfügbar ist, und öffne bei Bedarf den passenden Download.'],
+  ['Sicherheit', 'Ändere das Passwort deines angemeldeten Kontos. Dafür wird zuerst dein aktuelles Passwort geprüft.'],
+  ['Firestore-Katalog', 'Im Katalog findest du veröffentlichte, themenspezifische Tests, die du in dein MediTest-Konto herunterladen kannst.'],
+  ['Verfügbare Tests', 'Wähle einen Katalogtest aus. Je nach Freischaltung kannst du ihn direkt herunterladen, gratis aktivieren oder kaufen.'],
+  ['Admin', 'Administratoren können einen vorhandenen Fragenpool mit Titel, Beschreibung, Thema und Schwierigkeit im Katalog veröffentlichen.'],
+  ['Lizenz und Premium', 'Hier siehst du den Status deiner Testphase oder Premium-Lizenz und verwaltest Abo-, Katalog- und Freischaltcodes.'],
+  ['Katalogtests', 'Katalogtests können einzeln freigeschaltet und anschließend in die eigenen Fragenpools heruntergeladen werden.'],
+  ['Katalog-Code', 'Ein gültiger Gratis-Code schaltet genau einen noch gesperrten Katalogtest deiner Wahl frei.'],
+  ['Code einlösen', 'Gib hier einen Premium-Code ein, um MediTest und alle Katalogtests für dieses Konto freizuschalten.'],
+  ['Auswertung', 'Die Auswertung zeigt Ergebnis, Bestehensstatus und alle Antworten. Falsche Antworten werden mit der richtigen Lösung und Erklärung ergänzt.'],
+  ['Fehlerschwerpunkte', 'Diese Übersicht gruppiert deine Fehler nach Thema, damit du erkennst, welche Inhalte du zuerst wiederholen solltest.']
+]);
+
+const HELP_BY_HEADING_PREFIX = [
+  ['Fragen:', 'Hier siehst du alle Fragen dieses Fragenpools. Richtige Antworten sind markiert und jede Frage kann direkt bearbeitet werden.'],
+  ['Thema:', 'Hier siehst du alle gespeicherten Fragen zu diesem Thema, auch wenn sie aus unterschiedlichen Fragenpools stammen.'],
+  ['Themenanalyse', HELP_BY_HEADING.get('Themenanalyse')]
+];
+
+let helpPopoverId = 0;
+
+function plainHeadingText(heading) {
+  const clone = heading.cloneNode(true);
+  clone.querySelectorAll('.help-tip').forEach(el => el.remove());
+  return (clone.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
+function helpTextForHeading(heading) {
+  const text = plainHeadingText(heading);
+  return HELP_BY_HEADING.get(text)
+    || HELP_BY_HEADING_PREFIX.find(([prefix]) => text.startsWith(prefix))?.[1]
+    || '';
+}
+
+function positionHelpPopover(wrapper) {
+  const icon = wrapper.querySelector('.help-icon');
+  const popover = wrapper.querySelector('.help-popover');
+  if (!icon || !popover) return;
+
+  const iconRect = icon.getBoundingClientRect();
+  const popoverRect = popover.getBoundingClientRect();
+  const gap = 9;
+  const edge = 12;
+  const left = Math.min(
+    window.innerWidth - popoverRect.width - edge,
+    Math.max(edge, iconRect.left + iconRect.width / 2 - popoverRect.width / 2)
+  );
+  const below = iconRect.bottom + gap;
+  const top = below + popoverRect.height <= window.innerHeight - edge
+    ? below
+    : Math.max(edge, iconRect.top - popoverRect.height - gap);
+
+  popover.style.left = `${left}px`;
+  popover.style.top = `${top}px`;
+}
+
+function addHelpIcon(heading, text) {
+  if (!heading || !text || heading.querySelector(':scope > .help-tip')) return;
+
+  const wrapper = document.createElement('span');
+  wrapper.className = 'help-tip';
+
+  const icon = document.createElement('button');
+  const popover = document.createElement('span');
+  const id = `help-popover-${++helpPopoverId}`;
+  icon.className = 'help-icon';
+  icon.type = 'button';
+  icon.textContent = 'i';
+  icon.setAttribute('aria-label', `Hilfe zu ${plainHeadingText(heading)}`);
+  icon.setAttribute('aria-describedby', id);
+  popover.id = id;
+  popover.className = 'help-popover';
+  popover.setAttribute('role', 'tooltip');
+  popover.textContent = text;
+
+  wrapper.append(icon, popover);
+  wrapper.addEventListener('mouseenter', () => positionHelpPopover(wrapper));
+  wrapper.addEventListener('focusin', () => positionHelpPopover(wrapper));
+  icon.addEventListener('keydown', event => {
+    if (event.key === 'Escape') icon.blur();
+  });
+  heading.appendChild(wrapper);
+}
+
+function enhanceHelp(root = document) {
+  const headings = [];
+  if (root.matches?.('h1,h2')) headings.push(root);
+  root.querySelectorAll?.('h1,h2').forEach(heading => headings.push(heading));
+  headings.forEach(heading => addHelpIcon(heading, helpTextForHeading(heading)));
+}
+
 const TOOLTIP_BY_TEXT = new Map([
   ['Dokumente', 'Unterlagen hochladen, Fragenpools verwalten und Tests starten.'],
   ['Katalog', 'Themenspezifische Firestore-Tests herunterladen.'],
@@ -396,6 +504,8 @@ function applyTooltip(el, text) {
 }
 
 function enhanceTooltips(root = document) {
+  enhanceHelp(root);
+
   TOOLTIP_BY_SELECTOR.forEach(([selector, text]) => {
     root.querySelectorAll?.(selector).forEach(el => applyTooltip(el, text));
   });
@@ -407,6 +517,7 @@ function enhanceTooltips(root = document) {
 }
 
 window.enhanceTooltips = enhanceTooltips;
+window.enhanceHelp = enhanceHelp;
 
 const SETTINGS_CACHE_KEY = 'meditest-settings';
 let appSettingsPromise = null;
