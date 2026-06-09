@@ -1,6 +1,6 @@
 # MediTest
 
-MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choice-Fragen aus medizinischen Unterlagen. Version 4.1.3 nutzt Firebase Authentication und speichert alle Nutzerdaten getrennt vom Katalog in Firestore.
+MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choice-Fragen aus medizinischen Unterlagen. Version 4.1.4 nutzt Firebase Authentication und speichert alle Nutzerdaten getrennt vom Katalog in Firestore.
 
 ## Funktionen
 
@@ -21,7 +21,7 @@ MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choic
 - Anmeldeseite mit E-Mail-Bestätigung, Firebase-Kontoerstellung, Passwort-Reset und browserbasierter Sitzung
 - Vollständige Kontolöschung inklusive privater Firestore- und KI-Nutzungsdaten
 - Firestore-Katalog mit sichtbaren Preisen, Kaufübersicht und Admin-Veröffentlichung
-- Lizenzmodell vorbereitet: 7 Tage Testphase, 5,99 EUR/Monat, Katalogzugang, systemweit einmaliger Gratis-Katalog-Code und Premium-Freischaltung per Code
+- Lizenzmodell vorbereitet: 7 Tage Testphase, 5,99 EUR/Monat, Katalogzugang, einmaliger Gratis-Katalog-Code pro Benutzer und Premium-Freischaltung per Code
 
 ## Technik
 
@@ -56,7 +56,7 @@ Alternativ unter Windows: `Start_MediTest.bat` doppelklicken. Die App läuft sta
 
 ## Anmeldung mit Firebase
 
-V4.1.3 speichert keine Nutzerdaten mehr in einer lokalen `meditest.db`. Registrierung, Anmeldung, E-Mail-Bestätigung, Passwort-Reset und Passwortänderung laufen über Firebase Authentication. Nach der Registrierung muss die E-Mail-Adresse bestätigt werden; erst danach ist die Anmeldung in MediTest möglich. Im Browser werden ID-Token und Refresh-Token nur in `sessionStorage` gehalten und verschwinden beim Schließen der Browser-Sitzung.
+V4.1.4 speichert keine Nutzerdaten mehr in einer lokalen `meditest.db`. Registrierung, Anmeldung, E-Mail-Bestätigung, Passwort-Reset und Passwortänderung laufen über Firebase Authentication. Nach der Registrierung muss die E-Mail-Adresse bestätigt werden; erst danach ist die Anmeldung in MediTest möglich. Im Browser werden ID-Token und Refresh-Token nur in `sessionStorage` gehalten und verschwinden beim Schließen der Browser-Sitzung.
 
 In Firebase muss unter `Authentication -> Sign-in method` der Anbieter `Email/Password` aktiviert sein. Die Firebase-Web-Konfiguration steht in `appsettings.json`:
 
@@ -99,7 +99,7 @@ Die Seite `Lizenz` zeigt Testphase, Abo-Status, Katalogzugang und Premium-Code-E
 - 7 Tage Testphase pro Firebase-Nutzer ab erster erfolgreicher Anmeldung
 - 5,99 EUR pro Monat für das MediTest-Abo
 - Premium-Codes werden serverseitig über `Billing:PremiumCodeHashes` konfiguriert und schalten alle Katalogtests frei
-- Gratis-Katalog-Codes werden über `Billing:FreeCatalogCodeHashes` konfiguriert, serverseitig atomar eingelöst und können systemweit nur einmal verwendet werden
+- Gratis-Katalog-Codes werden über `Billing:FreeCatalogCodeHashes` konfiguriert und können von jedem Benutzerkonto genau einmal verwendet werden
 
 Die App enthält Checkout-Endpunkte und Konfiguration (`Billing:*`), aber keine echten Zahlungsdaten. Für produktiven Verkauf sollte ein Zahlungsanbieter wie Stripe Checkout genutzt werden; Webhooks müssen danach den Abo-Status bzw. gekaufte Katalogtest-IDs serverseitig in Firestore oder als Firebase Custom Claims setzen. Eingelöste Premium- und Gratis-Katalog-Codes werden im Firebase-Nutzerkonto unter `billing/license` gespeichert.
 
@@ -114,7 +114,7 @@ cd MediTest
 powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 ```
 
-Die fertigen Artefakte liegen danach unter `dist/MediTest-4.1.3/`. Bestehende Releases wie `dist/MediTest-2.0.0/`, `dist/MediTest-3.0.0/`, `dist/MediTest-3.1.1/`, `dist/MediTest-3.1.2/`, `dist/MediTest-3.1.3/`, `dist/MediTest-4.0.0/`, `dist/MediTest-4.0.3/`, `dist/MediTest-4.0.4/`, `dist/MediTest-4.0.5/`, `dist/MediTest-4.0.6/`, `dist/MediTest-4.0.7/`, `dist/MediTest-4.0.8/`, `dist/MediTest-4.0.9/`, `dist/MediTest-4.1.0/`, `dist/MediTest-4.1.1/` und `dist/MediTest-4.1.2/` bleiben erhalten.
+Die fertigen Artefakte liegen danach unter `dist/MediTest-4.1.4/`. Bestehende Releases wie `dist/MediTest-2.0.0/`, `dist/MediTest-3.0.0/`, `dist/MediTest-3.1.1/`, `dist/MediTest-3.1.2/`, `dist/MediTest-3.1.3/`, `dist/MediTest-4.0.0/`, `dist/MediTest-4.0.3/`, `dist/MediTest-4.0.4/`, `dist/MediTest-4.0.5/`, `dist/MediTest-4.0.6/`, `dist/MediTest-4.0.7/`, `dist/MediTest-4.0.8/`, `dist/MediTest-4.0.9/`, `dist/MediTest-4.1.0/`, `dist/MediTest-4.1.1/`, `dist/MediTest-4.1.2/` und `dist/MediTest-4.1.3/` bleiben erhalten.
 
 Ohne `-WindowsOnly` entstehen zusätzlich vorläufige, unsignierte macOS-Setup-ZIPs für Intel und Apple Silicon. Sind die Apple-Secrets in GitHub eingerichtet, ersetzt der Release-Workflow diese automatisch durch signierte und notarisierte PKG-Installer.
 

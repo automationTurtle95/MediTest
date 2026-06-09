@@ -48,7 +48,7 @@ E-Mail-Bestätigung, Passwort-Reset und Passwortänderung laufen direkt im Brows
 
 `DELETE /api/account`
 
-Ruft die geschützte Function `meditestDeleteAccount` auf. Sie entfernt das Firebase-Authentication-Konto, alle Dokumente unter `users/{uid}`, persönliche KI-Nutzungsstände und KI-Ereignisse. Einmalig verwendete Katalogcodes bleiben ohne persönliche Nutzerzuordnung als verbraucht markiert.
+Ruft die geschützte Function `meditestDeleteAccount` auf. Sie entfernt das Firebase-Authentication-Konto, alle Dokumente unter `users/{uid}`, persönliche KI-Nutzungsstände und KI-Ereignisse.
 
 ## Dokumente
 
@@ -166,7 +166,7 @@ Prüft einen Premium-Code aus `{ "code": "..." }`. Ein gültiger Code setzt den 
 
 `POST /api/license/redeem-catalog-code`
 
-Prüft einen Gratis-Katalog-Code aus `{ "code": "..." }`. Die geschützte Function `meditestRedeemCatalogCode` reserviert den Code atomar. Jeder konfigurierte Code kann dadurch systemweit nur einmal verwendet werden. Der nächste gesperrte Katalogtest wird für das einlösende Konto dauerhaft freigeschaltet.
+Prüft einen Gratis-Katalog-Code aus `{ "code": "..." }`. Die geschützte Function `meditestRedeemCatalogCode` aktualisiert den Lizenzstatus atomar. Jedes Benutzerkonto kann einen Gratis-Katalog-Code genau einmal verwenden. Derselbe gültige Code darf von unterschiedlichen Benutzerkonten jeweils einmal eingelöst werden.
 
 `GET /api/questions/by-topic?topic={topic}`
 
@@ -284,15 +284,15 @@ Prüft die konfigurierte GitHub-Release-Quelle oder `latest.json` und liefert di
 ```json
 {
   "configured": true,
-  "currentVersion": "4.1.3",
+  "currentVersion": "4.1.4",
   "currentPlatform": "windows-x64",
-  "latestVersion": "4.1.3",
+  "latestVersion": "4.1.4",
   "updateAvailable": false,
-  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v4.1.3",
+  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v4.1.4",
   "recommendedDownload": {
     "platform": "windows-x64",
-    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v4.1.3/MediTest-Setup-4.1.3-win-x64.msi",
-    "fileName": "MediTest-Setup-4.1.3-win-x64.msi",
+    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v4.1.4/MediTest-Setup-4.1.4-win-x64.msi",
+    "fileName": "MediTest-Setup-4.1.4-win-x64.msi",
     "sha256": "...",
     "sizeBytes": 42400000
   }

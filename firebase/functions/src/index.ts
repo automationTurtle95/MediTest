@@ -360,18 +360,10 @@ export const meditestRedeemCatalogCode = onRequest(
       return;
     }
 
-    const redemptionRef = db.collection("catalogCodeRedemptions").doc(codeHash);
     const licenseRef = db.doc(`users/${user.uid}/billing/license`);
     try {
       await db.runTransaction(async (transaction) => {
-        const [redemptionSnapshot, licenseSnapshot] = await Promise.all([
-          transaction.get(redemptionRef),
-          transaction.get(licenseRef)
-        ]);
-        if (redemptionSnapshot.exists) {
-          throw new Error("catalog_code_already_redeemed");
-        }
-
+        const licenseSnapshot = await transaction.get(licenseRef);
         const now = Timestamp.now();
         const state = parseJsonObject((licenseSnapshot.data() ?? {}).dataJson);
         const alreadyUsed = state.freeCatalogCreditActive === true ||
@@ -386,22 +378,12 @@ export const meditestRedeemCatalogCode = onRequest(
         state.freeCatalogCreditCodeHash = codeHash;
         state.updatedAt = now.toDate().toISOString();
 
-        transaction.create(redemptionRef, {
-          codeHash,
-          redeemedByUid: user.uid,
-          redeemedByEmail: user.email ?? "",
-          redeemedAt: now
-        });
         transaction.set(licenseRef, {
           dataJson: JSON.stringify(state)
         }, { merge: true });
       });
     } catch (error) {
       const code = error instanceof Error ? error.message : "";
-      if (code === "catalog_code_already_redeemed") {
-        res.status(409).json({ error: { message: "Dieser Gratis-Katalog-Code wurde bereits verwendet." } });
-        return;
-      }
       if (code === "account_already_used_catalog_code") {
         res.status(409).json({ error: { message: "Für dieses Konto wurde bereits ein Gratis-Katalog-Code verwendet." } });
         return;
@@ -447,16 +429,12 @@ export const meditestDeleteAccount = onRequest(
     try {
       const userRef = db.collection("users").doc(user.uid);
       const aiUsageRef = db.collection("aiUsage").doc(user.uid);
-      const [eventsSnapshot, redemptionsSnapshot] = await Promise.all([
-        db.collection("aiGenerationEvents").where("uid", "==", user.uid).get(),
-        db.collection("catalogCodeRedemptions").where("redeemedByUid", "==", user.uid).get()
-      ]);
+      const eventsSnapshot = await db.collection("aiGenerationEvents").where("uid", "==", user.uid).get();
 
       await Promise.all([
         db.recursiveDelete(userRef),
         db.recursiveDelete(aiUsageRef),
-        deleteDocuments(eventsSnapshot.docs.map((doc) => doc.ref)),
-        anonymizeCatalogRedemptions(redemptionsSnapshot.docs.map((doc) => doc.ref))
+        deleteDocuments(eventsSnapshot.docs.map((doc) => doc.ref))
       ]);
       await getAuth().deleteUser(user.uid);
     } catch (error) {
@@ -883,18 +861,6 @@ async function deleteDocuments(refs: Array<FirebaseFirestore.DocumentReference>)
   for (let offset = 0; offset < refs.length; offset += 400) {
     const batch = db.batch();
     refs.slice(offset, offset + 400).forEach((ref) => batch.delete(ref));
-    await batch.commit();
-  }
-}
-
-async function anonymizeCatalogRedemptions(refs: Array<FirebaseFirestore.DocumentReference>): Promise<void> {
-  for (let offset = 0; offset < refs.length; offset += 400) {
-    const batch = db.batch();
-    refs.slice(offset, offset + 400).forEach((ref) => batch.update(ref, {
-      redeemedByUid: "",
-      redeemedByEmail: "",
-      accountDeletedAt: Timestamp.now()
-    }));
     await batch.commit();
   }
 }
