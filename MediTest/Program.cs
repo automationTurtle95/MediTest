@@ -230,7 +230,9 @@ static FirebaseConfigDto? ToFirebaseConfigDto(IConfiguration cfg)
         (cfg["Auth:Firebase:StorageBucket"] ?? string.Empty).Trim(),
         (cfg["Auth:Firebase:MessagingSenderId"] ?? string.Empty).Trim(),
         (cfg["Auth:Firebase:AppId"] ?? string.Empty).Trim(),
-        (cfg["Auth:Firebase:MeasurementId"] ?? string.Empty).Trim());
+        (cfg["Auth:Firebase:MeasurementId"] ?? string.Empty).Trim(),
+        cfg.GetValue<bool?>("Auth:Firebase:GoogleEnabled") ?? false,
+        cfg.GetValue<bool?>("Auth:Firebase:AppleEnabled") ?? false);
 }
 
 static AuthUserDto ToFirebaseUserDto(ClaimsPrincipal principal, IConfiguration cfg)
@@ -969,7 +971,7 @@ app.MapPost("/api/catalog/tests/publish", async (CatalogPublishRequest req, Http
             ["difficulty"] = FirestoreValue(difficulty),
             ["questionCount"] = FirestoreIntValue(questions.Count),
             ["schemaVersion"] = FirestoreIntValue(1),
-            ["appVersion"] = FirestoreValue("4.1.4"),
+            ["appVersion"] = FirestoreValue("4.1.5"),
             ["questionsJson"] = FirestoreValue(questionsJson),
             ["createdByUid"] = FirestoreValue(user.UserId),
             ["createdByEmail"] = FirestoreValue(user.Email),

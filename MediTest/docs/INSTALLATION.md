@@ -5,7 +5,7 @@
 Empfohlen ist das MSI-Paket aus dem Release-Ordner:
 
 ```text
-dist/MediTest-4.1.4/windows/MediTest-Setup-4.1.4-win-x64.msi
+dist/MediTest-4.1.5/windows/MediTest-Setup-4.1.5-win-x64.msi
 ```
 
 Das MSI installiert MediTest benutzerbezogen nach:
@@ -23,8 +23,8 @@ Updates funktionieren über dasselbe MSI: Eine neuere `MediTest-Setup-<Version>-
 Solange die Apple-Signing-Secrets noch nicht eingerichtet sind, werden zwei unsignierte Setup-ZIPs veröffentlicht:
 
 ```text
-MediTest-4.1.4-macos-x64-setup.zip
-MediTest-4.1.4-macos-arm64-setup.zip
+MediTest-4.1.5-macos-x64-setup.zip
+MediTest-4.1.5-macos-arm64-setup.zip
 ```
 
 `macos-x64` ist für Intel-Macs, `macos-arm64` für Apple-Silicon-Macs.
@@ -40,7 +40,7 @@ Die App öffnet automatisch den Browser unter `http://127.0.0.1:55000`.
 
 Sobald die Apple-Secrets eingerichtet sind, veröffentlicht derselbe Workflow stattdessen native, signierte und notarisierte PKGs. Diese lassen sich ohne den vorläufigen ZIP-Installationsweg über den normalen macOS-Installer installieren.
 
-Version 4.1.4 legt keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden von V4 ignoriert.
+Version 4.1.5 legt keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden von V4 ignoriert.
 
 Die Einrichtung der benötigten Apple-Zertifikate und GitHub-Secrets steht in [MACOS_SIGNING.md](MACOS_SIGNING.md).
 
@@ -62,9 +62,9 @@ Windows-Updates laufen über das neue MSI. macOS-Updates laufen vorerst über da
 
 ## Erster Start und Anmeldung
 
-Version 4.1.4 startet mit einer Anmeldeseite. Nach der Kontoerstellung sendet Firebase eine Bestätigungs-E-Mail. Erst nach Bestätigung der Adresse ist die Anmeldung möglich. Passwort-Reset und Passwortänderung laufen ebenfalls über Firebase Authentication. Die Sitzung bleibt nur in der aktuellen Browser-Sitzung gespeichert.
+Version 4.1.5 startet mit einer Anmeldeseite. Die Anmeldung ist über E-Mail/Passwort, Google oder Apple möglich. Nach einer Kontoerstellung mit E-Mail/Passwort sendet Firebase eine Bestätigungs-E-Mail; erst nach Bestätigung der Adresse ist diese Anmeldemethode nutzbar. Passwort-Reset und Passwortänderung gelten nur für E-Mail/Passwort-Konten. Die Sitzung bleibt nur in der aktuellen Browser-Sitzung gespeichert.
 
-Vor dem ersten produktiven Test muss in Firebase unter `Authentication -> Sign-in method` der Anbieter `Email/Password` aktiviert sein. Die App erwartet folgende Auth-Konfiguration:
+Vor dem ersten produktiven Test müssen in Firebase unter `Authentication -> Sign-in method` die gewünschten Anbieter aktiviert sein. Die App erwartet folgende Auth-Konfiguration:
 
 ```json
 {
@@ -75,11 +75,15 @@ Vor dem ersten produktiven Test muss in Firebase unter `Authentication -> Sign-i
     "Firebase": {
       "ApiKey": "...",
       "AuthDomain": "meditest-12354.firebaseapp.com",
-      "ProjectId": "meditest-12354"
+      "ProjectId": "meditest-12354",
+      "GoogleEnabled": true,
+      "AppleEnabled": true
     }
   }
 }
 ```
+
+Trage in Firebase unter `Authentication -> Settings -> Authorized domains` mindestens `127.0.0.1` und `localhost` ein. Ohne `127.0.0.1` verweigert Firebase das Provider-Popup der lokal unter `http://127.0.0.1:55000` laufenden App. Für Apple müssen außerdem Apple Developer Program, Service ID, Team ID, Key ID und privater Schlüssel entsprechend der Firebase-Anleitung konfiguriert sein.
 
 Die lokale App speichert keine Passwörter, Passwort-Hashes, Anmeldesitzungen, Profilangaben, Dokumente, Fragen oder Tests in `meditest.db`. Passwort-Reset-Mails werden über Firebase Authentication versendet; die Passwortänderung für angemeldete Nutzer läuft ebenfalls über Firebase.
 
@@ -121,7 +125,7 @@ Vor dem eigentlichen Start zeigt MediTest beim Klick auf `Generieren` ein KI-Sta
 
 Hochgeladene PDF-, PPTX- und TXT-Dateien erhalten in der Dokumentübersicht die Aktion `Dokument ansehen`. Die Vorschau zeigt den für die Verarbeitung gespeicherten Inhalt. Bei PDF und PowerPoint wird der extrahierte Text nach Seiten beziehungsweise Folien gegliedert; das ursprüngliche Layout wird nicht dauerhaft gespeichert.
 
-Die Einstellungsseite speichert Profilangaben und Darstellung. Die bestätigte Konto-E-Mail ist nicht als Profilwert änderbar. Der Bereich `Konto löschen` entfernt nach doppelter Bestätigung das Authentication-Konto und alle zugehörigen privaten Daten.
+Die Einstellungsseite speichert Profilangaben und Darstellung. Die bestätigte Konto-E-Mail ist nicht als Profilwert änderbar. Bei Google- und Apple-Konten wird keine lokale Passwortänderung angeboten. Der Bereich `Konto löschen` entfernt nach doppelter Bestätigung das Authentication-Konto und alle zugehörigen privaten Daten. Bei Apple verlangt MediTest vorher eine erneute Apple-Anmeldung und widerruft das erhaltene Zugriffstoken.
 
 ## Datenhaltung
 

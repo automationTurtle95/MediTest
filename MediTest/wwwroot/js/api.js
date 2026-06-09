@@ -1,6 +1,7 @@
 const AUTH_SESSION_KEY = 'meditest-firebase-session';
 const AUTH_CONFIG_KEY = 'meditest-auth-config';
 let authConfigPromise = null;
+let firebaseWebSdkPromise = null;
 
 function readAuthSession() {
   try { return JSON.parse(sessionStorage.getItem(AUTH_SESSION_KEY) || 'null'); }
@@ -66,6 +67,49 @@ function firebaseErrorMessage(code) {
   return raw || 'Firebase-Anmeldung fehlgeschlagen.';
 }
 
+function firebaseProviderErrorMessage(error, providerLabel) {
+  const code = String(error?.code || error?.message || '');
+  if (code.includes('popup-closed-by-user') || code.includes('cancelled-popup-request')) return `${providerLabel}-Anmeldung wurde abgebrochen.`;
+  if (code.includes('popup-blocked')) return `Das Anmeldefenster für ${providerLabel} wurde vom Browser blockiert. Erlaube Popups für MediTest.`;
+  if (code.includes('unauthorized-domain')) return 'Diese lokale MediTest-Adresse ist in Firebase noch nicht als autorisierte Domain eingetragen.';
+  if (code.includes('operation-not-allowed')) return `${providerLabel}-Anmeldung ist in Firebase noch nicht vollständig aktiviert.`;
+  if (code.includes('account-exists-with-different-credential')) return 'Für diese E-Mail-Adresse besteht bereits ein Konto mit einer anderen Anmeldemethode.';
+  if (code.includes('network-request-failed')) return `Die Verbindung zur ${providerLabel}-Anmeldung ist fehlgeschlagen.`;
+  if (code.includes('user-disabled')) return 'Dieses Benutzerkonto wurde deaktiviert.';
+  return error?.message || `${providerLabel}-Anmeldung fehlgeschlagen.`;
+}
+
+async function getFirebaseWebSdk() {
+  if (firebaseWebSdkPromise) return firebaseWebSdkPromise;
+  firebaseWebSdkPromise = (async () => {
+    const [appSdk, authSdk, cfg] = await Promise.all([
+      import('https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js'),
+      import('https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js'),
+      getAuthConfig()
+    ]);
+    const firebase = cfg?.firebase;
+    if (!firebase?.apiKey || !firebase?.projectId) throw new Error('Firebase ist noch nicht konfiguriert.');
+    const appConfig = {
+      apiKey: firebase.apiKey,
+      authDomain: firebase.authDomain,
+      projectId: firebase.projectId,
+      storageBucket: firebase.storageBucket,
+      messagingSenderId: firebase.messagingSenderId,
+      appId: firebase.appId,
+      measurementId: firebase.measurementId
+    };
+    const app = appSdk.getApps().length ? appSdk.getApp() : appSdk.initializeApp(appConfig);
+    const auth = authSdk.getAuth(app);
+    auth.languageCode = 'de';
+    await authSdk.setPersistence(auth, authSdk.inMemoryPersistence);
+    return { ...authSdk, auth };
+  })().catch(error => {
+    firebaseWebSdkPromise = null;
+    throw error;
+  });
+  return firebaseWebSdkPromise;
+}
+
 async function firebaseAuthRequest(action, payload) {
   const cfg = await getAuthConfig();
   const apiKey = cfg?.firebase?.apiKey;
@@ -126,6 +170,7 @@ function saveFirebaseSession(auth, displayName = '') {
     licenseStatus: 'Aktiv',
     authMode: 'firebase',
     emailVerified: auth.emailVerified === true,
+    providerId: auth.providerId || 'password',
     expiresAt: new Date(expiresAt).toISOString()
   };
   writeAuthSession({
@@ -143,7 +188,7 @@ async function registerWithFirebase(payload) {
     password: payload.password,
     returnSecureToken: true
   });
-  let auth = created;
+  let auth = { ...created, providerId: 'password' };
   if (payload.displayName) {
     const updated = await firebaseAuthRequest('update', {
       idToken: created.idToken,
@@ -179,9 +224,76 @@ async function loginWithFirebase(payload) {
     throw error;
   }
   auth.emailVerified = true;
+  auth.providerId = 'password';
   saveFirebaseSession(auth, auth.displayName);
   try { return await api('/api/auth/me'); }
   catch (err) { clearAuthSession(); throw err; }
+}
+
+async function loginWithFirebaseProvider(providerId) {
+  const sdk = await getFirebaseWebSdk();
+  const providerLabel = providerId === 'apple.com' ? 'Apple' : 'Google';
+  let provider;
+  if (providerId === 'apple.com') {
+    provider = new sdk.OAuthProvider('apple.com');
+    provider.addScope('email');
+    provider.addScope('name');
+    provider.setCustomParameters({ locale: 'de' });
+  } else {
+    provider = new sdk.GoogleAuthProvider();
+    provider.addScope('email');
+    provider.addScope('profile');
+    provider.setCustomParameters({ prompt: 'select_account' });
+  }
+
+  try {
+    const result = await sdk.signInWithPopup(sdk.auth, provider);
+    const user = result.user;
+    const [idToken, tokenResult] = await Promise.all([
+      user.getIdToken(true),
+      user.getIdTokenResult()
+    ]);
+    const expiresIn = Math.max(60, Math.floor((new Date(tokenResult.expirationTime).getTime() - Date.now()) / 1000));
+    saveFirebaseSession({
+      idToken,
+      refreshToken: user.refreshToken,
+      expiresIn,
+      localId: user.uid,
+      email: user.email || '',
+      displayName: user.displayName || '',
+      emailVerified: user.emailVerified,
+      providerId
+    }, user.displayName || '');
+    try { return await api('/api/auth/me'); }
+    catch (error) { clearAuthSession(); throw error; }
+  } catch (error) {
+    clearAuthSession();
+    throw new Error(firebaseProviderErrorMessage(error, providerLabel));
+  }
+}
+
+async function prepareFirebaseProviderAccountDeletion() {
+  const session = readAuthSession();
+  if (session?.user?.providerId !== 'apple.com') return;
+
+  const sdk = await getFirebaseWebSdk();
+  const provider = new sdk.OAuthProvider('apple.com');
+  provider.addScope('email');
+  provider.addScope('name');
+  provider.setCustomParameters({ locale: 'de' });
+  try {
+    const result = await sdk.signInWithPopup(sdk.auth, provider);
+    if (result.user.uid !== session.user.userId) {
+      throw new Error('Das bestätigte Apple-Konto stimmt nicht mit dem angemeldeten MediTest-Konto überein.');
+    }
+    const credential = sdk.OAuthProvider.credentialFromResult(result);
+    if (!credential?.accessToken) {
+      throw new Error('Das Apple-Zugriffstoken konnte nicht widerrufen werden.');
+    }
+    await sdk.revokeAccessToken(sdk.auth, credential.accessToken);
+  } catch (error) {
+    throw new Error(firebaseProviderErrorMessage(error, 'Apple'));
+  }
 }
 
 async function resendFirebaseEmailVerification(payload) {
@@ -236,7 +348,7 @@ async function changeFirebasePassword(payload) {
     password: payload.newPassword,
     returnSecureToken: true
   });
-  saveFirebaseSession({ ...auth, ...updated, email: updated.email || email, localId: updated.localId || auth.localId }, session.user?.displayName || '');
+  saveFirebaseSession({ ...auth, ...updated, email: updated.email || email, localId: updated.localId || auth.localId, providerId: 'password' }, session.user?.displayName || '');
   try { await api('/api/auth/me'); } catch {}
   return { message: 'Passwort wurde geändert.' };
 }
@@ -323,6 +435,8 @@ async function downloadApiFile(path, fallbackName = 'MediTest.pdf') {
 window.getAuthConfig = getAuthConfig;
 window.registerWithFirebase = registerWithFirebase;
 window.loginWithFirebase = loginWithFirebase;
+window.loginWithFirebaseProvider = loginWithFirebaseProvider;
+window.prepareFirebaseProviderAccountDeletion = prepareFirebaseProviderAccountDeletion;
 window.resendFirebaseEmailVerification = resendFirebaseEmailVerification;
 window.sendFirebasePasswordReset = sendFirebasePasswordReset;
 window.changeFirebasePassword = changeFirebasePassword;

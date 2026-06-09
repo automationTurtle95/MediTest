@@ -68,6 +68,14 @@
     </section>
   </form>
 
+  <section id="socialAuthNotice" class="settings-grid hidden">
+    <section class="card">
+      <h2>Sicherheit</h2>
+      <p id="socialAuthText">Dieses Konto verwendet eine externe Anmeldemethode.</p>
+      <p class="muted">Passwort und Anmeldesicherheit werden beim jeweiligen Anbieter verwaltet.</p>
+    </section>
+  </section>
+
   <section class="settings-grid">
     <section class="card account-delete-card">
       <h2>Konto löschen</h2>
@@ -133,6 +141,13 @@ async function loadAccountIdentity(){
   const user=await currentAuthUser(false);
   accountEmail=user?.email||'';
   if(accountEmail)setValue('email',accountEmail);
+  const providerId=user?.providerId||'password';
+  const socialProvider=providerId==='google.com'||providerId==='apple.com';
+  document.getElementById('passwordForm').classList.toggle('hidden',socialProvider);
+  document.getElementById('socialAuthNotice').classList.toggle('hidden',!socialProvider);
+  document.getElementById('socialAuthText').textContent=providerId==='apple.com'
+    ? 'Dieses Konto verwendet die Anmeldung mit Apple.'
+    : 'Dieses Konto verwendet die Anmeldung mit Google.';
   savedSettingsSnapshot=JSON.stringify(editableSettings());
   updateSettingsState();
 }
@@ -173,6 +188,7 @@ async function deleteAccount(){
   button.disabled=true;
   status(msg,'Konto und Daten werden endgültig gelöscht...');
   try{
+    await prepareFirebaseProviderAccountDeletion();
     const result=await api('/api/account',{method:'DELETE'});
     clearAuthSession();
     location.href=`/pages/login.html?accountDeleted=1&message=${encodeURIComponent(result.message||'Konto wurde gelöscht.')}`;

@@ -324,7 +324,9 @@ public sealed record FirebaseConfigDto(
     string StorageBucket,
     string MessagingSenderId,
     string AppId,
-    string MeasurementId);
+    string MeasurementId,
+    bool GoogleEnabled,
+    bool AppleEnabled);
 
 public sealed record RegisterRequest(
     string? Email,

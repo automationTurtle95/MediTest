@@ -23,7 +23,9 @@ Liefert die Firebase-Konfiguration für das Frontend.
   "firebase": {
     "apiKey": "...",
     "authDomain": "meditest-12354.firebaseapp.com",
-    "projectId": "meditest-12354"
+    "projectId": "meditest-12354",
+    "googleEnabled": true,
+    "appleEnabled": true
   }
 }
 ```
@@ -34,7 +36,7 @@ Nicht mehr für produktive Anmeldung vorgesehen. Registrierung läuft im Fronten
 
 `POST /api/auth/login`
 
-Nicht mehr für produktive Anmeldung vorgesehen. Die Anmeldung läuft im Frontend über Firebase `accounts:signInWithPassword`.
+Nicht mehr für produktive Anmeldung vorgesehen. Die E-Mail-/Passwort-Anmeldung läuft im Frontend über Firebase `accounts:signInWithPassword`. Google und Apple werden über das modulare Firebase Web SDK und `signInWithPopup` angemeldet.
 
 `GET /api/auth/me`
 
@@ -44,11 +46,11 @@ Validiert den Firebase-ID-Token und liefert den aktuellen Benutzer.
 
 Bestätigt die Abmeldung für das Frontend. Das lokale Token wird clientseitig aus `sessionStorage` entfernt.
 
-E-Mail-Bestätigung, Passwort-Reset und Passwortänderung laufen direkt im Browser über Firebase Authentication. Die lokale MediTest-API speichert keine Passwörter und kennt keine Passwort-Hashes.
+E-Mail-Bestätigung, Passwort-Reset und Passwortänderung laufen für E-Mail-/Passwort-Konten direkt im Browser über Firebase Authentication. Google- und Apple-Konten verwalten ihre Anmeldesicherheit beim jeweiligen Anbieter. Die lokale MediTest-API speichert keine Passwörter und kennt keine Passwort-Hashes.
 
 `DELETE /api/account`
 
-Ruft die geschützte Function `meditestDeleteAccount` auf. Sie entfernt das Firebase-Authentication-Konto, alle Dokumente unter `users/{uid}`, persönliche KI-Nutzungsstände und KI-Ereignisse.
+Ruft die geschützte Function `meditestDeleteAccount` auf. Sie entfernt das Firebase-Authentication-Konto, alle Dokumente unter `users/{uid}`, persönliche KI-Nutzungsstände und KI-Ereignisse. Bei Apple-Konten widerruft das Frontend zuvor nach erneuter Apple-Anmeldung das Apple-Zugriffstoken.
 
 ## Dokumente
 
@@ -284,15 +286,15 @@ Prüft die konfigurierte GitHub-Release-Quelle oder `latest.json` und liefert di
 ```json
 {
   "configured": true,
-  "currentVersion": "4.1.4",
+  "currentVersion": "4.1.5",
   "currentPlatform": "windows-x64",
-  "latestVersion": "4.1.4",
+  "latestVersion": "4.1.5",
   "updateAvailable": false,
-  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v4.1.4",
+  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v4.1.5",
   "recommendedDownload": {
     "platform": "windows-x64",
-    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v4.1.4/MediTest-Setup-4.1.4-win-x64.msi",
-    "fileName": "MediTest-Setup-4.1.4-win-x64.msi",
+    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v4.1.5/MediTest-Setup-4.1.5-win-x64.msi",
+    "fileName": "MediTest-Setup-4.1.5-win-x64.msi",
     "sha256": "...",
     "sizeBytes": 42400000
   }

@@ -13,7 +13,7 @@
       <h1>MediTest</h1>
       <p>Multiple-Choice-Prüfungssimulation für Medizinstudenten.</p>
     </div>
-    <div class="auth-version">Version 4.1.4</div>
+    <div class="auth-version">Version 4.1.5</div>
   </section>
   <section class="auth-main">
     <div class="card auth-panel">
@@ -23,6 +23,13 @@
       <div class="auth-tabs">
         <button id="loginTab" class="active" type="button">Einloggen</button>
         <button id="registerTab" type="button">Konto erstellen</button>
+      </div>
+      <div id="socialAuth" class="auth-provider-section hidden">
+        <div class="auth-provider-list">
+          <button id="googleLoginBtn" class="auth-provider-button hidden" type="button"><span class="auth-provider-mark">G</span>Mit Google anmelden</button>
+          <button id="appleLoginBtn" class="auth-provider-button auth-provider-apple hidden" type="button"><span class="auth-provider-mark">A</span>Mit Apple anmelden</button>
+        </div>
+        <div class="auth-divider"><span>oder mit E-Mail</span></div>
       </div>
       <form id="authForm">
         <div id="displayNameWrap" class="hidden">
@@ -70,6 +77,9 @@ const modeBadge=document.getElementById('modeBadge');
 const loginSuccess=document.getElementById('loginSuccess');
 const resetPasswordBtn=document.getElementById('resetPasswordBtn');
 const resendVerificationBtn=document.getElementById('resendVerificationBtn');
+const socialAuth=document.getElementById('socialAuth');
+const googleLoginBtn=document.getElementById('googleLoginBtn');
+const appleLoginBtn=document.getElementById('appleLoginBtn');
 let mode='login';
 let loginRedirectTimer=null;
 
@@ -95,17 +105,50 @@ function setMode(next){
 async function loadConfig(){
   try{
     const cfg=await getAuthConfig(true);
+    const googleEnabled=cfg.firebase?.googleEnabled===true;
+    const appleEnabled=cfg.firebase?.appleEnabled===true;
     modeBadge.textContent=cfg.cloudConfigured?'Firebase-Anmeldung':'Firebase fehlt';
     authHint.textContent=cfg.cloudConfigured
-      ? 'Melde dich mit deinem Konto an.'
+      ? 'Melde dich mit E-Mail, Google oder Apple an.'
       : 'Firebase ist noch nicht vollständig konfiguriert.';
     registerTab.classList.toggle('hidden',!cfg.registrationEnabled);
+    googleLoginBtn.classList.toggle('hidden',!googleEnabled);
+    appleLoginBtn.classList.toggle('hidden',!appleEnabled);
+    socialAuth.classList.toggle('hidden',!googleEnabled&&!appleEnabled);
   }catch(e){
     modeBadge.textContent='Anmeldung';
   }
 }
+async function completeLogin(res){
+  status(msg,`Willkommen, ${res.user.displayName||res.user.email}.`,'status success');
+  loginSuccess.classList.remove('hidden');
+  setTimeout(async()=>{
+    loginSuccess.classList.add('hidden');
+    window.mediTestPostUpdateRedirect=safeReturnUrl();
+    const updateInfo=await checkForAppUpdatePopup();
+    if(updateInfo?.updateAvailable) return;
+    loginRedirectTimer=setTimeout(()=>{location.href=safeReturnUrl();},350);
+  },1450);
+}
+async function providerLogin(providerId){
+  const label=providerId==='apple.com'?'Apple':'Google';
+  try{
+    googleLoginBtn.disabled=true;
+    appleLoginBtn.disabled=true;
+    status(msg,`${label}-Anmeldung wird geöffnet...`);
+    const res=await loginWithFirebaseProvider(providerId);
+    await completeLogin(res);
+  }catch(error){
+    status(msg,error.message,'status error');
+  }finally{
+    googleLoginBtn.disabled=false;
+    appleLoginBtn.disabled=false;
+  }
+}
 loginTab.onclick=()=>setMode('login');
 registerTab.onclick=()=>setMode('register');
+googleLoginBtn.onclick=()=>providerLogin('google.com');
+appleLoginBtn.onclick=()=>providerLogin('apple.com');
 resetPasswordBtn.onclick=async()=>{
   const email=document.getElementById('email').value.trim();
   try{
@@ -149,15 +192,7 @@ form.addEventListener('submit',async e=>{
       status(msg,res.message,'status success');
       return;
     }
-    status(msg,`Willkommen, ${res.user.displayName||res.user.email}.`,'status success');
-    loginSuccess.classList.remove('hidden');
-    setTimeout(async()=>{
-      loginSuccess.classList.add('hidden');
-      window.mediTestPostUpdateRedirect=safeReturnUrl();
-      const updateInfo=await checkForAppUpdatePopup();
-      if(updateInfo?.updateAvailable) return;
-      loginRedirectTimer=setTimeout(()=>{location.href=safeReturnUrl();},350);
-    },1450);
+    await completeLogin(res);
   }catch(err){
     resendVerificationBtn.classList.toggle('hidden',err?.emailVerificationRequired!==true);
     status(msg,err.message,'status error');

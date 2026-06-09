@@ -6,6 +6,8 @@ Diese Firebase-Konfiguration enthält den KI-Proxy und die Firestore-Regeln für
 
 Wenn ein Gemini-Key versehentlich in Chat, Logs oder Screenshots gelandet ist, lösche ihn zuerst in der Google/Firebase Console und erstelle einen neuen Key.
 
+Aktiviere in Firebase Authentication unter `Sign-in method` die Anbieter `Email/Password`, `Google` und `Apple`. Unter `Settings -> Authorized domains` müssen für die lokale MediTest-App mindestens `127.0.0.1` und `localhost` freigegeben sein. Der Apple-Anbieter benötigt zusätzlich die vollständige Apple-Developer-Konfiguration mit Service ID, Team ID, Key ID und privatem Schlüssel. In MediTest werden die sichtbaren Provider über `Auth:Firebase:GoogleEnabled` und `Auth:Firebase:AppleEnabled` gesteuert.
+
 1. Firebase CLI installieren und anmelden:
 
    ```powershell

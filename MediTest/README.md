@@ -1,6 +1,6 @@
 # MediTest
 
-MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choice-Fragen aus medizinischen Unterlagen. Version 4.1.4 nutzt Firebase Authentication und speichert alle Nutzerdaten getrennt vom Katalog in Firestore.
+MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choice-Fragen aus medizinischen Unterlagen. Version 4.1.5 nutzt Firebase Authentication und speichert alle Nutzerdaten getrennt vom Katalog in Firestore.
 
 ## Funktionen
 
@@ -18,7 +18,7 @@ MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choic
 - Auswertung mit Punktzahl, Bestehensgrenze, Erklärungen und Fehlerschwerpunkten
 - Erweiterte Statistik mit Themenanalyse, Schwierigkeitsauswertung, Verlauf, Kreisdiagrammen und Lernempfehlungen
 - Themensprung: Fragen eines Themas direkt öffnen und gezielt wiederholen
-- Anmeldeseite mit E-Mail-Bestätigung, Firebase-Kontoerstellung, Passwort-Reset und browserbasierter Sitzung
+- Anmeldeseite mit E-Mail/Passwort, Google, Apple, E-Mail-Bestätigung, Passwort-Reset und browserbasierter Sitzung
 - Vollständige Kontolöschung inklusive privater Firestore- und KI-Nutzungsdaten
 - Firestore-Katalog mit sichtbaren Preisen, Kaufübersicht und Admin-Veröffentlichung
 - Lizenzmodell vorbereitet: 7 Tage Testphase, 5,99 EUR/Monat, Katalogzugang, einmaliger Gratis-Katalog-Code pro Benutzer und Premium-Freischaltung per Code
@@ -56,9 +56,9 @@ Alternativ unter Windows: `Start_MediTest.bat` doppelklicken. Die App läuft sta
 
 ## Anmeldung mit Firebase
 
-V4.1.4 speichert keine Nutzerdaten mehr in einer lokalen `meditest.db`. Registrierung, Anmeldung, E-Mail-Bestätigung, Passwort-Reset und Passwortänderung laufen über Firebase Authentication. Nach der Registrierung muss die E-Mail-Adresse bestätigt werden; erst danach ist die Anmeldung in MediTest möglich. Im Browser werden ID-Token und Refresh-Token nur in `sessionStorage` gehalten und verschwinden beim Schließen der Browser-Sitzung.
+V4.1.5 speichert keine Nutzerdaten mehr in einer lokalen `meditest.db`. Registrierung und Anmeldung laufen über Firebase Authentication wahlweise mit E-Mail/Passwort, Google oder Apple. Bei E-Mail/Passwort muss die Adresse nach der Registrierung bestätigt werden; Google- und Apple-Konten übernehmen den bestätigten Anmeldestatus des jeweiligen Anbieters. Passwort-Reset und Passwortänderung gelten nur für E-Mail/Passwort-Konten. Im Browser werden ID-Token und Refresh-Token nur in `sessionStorage` gehalten und verschwinden beim Schließen der Browser-Sitzung.
 
-In Firebase muss unter `Authentication -> Sign-in method` der Anbieter `Email/Password` aktiviert sein. Die Firebase-Web-Konfiguration steht in `appsettings.json`:
+In Firebase müssen unter `Authentication -> Sign-in method` die verwendeten Anbieter aktiviert sein. Die Firebase-Web-Konfiguration steht in `appsettings.json`:
 
 ```json
 {
@@ -70,11 +70,15 @@ In Firebase muss unter `Authentication -> Sign-in method` der Anbieter `Email/Pa
     "Firebase": {
       "ApiKey": "...",
       "AuthDomain": "meditest-12354.firebaseapp.com",
-      "ProjectId": "meditest-12354"
+      "ProjectId": "meditest-12354",
+      "GoogleEnabled": true,
+      "AppleEnabled": true
     }
   }
 }
 ```
+
+Unter `Authentication -> Settings -> Authorized domains` müssen mindestens `127.0.0.1` und `localhost` eingetragen sein, weil MediTest lokal unter `http://127.0.0.1:55000` läuft. Für Apple müssen zusätzlich die Apple-Developer-Konfiguration und die in Firebase verlangten Service-ID-/Schlüsselangaben vollständig hinterlegt sein.
 
 Die Firebase-Web-API-Konfiguration ist im Frontend sichtbar und darf dort stehen. Sicherheitsregeln, echte Lizenzpläne und spätere Abo-Entscheidungen gehören in Firebase/Cloud-Funktionen bzw. einen späteren Server.
 
@@ -86,7 +90,7 @@ Die Firebase-Function-Vorlage liegt unter `../firebase`. Die App ist fest auf `f
 
 Die Function begrenzt die KI-Nutzung standardmäßig auf 25 Fragen pro Generierung, 50 Fragen pro Nutzer und Tag, 500 Fragen pro Nutzer und Monat sowie 10 Anfragen pro Tag. Zwischen akzeptierten Anfragen liegen mindestens 30 Sekunden. Administratoren mit Firebase Custom Claim `admin=true` sehen Kontingente und die letzten Generierungsversuche unter `Katalog -> KI-Nutzung`. Skripttexte und Prompts werden dabei nicht protokolliert.
 
-Die Seite `Einstellungen` speichert Profil und Programmeinstellungen unter `users/{uid}/settings/profile` in Firestore. Die bestätigte Konto-E-Mail wird schreibgeschützt angezeigt. Über `Konto löschen` werden Firebase Authentication, private Firestore-Daten und persönliche KI-Nutzungsdaten dauerhaft entfernt.
+Die Seite `Einstellungen` speichert Profil und Programmeinstellungen unter `users/{uid}/settings/profile` in Firestore. Die bestätigte Konto-E-Mail wird schreibgeschützt angezeigt. Bei Google- und Apple-Konten wird die Passwortänderung ausgeblendet. Über `Konto löschen` werden Firebase Authentication, private Firestore-Daten und persönliche KI-Nutzungsdaten dauerhaft entfernt; bei Apple wird vorher das Apple-Zugriffstoken nach erneuter Anmeldung widerrufen.
 
 ## Firestore-Katalog und Admin-Konto
 
@@ -114,7 +118,7 @@ cd MediTest
 powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 ```
 
-Die fertigen Artefakte liegen danach unter `dist/MediTest-4.1.4/`. Bestehende Releases wie `dist/MediTest-2.0.0/`, `dist/MediTest-3.0.0/`, `dist/MediTest-3.1.1/`, `dist/MediTest-3.1.2/`, `dist/MediTest-3.1.3/`, `dist/MediTest-4.0.0/`, `dist/MediTest-4.0.3/`, `dist/MediTest-4.0.4/`, `dist/MediTest-4.0.5/`, `dist/MediTest-4.0.6/`, `dist/MediTest-4.0.7/`, `dist/MediTest-4.0.8/`, `dist/MediTest-4.0.9/`, `dist/MediTest-4.1.0/`, `dist/MediTest-4.1.1/`, `dist/MediTest-4.1.2/` und `dist/MediTest-4.1.3/` bleiben erhalten.
+Die fertigen Artefakte liegen danach unter `dist/MediTest-4.1.5/`. Bestehende Releases wie `dist/MediTest-2.0.0/`, `dist/MediTest-3.0.0/`, `dist/MediTest-3.1.1/`, `dist/MediTest-3.1.2/`, `dist/MediTest-3.1.3/`, `dist/MediTest-4.0.0/`, `dist/MediTest-4.0.3/`, `dist/MediTest-4.0.4/`, `dist/MediTest-4.0.5/`, `dist/MediTest-4.0.6/`, `dist/MediTest-4.0.7/`, `dist/MediTest-4.0.8/`, `dist/MediTest-4.0.9/`, `dist/MediTest-4.1.0/`, `dist/MediTest-4.1.1/`, `dist/MediTest-4.1.2/`, `dist/MediTest-4.1.3/` und `dist/MediTest-4.1.4/` bleiben erhalten.
 
 Ohne `-WindowsOnly` entstehen zusätzlich vorläufige, unsignierte macOS-Setup-ZIPs für Intel und Apple Silicon. Sind die Apple-Secrets in GitHub eingerichtet, ersetzt der Release-Workflow diese automatisch durch signierte und notarisierte PKG-Installer.
 
