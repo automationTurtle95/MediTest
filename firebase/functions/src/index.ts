@@ -6,6 +6,7 @@ import { defineInt, defineSecret, defineString } from "firebase-functions/params
 import { onRequest } from "firebase-functions/v2/https";
 import { setGlobalOptions } from "firebase-functions/v2/options";
 import { createHash } from "node:crypto";
+import Stripe from "stripe";
 
 initializeApp();
 
@@ -15,6 +16,8 @@ setGlobalOptions({
 });
 
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
+const stripeApiKey = defineSecret("MEDITEST_STRIPE_API_KEY");
+const stripeWebhookSecret = defineSecret("MEDITEST_STRIPE_WEBHOOK_SECRET");
 const aiMaxQuestionsPerRequest = defineInt("AI_MAX_QUESTIONS_PER_REQUEST", { default: 25 });
 const aiDailyQuestionLimit = defineInt("AI_DAILY_QUESTION_LIMIT", { default: 50 });
 const aiMonthlyQuestionLimit = defineInt("AI_MONTHLY_QUESTION_LIMIT", { default: 500 });
@@ -23,8 +26,22 @@ const aiCooldownSeconds = defineInt("AI_COOLDOWN_SECONDS", { default: 30 });
 const aiUsageRetentionDays = defineInt("AI_USAGE_RETENTION_DAYS", { default: 90 });
 const aiMaxPromptChars = defineInt("AI_MAX_PROMPT_CHARS", { default: 50000 });
 const freeCatalogCodeHashList = defineString("FREE_CATALOG_CODE_HASHES", {
-  default: "33D660B54A9FFBD438D6D99EBDB7650EADCC2F871EE04C058205E5DCB0BE0876"
+  default: ""
 });
+const premiumCodeHashList = defineString("PREMIUM_CODE_HASHES", {
+  default: ""
+});
+const billingTrialDays = defineInt("BILLING_TRIAL_DAYS", { default: 7 });
+const billingMonthlyPriceCents = defineInt("BILLING_MONTHLY_PRICE_CENTS", { default: 599 });
+const billingCatalogQuestionPriceCents = defineInt("BILLING_CATALOG_QUESTION_PRICE_CENTS", { default: 10 });
+const billingCatalogPriceEndingCents = defineInt("BILLING_CATALOG_PRICE_ENDING_CENTS", { default: 9 });
+const billingCurrency = defineString("BILLING_CURRENCY", { default: "EUR" });
+const billingReturnBaseUrl = defineString("BILLING_RETURN_BASE_URL", { default: "http://127.0.0.1:55000" });
+const stripeCustomersCollection = defineString("STRIPE_CUSTOMERS_COLLECTION", { default: "customers" });
+const stripeSubscriptionPriceId = defineString("STRIPE_SUBSCRIPTION_PRICE_ID", { default: "not-configured" });
+const stripeCatalogUnitPriceId = defineString("STRIPE_CATALOG_UNIT_PRICE_ID", { default: "not-configured" });
+const stripeCatalogEndingPriceId = defineString("STRIPE_CATALOG_ENDING_PRICE_ID", { default: "not-configured" });
+const stripePortalConfigurationId = defineString("STRIPE_PORTAL_CONFIGURATION_ID", { default: "not-configured" });
 const db = getFirestore();
 
 type GenerateQuestionsRequest = {
@@ -74,6 +91,26 @@ type UsageReservation = {
   monthlyRemaining: number;
   code?: string;
   message?: string;
+};
+
+type LicenseState = {
+  trialStartedAt: string;
+  trialEndsAt: string;
+  subscriptionActive: boolean;
+  subscriptionRenewsAt: string | null;
+  subscriptionProvider: string;
+  subscriptionCustomerId: string;
+  premiumActive: boolean;
+  premiumGrantedAt: string | null;
+  premiumProvider: string;
+  premiumCodeHash: string;
+  freeCatalogCreditActive: boolean;
+  freeCatalogCreditGrantedAt: string | null;
+  freeCatalogCreditCodeHash: string;
+  freeCatalogCreditRedeemedCatalogId: string;
+  freeCatalogCreditRedeemedAt: string | null;
+  purchasedCatalogTestIds: string[];
+  updatedAt: string;
 };
 
 let telemetryPromise: Promise<void> | null = null;
@@ -323,6 +360,338 @@ export const meditestAiStatus = onRequest(
   }
 );
 
+export const meditestLicenseStatus = onRequest(
+  {
+    invoker: "public",
+    memory: "256MiB",
+    timeoutSeconds: 30
+  },
+  async (req, res) => {
+    if (req.method !== "GET") {
+      res.set("Allow", "GET").status(405).json({ error: { message: "Nur GET-Anfragen sind erlaubt." } });
+      return;
+    }
+
+    const user = await verifiedUser(req.header("authorization") ?? "", res);
+    if (!user) return;
+
+    const state = await ensureLicenseState(user.uid);
+    res.status(200).json({ state });
+  }
+);
+
+export const meditestRedeemPremiumCode = onRequest(
+  {
+    invoker: "public",
+    memory: "256MiB",
+    timeoutSeconds: 30
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.set("Allow", "POST").status(405).json({ error: { message: "Nur POST-Anfragen sind erlaubt." } });
+      return;
+    }
+
+    const user = await verifiedUser(req.header("authorization") ?? "", res);
+    if (!user) return;
+
+    const normalizedCode = normalizeAccessCode(req.body?.code);
+    const codeHash = hashAccessCode(normalizedCode);
+    if (!normalizedCode || !configuredPremiumCodeHashes().has(codeHash)) {
+      res.status(400).json({ error: { message: "Dieser Premium-Code ist ungültig." } });
+      return;
+    }
+
+    const state = await updateLicenseState(user.uid, (current) => {
+      const now = new Date().toISOString();
+      current.premiumActive = true;
+      current.premiumGrantedAt ||= now;
+      current.premiumProvider = "premium-code";
+      current.premiumCodeHash = codeHash;
+      return current;
+    });
+    res.status(200).json({ state, message: "Premium wurde aktiviert." });
+  }
+);
+
+export const meditestConsumeCatalogCredit = onRequest(
+  {
+    invoker: "public",
+    memory: "256MiB",
+    timeoutSeconds: 30
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.set("Allow", "POST").status(405).json({ error: { message: "Nur POST-Anfragen sind erlaubt." } });
+      return;
+    }
+
+    const user = await verifiedUser(req.header("authorization") ?? "", res);
+    if (!user) return;
+    const catalogId = stringValue(req.body?.catalogId).slice(0, 200);
+    if (!catalogId) {
+      res.status(400).json({ error: { message: "Katalog-ID fehlt." } });
+      return;
+    }
+
+    try {
+      const state = await updateLicenseState(user.uid, (current) => {
+        if (current.premiumActive || current.purchasedCatalogTestIds.includes(catalogId)) return current;
+        if (!current.freeCatalogCreditActive || current.freeCatalogCreditRedeemedCatalogId) {
+          throw new Error("catalog_credit_unavailable");
+        }
+
+        current.freeCatalogCreditActive = false;
+        current.freeCatalogCreditRedeemedCatalogId = catalogId;
+        current.freeCatalogCreditRedeemedAt = new Date().toISOString();
+        current.purchasedCatalogTestIds.push(catalogId);
+        return current;
+      });
+      res.status(200).json({ state, consumed: true });
+    } catch (error) {
+      if (error instanceof Error && error.message === "catalog_credit_unavailable") {
+        res.status(409).json({ error: { message: "Für dieses Konto ist kein Gratis-Katalogtest verfügbar." } });
+        return;
+      }
+      throw error;
+    }
+  }
+);
+
+export const meditestCreateCheckout = onRequest(
+  {
+    invoker: "public",
+    memory: "256MiB",
+    secrets: [stripeApiKey],
+    timeoutSeconds: 60
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.set("Allow", "POST").status(405).json({ error: { message: "Nur POST-Anfragen sind erlaubt." } });
+      return;
+    }
+
+    const user = await verifiedUser(req.header("authorization") ?? "", res);
+    if (!user) return;
+    const kind = stringValue(req.body?.kind).toLowerCase();
+    const catalogId = stringValue(req.body?.catalogId).slice(0, 200);
+    const returnBaseUrl = billingReturnBaseUrl.value().replace(/\/+$/, "");
+    const state = await ensureLicenseState(user.uid);
+    const stripe = stripeClient();
+    const customerId = await ensureStripeCustomer(stripe, user.uid, stringValue(user.email));
+    let checkoutData: any;
+
+    if (kind === "subscription") {
+      const priceId = stripeSubscriptionPriceId.value().trim();
+      if (!isStripePriceId(priceId)) {
+        res.status(503).json({ error: { message: "Der Stripe-Abo-Preis ist noch nicht konfiguriert." } });
+        return;
+      }
+      if (state.premiumActive || state.subscriptionActive) {
+        res.status(409).json({ error: { message: "Für dieses Konto ist bereits ein Zugang aktiv." } });
+        return;
+      }
+      const subscriptions = await stripe.subscriptions.list({
+        customer: customerId,
+        status: "all",
+        limit: 20
+      });
+      const activeSubscription = subscriptions.data.find(
+        (subscription: any) => subscription.status === "active" || subscription.status === "trialing"
+      ) as any;
+      if (activeSubscription) {
+        await updateLicenseState(user.uid, (current) => {
+          current.subscriptionActive = true;
+          current.subscriptionRenewsAt = Number.isFinite(Number(activeSubscription.current_period_end))
+            ? new Date(Number(activeSubscription.current_period_end) * 1000).toISOString()
+            : null;
+          current.subscriptionProvider = "stripe";
+          current.subscriptionCustomerId = customerId;
+          return current;
+        });
+        res.status(409).json({ error: { message: "Für dieses Konto ist bereits ein Stripe-Abo aktiv." } });
+        return;
+      }
+      await expireOpenCheckoutSessions(
+        stripe,
+        customerId,
+        (session) => session.mode === "subscription"
+      );
+
+      const remainingTrialDays = Math.max(
+        0,
+        Math.ceil((Date.parse(state.trialEndsAt) - Date.now()) / 86_400_000)
+      );
+      const metadata = {
+        meditestPurchaseType: "subscription",
+        firebaseUid: user.uid,
+        monthlyPriceCents: String(Math.max(0, billingMonthlyPriceCents.value())),
+        currency: billingCurrency.value().trim().toUpperCase()
+      };
+      checkoutData = {
+        mode: "subscription",
+        customer: customerId,
+        line_items: [{ price: priceId, quantity: 1 }],
+        client_reference_id: user.uid,
+        success_url: `${returnBaseUrl}/pages/license.html?checkout=success`,
+        cancel_url: `${returnBaseUrl}/pages/license.html?checkout=cancelled`,
+        metadata,
+        subscription_data: {
+          metadata,
+          ...(remainingTrialDays > 0 ? { trial_period_days: Math.min(60, remainingTrialDays) } : {})
+        },
+        allow_promotion_codes: false
+      };
+    } else if (kind === "catalog") {
+      if (!catalogId) {
+        res.status(400).json({ error: { message: "Katalog-ID fehlt." } });
+        return;
+      }
+      if (state.premiumActive || state.purchasedCatalogTestIds.includes(catalogId)) {
+        res.status(409).json({ error: { message: "Dieser Katalogtest ist bereits freigeschaltet." } });
+        return;
+      }
+
+      const unitPriceId = stripeCatalogUnitPriceId.value().trim();
+      const endingPriceId = stripeCatalogEndingPriceId.value().trim();
+      if (!isStripePriceId(unitPriceId) || !isStripePriceId(endingPriceId)) {
+        res.status(503).json({ error: { message: "Die Stripe-Preise für Katalogtests sind noch nicht konfiguriert." } });
+        return;
+      }
+      const catalog = await findCatalogTest(catalogId);
+      if (!catalog) {
+        res.status(404).json({ error: { message: "Katalogtest nicht gefunden." } });
+        return;
+      }
+      await expireOpenCheckoutSessions(
+        stripe,
+        customerId,
+        (session) => session.mode === "payment" && session.metadata?.catalogId === catalogId
+      );
+
+      const metadata = {
+        meditestPurchaseType: "catalog",
+        catalogId,
+        firebaseUid: user.uid,
+        questionCount: String(catalog.questionCount),
+        questionPriceCents: String(Math.max(0, billingCatalogQuestionPriceCents.value())),
+        priceEndingCents: String(Math.max(0, billingCatalogPriceEndingCents.value())),
+        expectedPriceCents: String(
+          catalog.questionCount * Math.max(0, billingCatalogQuestionPriceCents.value()) +
+          Math.max(0, billingCatalogPriceEndingCents.value())
+        ),
+        currency: billingCurrency.value().trim().toUpperCase()
+      };
+      checkoutData = {
+        mode: "payment",
+        customer: customerId,
+        line_items: [
+          { price: unitPriceId, quantity: catalog.questionCount },
+          { price: endingPriceId, quantity: 1 }
+        ],
+        client_reference_id: user.uid,
+        success_url: `${returnBaseUrl}/pages/catalog.html?checkout=success&catalogId=${encodeURIComponent(catalogId)}`,
+        cancel_url: `${returnBaseUrl}/pages/catalog.html?checkout=cancelled&catalogId=${encodeURIComponent(catalogId)}`,
+        metadata,
+        payment_intent_data: { metadata }
+      };
+    } else {
+      res.status(400).json({ error: { message: "Unbekannte Checkout-Art." } });
+      return;
+    }
+
+    const session = await stripe.checkout.sessions.create(checkoutData);
+    if (!session.url) {
+      res.status(502).json({ error: { message: "Stripe hat keinen Checkout-Link geliefert." } });
+      return;
+    }
+    res.status(200).json({
+      available: true,
+      url: session.url,
+      message: "Weiterleitung zum sicheren Stripe-Checkout."
+    });
+  }
+);
+
+export const meditestStripePortal = onRequest(
+  {
+    invoker: "public",
+    memory: "256MiB",
+    secrets: [stripeApiKey],
+    timeoutSeconds: 30
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.set("Allow", "POST").status(405).json({ error: { message: "Nur POST-Anfragen sind erlaubt." } });
+      return;
+    }
+    const user = await verifiedUser(req.header("authorization") ?? "", res);
+    if (!user) return;
+
+    const stripe = stripeClient();
+    const customerId = await ensureStripeCustomer(stripe, user.uid, stringValue(user.email));
+    const configurationId = stripePortalConfigurationId.value().trim();
+    if (!configurationId.startsWith("bpc_")) {
+      res.status(503).json({ error: { message: "Das Stripe-Kundenportal ist noch nicht konfiguriert." } });
+      return;
+    }
+    const returnUrl = stringValue(req.body?.returnUrl) ||
+      `${billingReturnBaseUrl.value().replace(/\/+$/, "")}/pages/license.html`;
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      configuration: configurationId,
+      return_url: returnUrl
+    });
+    res.status(200).json({
+      available: true,
+      url: session.url,
+      message: "Weiterleitung zum Stripe-Kundenportal."
+    });
+  }
+);
+
+export const meditestStripeWebhook = onRequest(
+  {
+    memory: "256MiB",
+    secrets: [stripeApiKey, stripeWebhookSecret],
+    timeoutSeconds: 60
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.set("Allow", "POST").status(405).send("Method not allowed");
+      return;
+    }
+    const signature = req.header("stripe-signature");
+    if (!signature) {
+      res.status(400).send("Stripe signature missing");
+      return;
+    }
+
+    let event: any;
+    try {
+      event = stripeClient().webhooks.constructEvent(req.rawBody, signature, stripeWebhookSecret.value());
+    } catch (error) {
+      logger.warn("Stripe webhook signature rejected", {
+        message: error instanceof Error ? error.message : String(error)
+      });
+      res.status(400).send("Invalid Stripe signature");
+      return;
+    }
+
+    try {
+      await processStripeEvent(event);
+      res.status(200).json({ received: true });
+    } catch (error) {
+      logger.error("Stripe webhook processing failed", {
+        eventId: event.id,
+        type: event.type,
+        message: error instanceof Error ? error.message : String(error)
+      });
+      res.status(500).send("Webhook processing failed");
+    }
+  }
+);
+
 export const meditestRedeemCatalogCode = onRequest(
   {
     invoker: "public",
@@ -360,27 +729,25 @@ export const meditestRedeemCatalogCode = onRequest(
       return;
     }
 
-    const licenseRef = db.doc(`users/${user.uid}/billing/license`);
     try {
-      await db.runTransaction(async (transaction) => {
-        const licenseSnapshot = await transaction.get(licenseRef);
+      const state = await updateLicenseState(user.uid, (current) => {
         const now = Timestamp.now();
-        const state = parseJsonObject((licenseSnapshot.data() ?? {}).dataJson);
-        const alreadyUsed = state.freeCatalogCreditActive === true ||
-          (typeof state.freeCatalogCreditRedeemedCatalogId === "string" && state.freeCatalogCreditRedeemedCatalogId.length > 0) ||
-          (typeof state.freeCatalogCreditCodeHash === "string" && state.freeCatalogCreditCodeHash.length > 0);
+        const alreadyUsed = current.freeCatalogCreditActive ||
+          current.freeCatalogCreditRedeemedCatalogId.length > 0 ||
+          current.freeCatalogCreditCodeHash.length > 0;
         if (alreadyUsed) {
           throw new Error("account_already_used_catalog_code");
         }
 
-        state.freeCatalogCreditActive = true;
-        state.freeCatalogCreditGrantedAt = state.freeCatalogCreditGrantedAt || now.toDate().toISOString();
-        state.freeCatalogCreditCodeHash = codeHash;
-        state.updatedAt = now.toDate().toISOString();
-
-        transaction.set(licenseRef, {
-          dataJson: JSON.stringify(state)
-        }, { merge: true });
+        current.freeCatalogCreditActive = true;
+        current.freeCatalogCreditGrantedAt ||= now.toDate().toISOString();
+        current.freeCatalogCreditCodeHash = codeHash;
+        return current;
+      });
+      res.status(200).json({
+        redeemed: true,
+        state,
+        message: "Gratis-Test wurde aktiviert."
       });
     } catch (error) {
       const code = error instanceof Error ? error.message : "";
@@ -392,11 +759,6 @@ export const meditestRedeemCatalogCode = onRequest(
       res.status(503).json({ error: { message: "Der Gratis-Katalog-Code konnte momentan nicht eingelöst werden." } });
       return;
     }
-
-    res.status(200).json({
-      redeemed: true,
-      message: "Gratis-Test wurde aktiviert."
-    });
   }
 );
 
@@ -404,6 +766,7 @@ export const meditestDeleteAccount = onRequest(
   {
     invoker: "public",
     memory: "256MiB",
+    secrets: [stripeApiKey],
     timeoutSeconds: 120
   },
   async (req, res) => {
@@ -428,11 +791,17 @@ export const meditestDeleteAccount = onRequest(
 
     try {
       const userRef = db.collection("users").doc(user.uid);
+      const customerRef = db.collection(stripeCustomersCollection.value()).doc(user.uid);
       const aiUsageRef = db.collection("aiUsage").doc(user.uid);
       const eventsSnapshot = await db.collection("aiGenerationEvents").where("uid", "==", user.uid).get();
+      const customerData = (await customerRef.get()).data() ?? {};
+      if (typeof customerData.stripeId === "string" && customerData.stripeId) {
+        await stripeClient().customers.del(customerData.stripeId);
+      }
 
       await Promise.all([
         db.recursiveDelete(userRef),
+        db.recursiveDelete(customerRef),
         db.recursiveDelete(aiUsageRef),
         deleteDocuments(eventsSnapshot.docs.map((doc) => doc.ref))
       ]);
@@ -454,6 +823,211 @@ export const meditestDeleteAccount = onRequest(
     });
   }
 );
+
+async function verifiedUser(authorization: string, res: any): Promise<any | null> {
+  const idToken = readBearerToken(authorization);
+  if (!idToken) {
+    res.status(401).json({ error: { message: "Anmeldetoken fehlt." } });
+    return null;
+  }
+
+  try {
+    const user = await getAuth().verifyIdToken(idToken);
+    if (user.email_verified !== true) {
+      res.status(403).json({ error: { message: "Bitte bestätige zuerst deine E-Mail-Adresse." } });
+      return null;
+    }
+    return user;
+  } catch {
+    res.status(401).json({ error: { message: "Anmeldetoken ist ungültig oder abgelaufen." } });
+    return null;
+  }
+}
+
+async function ensureLicenseState(uid: string): Promise<LicenseState> {
+  return await updateLicenseState(uid, (state) => state);
+}
+
+async function updateLicenseState(
+  uid: string,
+  update: (state: LicenseState) => LicenseState
+): Promise<LicenseState> {
+  const authUser = await getAuth().getUser(uid);
+  const createdAt = validIsoString(authUser.metadata.creationTime) ?? new Date().toISOString();
+  const licenseRef = db.doc(`users/${uid}/billing/license`);
+
+  return await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(licenseRef);
+    const current = normalizeLicenseState(parseJsonObject((snapshot.data() ?? {}).dataJson), createdAt);
+    const next = normalizeLicenseState(update(current), createdAt);
+    next.updatedAt = new Date().toISOString();
+    transaction.set(licenseRef, { dataJson: JSON.stringify(next) }, { merge: true });
+    return next;
+  });
+}
+
+function stripeClient(): InstanceType<typeof Stripe> {
+  return new Stripe(stripeApiKey.value());
+}
+
+async function ensureStripeCustomer(
+  stripe: InstanceType<typeof Stripe>,
+  uid: string,
+  email: string
+): Promise<string> {
+  const customerRef = db.collection(stripeCustomersCollection.value()).doc(uid);
+  const existing = (await customerRef.get()).data() ?? {};
+  if (typeof existing.stripeId === "string" && existing.stripeId) return existing.stripeId;
+
+  const customer = await stripe.customers.create(
+    {
+      email: email || undefined,
+      metadata: { firebaseUid: uid }
+    },
+    { idempotencyKey: `meditest-customer-${uid}` }
+  );
+  await customerRef.set({
+    stripeId: customer.id,
+    email,
+    updatedAt: Timestamp.now()
+  }, { merge: true });
+  return customer.id;
+}
+
+async function expireOpenCheckoutSessions(
+  stripe: InstanceType<typeof Stripe>,
+  customerId: string,
+  shouldExpire: (session: any) => boolean
+): Promise<void> {
+  const sessions = await stripe.checkout.sessions.list({
+    customer: customerId,
+    status: "open",
+    limit: 100
+  });
+  await Promise.all(
+    sessions.data
+      .filter(shouldExpire)
+      .map((session: any) => stripe.checkout.sessions.expire(session.id))
+  );
+}
+
+async function processStripeEvent(event: any): Promise<void> {
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as any;
+    if (session.mode === "payment" && session.payment_status === "paid") {
+      const uid = stringValue(session.metadata?.firebaseUid);
+      const catalogId = stringValue(session.metadata?.catalogId).slice(0, 200);
+      if (uid && catalogId && session.metadata?.meditestPurchaseType === "catalog") {
+        await updateLicenseState(uid, (state) => {
+          state.purchasedCatalogTestIds.push(catalogId);
+          return state;
+        });
+      }
+    }
+  } else if (
+    event.type === "customer.subscription.created" ||
+    event.type === "customer.subscription.updated" ||
+    event.type === "customer.subscription.deleted"
+  ) {
+    const subscription = event.data.object as any;
+    const customerId = typeof subscription.customer === "string"
+      ? subscription.customer
+      : stringValue(subscription.customer?.id);
+    const uid = stringValue(subscription.metadata?.firebaseUid) ||
+      await firebaseUidForStripeCustomer(customerId);
+    if (uid) {
+      const active = subscription.status === "active" || subscription.status === "trialing";
+      const renewsAt = Number(subscription.current_period_end);
+      await updateLicenseState(uid, (state) => {
+        state.subscriptionActive = active;
+        state.subscriptionRenewsAt = active && Number.isFinite(renewsAt)
+          ? new Date(renewsAt * 1000).toISOString()
+          : null;
+        state.subscriptionProvider = active ? "stripe" : "";
+        state.subscriptionCustomerId = active ? customerId : "";
+        return state;
+      });
+    }
+  }
+
+  await db.collection("stripeWebhookEvents").doc(event.id).set({
+    type: event.type,
+    livemode: event.livemode,
+    processedAt: Timestamp.now()
+  }, { merge: true });
+}
+
+async function firebaseUidForStripeCustomer(customerId: string): Promise<string> {
+  if (!customerId) return "";
+  const snapshot = await db.collection(stripeCustomersCollection.value())
+    .where("stripeId", "==", customerId)
+    .limit(1)
+    .get();
+  return snapshot.empty ? "" : snapshot.docs[0].id;
+}
+
+function normalizeLicenseState(source: Record<string, any>, createdAt: string): LicenseState {
+  const trialDays = Math.min(60, Math.max(1, Number(billingTrialDays.value()) || 7));
+  const trialStartedAt = validIsoString(source.trialStartedAt) ?? createdAt;
+  const trialEndsAt = validIsoString(source.trialEndsAt) ??
+    new Date(Date.parse(trialStartedAt) + trialDays * 86_400_000).toISOString();
+  const purchased = Array.isArray(source.purchasedCatalogTestIds)
+    ? source.purchasedCatalogTestIds.map(stringValue).filter(Boolean)
+    : [];
+
+  return {
+    trialStartedAt,
+    trialEndsAt,
+    subscriptionActive: source.subscriptionActive === true,
+    subscriptionRenewsAt: validIsoString(source.subscriptionRenewsAt),
+    subscriptionProvider: stringValue(source.subscriptionProvider),
+    subscriptionCustomerId: stringValue(source.subscriptionCustomerId),
+    premiumActive: source.premiumActive === true,
+    premiumGrantedAt: validIsoString(source.premiumGrantedAt),
+    premiumProvider: stringValue(source.premiumProvider),
+    premiumCodeHash: stringValue(source.premiumCodeHash),
+    freeCatalogCreditActive: source.freeCatalogCreditActive === true,
+    freeCatalogCreditGrantedAt: validIsoString(source.freeCatalogCreditGrantedAt),
+    freeCatalogCreditCodeHash: stringValue(source.freeCatalogCreditCodeHash),
+    freeCatalogCreditRedeemedCatalogId: stringValue(source.freeCatalogCreditRedeemedCatalogId),
+    freeCatalogCreditRedeemedAt: validIsoString(source.freeCatalogCreditRedeemedAt),
+    purchasedCatalogTestIds: [...new Set(purchased)].sort(),
+    updatedAt: validIsoString(source.updatedAt) ?? new Date().toISOString()
+  };
+}
+
+async function findCatalogTest(catalogId: string): Promise<{ questionCount: number } | null> {
+  for (const collection of ["catalogTests", "thematicTests"]) {
+    const snapshot = await db.collection(collection).doc(catalogId).get();
+    if (!snapshot.exists) continue;
+    const data = snapshot.data() ?? {};
+    let questionCount = Number(data.questionCount);
+    if (!Number.isInteger(questionCount) || questionCount <= 0) {
+      try {
+        const questions = JSON.parse(stringValue(data.questionsJson));
+        questionCount = Array.isArray(questions) ? questions.length : 0;
+      } catch {
+        questionCount = 0;
+      }
+    }
+    if (questionCount > 0) return { questionCount: Math.min(1000, questionCount) };
+  }
+  return null;
+}
+
+function validIsoString(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const milliseconds = Date.parse(value);
+  return Number.isFinite(milliseconds) ? new Date(milliseconds).toISOString() : null;
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function isStripePriceId(value: string): boolean {
+  return /^price_[A-Za-z0-9]+$/.test(value);
+}
 
 async function reserveUsage(
   user: { uid: string; email?: string; name?: string },
@@ -842,6 +1416,13 @@ function hashAccessCode(code: string): string {
 
 function configuredFreeCatalogCodeHashes(): Set<string> {
   return new Set(freeCatalogCodeHashList.value()
+    .split(/[,\s;]+/)
+    .map((value) => value.trim().toUpperCase())
+    .filter(Boolean));
+}
+
+function configuredPremiumCodeHashes(): Set<string> {
+  return new Set(premiumCodeHashList.value()
     .split(/[,\s;]+/)
     .map((value) => value.trim().toUpperCase())
     .filter(Boolean));

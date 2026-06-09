@@ -124,7 +124,7 @@ Beispiel:
 
 `POST /api/catalog/tests/{catalogId}/checkout`
 
-Bereitet den Checkout für einen Katalogtest vor. Die Oberfläche zeigt vorher Preis, Fragenanzahl, Thema und Schwierigkeit in einem Kaufdialog. Ohne konfigurierte `Billing:CatalogCheckoutUrl` liefert der Endpunkt `501`.
+Erstellt über `meditestCreateCheckout` eine Stripe-Checkout-Sitzung mit serverseitig festgelegten Preis-IDs. Die Oberfläche zeigt vorher Preis, Fragenanzahl, Thema und Schwierigkeit.
 
 `POST /api/catalog/tests/publish`
 
@@ -160,7 +160,11 @@ Liefert Testphase, Abo-Status und Preisangaben.
 
 `POST /api/license/checkout/subscription`
 
-Bereitet den Checkout für das Monatsabo vor. Ohne konfigurierte `Billing:SubscriptionCheckoutUrl` liefert der Endpunkt `501`.
+Erstellt über `meditestCreateCheckout` eine Stripe-Checkout-Sitzung für das Monatsabo.
+
+`POST /api/license/portal`
+
+Öffnet für aktive Stripe-Kunden das Stripe-Kundenportal zur Abo- und Zahlungsmittelverwaltung.
 
 `POST /api/license/redeem-premium-code`
 
@@ -286,15 +290,15 @@ Prüft die konfigurierte GitHub-Release-Quelle oder `latest.json` und liefert di
 ```json
 {
   "configured": true,
-  "currentVersion": "4.1.6",
+  "currentVersion": "4.1.7",
   "currentPlatform": "windows-x64",
-  "latestVersion": "4.1.6",
+  "latestVersion": "4.1.7",
   "updateAvailable": false,
-  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v4.1.6",
+  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v4.1.7",
   "recommendedDownload": {
     "platform": "windows-x64",
-    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v4.1.6/MediTest-Setup-4.1.6-win-x64.msi",
-    "fileName": "MediTest-Setup-4.1.6-win-x64.msi",
+    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v4.1.7/MediTest-Setup-4.1.7-win-x64.msi",
+    "fileName": "MediTest-Setup-4.1.7-win-x64.msi",
     "sha256": "...",
     "sizeBytes": 42400000
   }

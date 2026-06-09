@@ -3,7 +3,6 @@ using System.Net;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -616,30 +615,25 @@ app.MapGet("/api/license/status", async (HttpContext context, IConfiguration cfg
     return Results.Ok(ToLicenseStatusDto(state, context, cfg));
 });
 
-app.MapPost("/api/license/redeem-premium-code", async (RedeemPremiumCodeRequest req, HttpContext context, IConfiguration cfg, FirestoreUserDataStore store, CancellationToken ct) =>
+app.MapPost("/api/license/redeem-premium-code", async (RedeemPremiumCodeRequest req, HttpContext context, IConfiguration cfg, FirestoreUserDataStore store, IHttpClientFactory httpClientFactory, CancellationToken ct) =>
 {
     var normalizedCode = NormalizePremiumCode(req.Code);
     if (string.IsNullOrWhiteSpace(normalizedCode))
         return Results.BadRequest(new { error = "Bitte gib einen Premium-Code ein." });
 
-    if (!BillingPremiumCodesConfigured(cfg))
-    {
-        return Results.Json(new { error = "Premium-Codes sind noch nicht konfiguriert." }, statusCode: StatusCodes.Status501NotImplemented);
-    }
-
-    if (!BillingPremiumCodeMatches(cfg, normalizedCode))
-    {
-        return Results.BadRequest(new { error = "Dieser Premium-Code ist ungültig." });
-    }
+    var functionUrl = FirebaseFunctionUrl(cfg, "Billing:PremiumCodeRedemptionFunctionUrl", "meditestRedeemPremiumCode");
+    var functionResult = await SendProtectedFirebaseFunctionAsync(
+        httpClientFactory,
+        context,
+        HttpMethod.Post,
+        functionUrl,
+        new { code = req.Code },
+        "Der Premium-Code konnte nicht eingelöst werden.",
+        ct);
+    if (functionResult.Error != null) return functionResult.Error;
+    functionResult.Json?.Dispose();
 
     var state = await store.GetLicenseStateAsync(BillingTrialDays(cfg), ct);
-    var now = DateTime.UtcNow;
-    state.PremiumActive = true;
-    state.PremiumGrantedAt ??= now;
-    state.PremiumProvider = "premium-code";
-    state.PremiumCodeHash = PremiumCodeHash(normalizedCode);
-    await store.SaveLicenseStateAsync(state, ct);
-
     return Results.Ok(ToLicenseStatusDto(state, context, cfg));
 });
 
@@ -648,24 +642,6 @@ app.MapPost("/api/license/redeem-catalog-code", async (RedeemCatalogCodeRequest 
     var normalizedCode = NormalizePremiumCode(req.Code);
     if (string.IsNullOrWhiteSpace(normalizedCode))
         return Results.BadRequest(new { error = "Bitte gib einen Gratis-Katalog-Code ein." });
-
-    if (!BillingFreeCatalogCodesConfigured(cfg))
-    {
-        return Results.Json(new { error = "Gratis-Katalog-Codes sind noch nicht konfiguriert." }, statusCode: StatusCodes.Status501NotImplemented);
-    }
-
-    if (!BillingFreeCatalogCodeMatches(cfg, normalizedCode))
-    {
-        return Results.BadRequest(new { error = "Dieser Gratis-Katalog-Code ist ungültig." });
-    }
-
-    var state = await store.GetLicenseStateAsync(BillingTrialDays(cfg), ct);
-    if (state.FreeCatalogCreditActive ||
-        !string.IsNullOrWhiteSpace(state.FreeCatalogCreditCodeHash) ||
-        !string.IsNullOrWhiteSpace(state.FreeCatalogCreditRedeemedCatalogId))
-    {
-        return Results.BadRequest(new { error = "Für dieses Konto wurde bereits ein Gratis-Katalog-Code verwendet." });
-    }
 
     var functionUrl = FirebaseFunctionUrl(cfg, "Billing:CatalogCodeRedemptionFunctionUrl", "meditestRedeemCatalogCode");
     var functionResult = await SendProtectedFirebaseFunctionAsync(
@@ -678,7 +654,7 @@ app.MapPost("/api/license/redeem-catalog-code", async (RedeemCatalogCodeRequest 
         ct);
     if (functionResult.Error != null) return functionResult.Error;
 
-    state = await store.GetLicenseStateAsync(BillingTrialDays(cfg), ct);
+    var state = await store.GetLicenseStateAsync(BillingTrialDays(cfg), ct);
     return Results.Ok(ToLicenseStatusDto(state, context, cfg));
 });
 
@@ -697,15 +673,39 @@ app.MapDelete("/api/account", async (HttpContext context, IConfiguration cfg, IH
     return Results.Ok(new { deleted = true, message = "Konto und zugehörige Nutzerdaten wurden gelöscht." });
 });
 
-app.MapPost("/api/license/checkout/subscription", async (IConfiguration cfg) =>
+app.MapPost("/api/license/checkout/subscription", async (HttpContext context, IConfiguration cfg, IHttpClientFactory httpClientFactory, CancellationToken ct) =>
 {
-    var url = (cfg["Billing:SubscriptionCheckoutUrl"] ?? string.Empty).Trim();
-    if (string.IsNullOrWhiteSpace(url))
-    {
-        return Results.Json(new CheckoutLinkDto(false, null, "Checkout ist noch nicht konfiguriert. Lege in Stripe ein Abo-Produkt für 5,99 EUR/Monat mit 7 Tagen Testphase an und trage die Checkout-URL serverseitig ein."), statusCode: StatusCodes.Status501NotImplemented);
-    }
+    var functionUrl = FirebaseFunctionUrl(cfg, "Billing:CheckoutFunctionUrl", "meditestCreateCheckout");
+    var functionResult = await SendProtectedFirebaseFunctionAsync(
+        httpClientFactory,
+        context,
+        HttpMethod.Post,
+        functionUrl,
+        new { kind = "subscription" },
+        "Der Stripe-Checkout konnte nicht gestartet werden.",
+        ct);
+    if (functionResult.Error != null) return functionResult.Error;
+    using var json = functionResult.Json;
+    return Results.Ok(ParseCheckoutLink(json, "Weiterleitung zum Abo-Checkout."));
+});
 
-    return Results.Ok(new CheckoutLinkDto(true, url, "Weiterleitung zum Abo-Checkout."));
+app.MapPost("/api/license/portal", async (HttpContext context, IConfiguration cfg, IHttpClientFactory httpClientFactory, CancellationToken ct) =>
+{
+    var functionUrl = FirebaseFunctionUrl(cfg, "Billing:StripePortalFunctionUrl", "meditestStripePortal");
+    var functionResult = await SendProtectedFirebaseFunctionAsync(
+        httpClientFactory,
+        context,
+        HttpMethod.Post,
+        functionUrl,
+        new
+        {
+            returnUrl = "http://127.0.0.1:55000/pages/license.html"
+        },
+        "Das Stripe-Kundenportal konnte nicht geöffnet werden.",
+        ct);
+    if (functionResult.Error != null) return functionResult.Error;
+    using var json = functionResult.Json;
+    return Results.Ok(ParseCheckoutLink(json, "Weiterleitung zum Stripe-Kundenportal."));
 });
 
 app.MapPost("/api/documents/upload", async (HttpRequest request, FirestoreUserDataStore store, ITextExtractionService extractor, IConfiguration cfg, CancellationToken ct) =>
@@ -878,6 +878,21 @@ app.MapPost("/api/catalog/tests/{catalogId}/download", async (string catalogId, 
         }
     }
 
+    if (consumeFreeCatalogCredit)
+    {
+        var consumeUrl = FirebaseFunctionUrl(cfg, "Billing:CatalogCreditConsumptionFunctionUrl", "meditestConsumeCatalogCredit");
+        var consumeResult = await SendProtectedFirebaseFunctionAsync(
+            httpClientFactory,
+            context,
+            HttpMethod.Post,
+            consumeUrl,
+            new { catalogId },
+            "Der Gratis-Katalogtest konnte nicht freigeschaltet werden.",
+            ct);
+        if (consumeResult.Error != null) return consumeResult.Error;
+        consumeResult.Json?.Dispose();
+    }
+
     var documentName = TrimTo(req.DocumentName, 200);
     if (string.IsNullOrWhiteSpace(documentName)) documentName = title;
     if (string.IsNullOrWhiteSpace(documentName)) documentName = "Firestore-Test";
@@ -907,31 +922,26 @@ app.MapPost("/api/catalog/tests/{catalogId}/download", async (string catalogId, 
         }, ct);
     }
 
-    if (consumeFreeCatalogCredit)
-    {
-        licenseState.FreeCatalogCreditActive = false;
-        licenseState.FreeCatalogCreditRedeemedCatalogId = catalogId;
-        licenseState.FreeCatalogCreditRedeemedAt = DateTime.UtcNow;
-        licenseState.PurchasedCatalogTestIds.Add(catalogId);
-        await store.SaveLicenseStateAsync(licenseState, ct);
-    }
-
     return Results.Ok(new CatalogDownloadResult(doc.Id, doc.FileName, questions.Count));
 });
 
-app.MapPost("/api/catalog/tests/{catalogId}/checkout", (string catalogId, IConfiguration cfg) =>
+app.MapPost("/api/catalog/tests/{catalogId}/checkout", async (string catalogId, HttpContext context, IConfiguration cfg, IHttpClientFactory httpClientFactory, CancellationToken ct) =>
 {
     catalogId = (catalogId ?? string.Empty).Trim();
     if (string.IsNullOrWhiteSpace(catalogId)) return Results.BadRequest(new { error = "Katalog-ID fehlt." });
 
-    var url = (cfg["Billing:CatalogCheckoutUrl"] ?? string.Empty).Trim();
-    if (string.IsNullOrWhiteSpace(url))
-    {
-        return Results.Json(new CheckoutLinkDto(false, null, "Checkout ist noch nicht konfiguriert. Lege serverseitig den Zahlungsanbieter und die Webhook-Zuordnung für Katalogkäufe an."), statusCode: StatusCodes.Status501NotImplemented);
-    }
-
-    url = url.Replace("{catalogId}", Uri.EscapeDataString(catalogId), StringComparison.OrdinalIgnoreCase);
-    return Results.Ok(new CheckoutLinkDto(true, url, "Weiterleitung zum Katalogtest-Checkout."));
+    var functionUrl = FirebaseFunctionUrl(cfg, "Billing:CheckoutFunctionUrl", "meditestCreateCheckout");
+    var functionResult = await SendProtectedFirebaseFunctionAsync(
+        httpClientFactory,
+        context,
+        HttpMethod.Post,
+        functionUrl,
+        new { kind = "catalog", catalogId },
+        "Der Stripe-Checkout konnte nicht gestartet werden.",
+        ct);
+    if (functionResult.Error != null) return functionResult.Error;
+    using var json = functionResult.Json;
+    return Results.Ok(ParseCheckoutLink(json, "Weiterleitung zum Katalogtest-Checkout."));
 });
 
 app.MapPost("/api/catalog/tests/publish", async (CatalogPublishRequest req, HttpContext context, IConfiguration cfg, IHttpClientFactory httpClientFactory, FirestoreUserDataStore store, CancellationToken ct) =>
@@ -971,7 +981,7 @@ app.MapPost("/api/catalog/tests/publish", async (CatalogPublishRequest req, Http
             ["difficulty"] = FirestoreValue(difficulty),
             ["questionCount"] = FirestoreIntValue(questions.Count),
             ["schemaVersion"] = FirestoreIntValue(1),
-            ["appVersion"] = FirestoreValue("4.1.6"),
+            ["appVersion"] = FirestoreValue("4.1.7"),
             ["questionsJson"] = FirestoreValue(questionsJson),
             ["createdByUid"] = FirestoreValue(user.UserId),
             ["createdByEmail"] = FirestoreValue(user.Email),
@@ -1499,7 +1509,7 @@ static LicenseStatusDto ToLicenseStatusDto(UserLicenseState state, HttpContext c
     var accessActive = subscriptionActive || trialActive;
     var status = premiumActive ? "premium" : subscriptionActive ? "active" : trialActive ? "trial" : "expired";
     var plan = premiumActive ? "Premium" : subscriptionActive ? "Pro" : "Testphase";
-    var checkoutConfigured = !string.IsNullOrWhiteSpace(cfg["Billing:SubscriptionCheckoutUrl"]);
+    var checkoutConfigured = cfg.GetValue<bool?>("Billing:StripeEnabled") ?? false;
     var message = status switch
     {
         "premium" => "Premium aktiv: MediTest und alle Katalogtests sind freigeschaltet.",
@@ -1598,60 +1608,9 @@ static int BillingCatalogTestPriceCents(IConfiguration cfg, int questionCount)
 static string BillingCurrency(IConfiguration cfg) => string.IsNullOrWhiteSpace(cfg["Billing:Currency"]) ? "EUR" : cfg["Billing:Currency"]!.Trim().ToUpperInvariant();
 static bool BillingEnforcesCatalogPurchases(IConfiguration cfg) => cfg.GetValue<bool?>("Billing:EnforceCatalogPurchases") ?? true;
 
-static bool BillingPremiumCodesConfigured(IConfiguration cfg)
-{
-    return BillingConfigStrings(cfg, "Billing:PremiumCodes").Any() || BillingConfigStrings(cfg, "Billing:PremiumCodeHashes").Any();
-}
-
-static bool BillingPremiumCodeMatches(IConfiguration cfg, string normalizedCode)
-{
-    var codeMatches = BillingConfigStrings(cfg, "Billing:PremiumCodes")
-        .Select(NormalizePremiumCode)
-        .Any(code => string.Equals(code, normalizedCode, StringComparison.OrdinalIgnoreCase));
-    if (codeMatches) return true;
-
-    var codeHash = PremiumCodeHash(normalizedCode);
-    return BillingConfigStrings(cfg, "Billing:PremiumCodeHashes")
-        .Select(hash => hash.Trim())
-        .Any(hash => string.Equals(hash, codeHash, StringComparison.OrdinalIgnoreCase));
-}
-
-static bool BillingFreeCatalogCodesConfigured(IConfiguration cfg)
-{
-    return BillingConfigStrings(cfg, "Billing:FreeCatalogCodes").Any() || BillingConfigStrings(cfg, "Billing:FreeCatalogCodeHashes").Any();
-}
-
-static bool BillingFreeCatalogCodeMatches(IConfiguration cfg, string normalizedCode)
-{
-    var codeMatches = BillingConfigStrings(cfg, "Billing:FreeCatalogCodes")
-        .Select(NormalizePremiumCode)
-        .Any(code => string.Equals(code, normalizedCode, StringComparison.OrdinalIgnoreCase));
-    if (codeMatches) return true;
-
-    var codeHash = PremiumCodeHash(normalizedCode);
-    return BillingConfigStrings(cfg, "Billing:FreeCatalogCodeHashes")
-        .Select(hash => hash.Trim())
-        .Any(hash => string.Equals(hash, codeHash, StringComparison.OrdinalIgnoreCase));
-}
-
 static bool FreeCatalogCreditAvailable(UserLicenseState state)
 {
     return state.FreeCatalogCreditActive && string.IsNullOrWhiteSpace(state.FreeCatalogCreditRedeemedCatalogId);
-}
-
-static List<string> BillingConfigStrings(IConfiguration cfg, string key)
-{
-    var values = cfg.GetSection(key).Get<string[]>() ?? [];
-    if (values.Length == 0 && !string.IsNullOrWhiteSpace(cfg[key]))
-    {
-        values = cfg[key]!
-            .Split([',', ';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-    }
-
-    return values
-        .Select(v => (v ?? string.Empty).Trim())
-        .Where(v => !string.IsNullOrWhiteSpace(v))
-        .ToList();
 }
 
 static string NormalizePremiumCode(string? code)
@@ -1659,16 +1618,23 @@ static string NormalizePremiumCode(string? code)
     return Regex.Replace((code ?? string.Empty).Trim().ToUpperInvariant(), "[^A-Z0-9]", string.Empty);
 }
 
-static string PremiumCodeHash(string normalizedCode)
-{
-    return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedCode)));
-}
-
 static string FirebaseFunctionUrl(IConfiguration cfg, string configKey, string functionName)
 {
     var configured = (cfg[configKey] ?? string.Empty).Trim();
     if (!string.IsNullOrWhiteSpace(configured)) return configured;
     return $"https://europe-west3-{FirebaseProjectId(cfg)}.cloudfunctions.net/{functionName}";
+}
+
+static CheckoutLinkDto ParseCheckoutLink(JsonDocument? json, string fallbackMessage)
+{
+    if (json == null) return new CheckoutLinkDto(false, null, fallbackMessage);
+    var root = json.RootElement;
+    var available = root.TryGetProperty("available", out var availableElement) && availableElement.ValueKind == JsonValueKind.True;
+    var url = root.TryGetProperty("url", out var urlElement) ? urlElement.GetString() : null;
+    var message = root.TryGetProperty("message", out var messageElement)
+        ? messageElement.GetString() ?? fallbackMessage
+        : fallbackMessage;
+    return new CheckoutLinkDto(available && !string.IsNullOrWhiteSpace(url), url, message);
 }
 
 static async Task<(JsonDocument? Json, IResult? Error)> SendProtectedFirebaseFunctionAsync(

@@ -14,5 +14,8 @@
         "firebase-debug.*.log"
       ]
     }
-  ]
+  ],
+  "extensions": {
+    "firestore-stripe-invoices": "stripe/firestore-stripe-invoices@0.2.2"
+  }
 }

@@ -250,7 +250,18 @@ document.getElementById('publishForm').addEventListener('submit',async e=>{
   }catch(err){status(msg,err.message,'status error');}
 });
 
-loadCatalog().catch(e=>status(document.getElementById('msg'),e.message,'status error'));
+async function initCatalog(){
+  const checkout=new URLSearchParams(location.search).get('checkout');
+  await loadCatalog();
+  if(checkout==='success'){
+    status(document.getElementById('msg'),'Zahlung erfolgreich. Die Freischaltung wird mit Stripe abgeglichen...','status success');
+    setTimeout(()=>loadCatalog().catch(()=>{}),2500);
+  }else if(checkout==='cancelled'){
+    status(document.getElementById('msg'),'Checkout abgebrochen. Es wurde nichts gekauft.','status');
+  }
+}
+
+initCatalog().catch(e=>status(document.getElementById('msg'),e.message,'status error'));
 </script>
 </body>
 </html>

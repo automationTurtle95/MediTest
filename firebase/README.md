@@ -68,7 +68,12 @@ AI_DAILY_REQUEST_LIMIT=10
 AI_COOLDOWN_SECONDS=30
 AI_USAGE_RETENTION_DAYS=90
 AI_MAX_PROMPT_CHARS=50000
-FREE_CATALOG_CODE_HASHES=33D660B54A9FFBD438D6D99EBDB7650EADCC2F871EE04C058205E5DCB0BE0876
+FREE_CATALOG_CODE_HASHES=<SHA-256-HASH>
+PREMIUM_CODE_HASHES=<SHA-256-HASH>
+STRIPE_SUBSCRIPTION_PRICE_ID=price_...
+STRIPE_CATALOG_UNIT_PRICE_ID=price_...
+STRIPE_CATALOG_ENDING_PRICE_ID=price_...
+STRIPE_PORTAL_CONFIGURATION_ID=bpc_...
 ```
 
 Anschließend die Functions erneut bereitstellen:
@@ -114,7 +119,7 @@ Wenn `gcloud` nicht angemeldet ist, kann der Functions-Deploy trotzdem über `np
 Firestore trennt Katalog und Nutzerdaten:
 
 - `catalogTests`: Angemeldete Nutzer dürfen lesen; schreiben darf nur ein Konto mit Firebase Custom Claim `admin=true`.
-- `users/{uid}/...`: Private Profil-, Dokument-, Fragen- und Testdaten; lesen und schreiben darf nur der jeweilige Firebase-Nutzer.
+- `users/{uid}/...`: Private Profil-, Dokument-, Fragen- und Testdaten; den Lizenzpfad darf der Nutzer nur lesen.
 - `thematicTests`: Legacy-Katalogpfad mit denselben Admin-Regeln, falls ältere Katalogdaten noch vorhanden sind.
 
 1. Admin-Benutzer in Firebase Authentication anlegen oder über MediTest registrieren.
@@ -140,10 +145,14 @@ Danach läuft die Fragegenerierung über Firebase. Der echte Gemini-Key liegt ni
 
 ## Lizenz und Zahlungen
 
-MediTest V4.0.2 bereitet das Lizenzmodell vor:
+MediTest V4.1.7 integriert das Lizenzmodell:
 
 - 7 Tage Testphase pro Firebase-Nutzer
 - 5,99 EUR pro Monat für das Abo
 - Katalogzugang und Premium-Freischaltung per Code
 
-Produktive Zahlungen müssen serverseitig über einen Zahlungsanbieter laufen. Eine geschützte Function erstellt die Checkout-Sitzung und bindet sie über serverseitige Metadaten an Firebase-UID, Kaufart und gegebenenfalls Katalog-ID. Ein signierter, idempotent verarbeiteter Webhook aktualisiert anschließend den Abo-Status bzw. gekaufte Katalogtest-IDs unter `users/{uid}/billing/license`. Die Firestore-Regeln müssen direkte Nutzer-Schreibzugriffe auf diesen Lizenzpfad sperren; vorher müssen sämtliche Lizenzänderungen, einschließlich Testphase und Codes, in vertrauenswürdige Functions verlagert werden. Die vorhandenen `Billing:SubscriptionCheckoutUrl` und `Billing:CatalogCheckoutUrl` sind nur vorbereitete Weiterleitungen und ersetzen diesen Ablauf nicht. Premium- und Admin-Konten haben Zugriff auf alle Katalogtests. Bei einer Kontolöschung werden private Firestore-Daten, KI-Nutzungsdaten und das Authentication-Konto entfernt.
+Die geschützte Function `meditestCreateCheckout` erstellt Stripe Checkout direkt mit dem Secret `MEDITEST_STRIPE_API_KEY`. Preise werden ausschließlich über `STRIPE_SUBSCRIPTION_PRICE_ID`, `STRIPE_CATALOG_UNIT_PRICE_ID` und `STRIPE_CATALOG_ENDING_PRICE_ID` festgelegt. `meditestStripeWebhook` prüft jedes Ereignis mit `MEDITEST_STRIPE_WEBHOOK_SECRET` und aktualisiert anschließend `users/{uid}/billing/license`. `meditestStripePortal` verwendet `STRIPE_PORTAL_CONFIGURATION_ID`.
+
+Die Payments-Extension kann für diese Datenbank nicht verwendet werden, weil ihre Gen-1-Firestore-Trigger mit dem Firestore-Multiregionsstandort `eur3` nicht bereitgestellt werden können. Die direkten Functions liefern denselben Checkout-, Webhook- und Portalablauf ohne diese Standortbeschränkung.
+
+Die Firestore-Regeln erlauben Nutzern nur Lesezugriff auf Lizenz- und Stripe-Ausgabedaten. Premium-Code, Gratis-Code und Gratis-Katalogverbrauch laufen ebenfalls über geschützte Functions. Bei einer Kontolöschung werden private Firestore-Daten, Stripe-Kundendaten, KI-Nutzungsdaten und das Authentication-Konto entfernt.

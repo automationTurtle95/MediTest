@@ -26,6 +26,7 @@ async function loadLicense(){
   status(statusBox,s.message,s.accessActive?'status success':'status error');
   const trialEnd=new Date(s.trialEndsAt).toLocaleDateString();
   const isPremium=s.premiumActive||s.status==='premium';
+  const hasSubscription=s.status==='active'&&!isPremium;
   const freeCreditAvailable=!!s.freeCatalogCreditAvailable;
   const freeCreditRedeemed=!!s.freeCatalogCreditRedeemed;
   const freeCreditText=freeCreditAvailable
@@ -39,7 +40,13 @@ async function loadLicense(){
       <h2>${esc(s.plan)}</h2>
       <p class="muted">${isPremium?'Dauerhaft freigeschaltet':`Testphase bis ${trialEnd} · ${Number(s.trialDaysRemaining)||0} Tag(e) übrig`}</p>
       <p>${isPremium?'Premium ist aktiv. MediTest und alle Katalogtests sind freigeschaltet.':`Nach der Testphase kostet MediTest <b>${priceLabel(s.monthlyPriceCents,s.currency)} pro Monat</b>.`}</p>
-      <div class="actions">${isPremium?'<a class="button primary" href="/pages/catalog.html">Katalog öffnen</a>':'<button class="primary" type="button" onclick="startSubscription()">Abo starten</button>'}</div>
+      <div class="actions">${
+        isPremium
+          ? '<a class="button primary" href="/pages/catalog.html">Katalog öffnen</a>'
+          : hasSubscription
+            ? '<button class="primary" type="button" onclick="manageSubscription()">Abo verwalten</button>'
+            : `<button class="primary" type="button" onclick="startSubscription()" ${s.checkoutConfigured?'':'disabled'}>Abo starten</button>`
+      }</div>
     </article>
     <article class="card doc-card">
       <span class="badge">Einzelzugang</span>
@@ -72,6 +79,16 @@ async function loadLicense(){
       </form>
     </article>`;
   enhanceTooltips();
+}
+
+async function manageSubscription(){
+  const msg=document.getElementById('msg');
+  status(msg,'Öffne Stripe-Kundenportal...');
+  try{
+    const r=await api('/api/license/portal',{method:'POST'});
+    if(r.available&&r.url) location.href=r.url;
+    else status(msg,r.message,'status error');
+  }catch(e){status(msg,e.message,'status error');}
 }
 
 async function startSubscription(){
@@ -112,7 +129,18 @@ async function redeemCatalogCode(e){
   }catch(e){status(msg,e.message,'status error');}
 }
 
-loadLicense().catch(e=>status(document.getElementById('msg'),e.message,'status error'));
+async function initLicense(){
+  const checkout=new URLSearchParams(location.search).get('checkout');
+  await loadLicense();
+  if(checkout==='success'){
+    status(document.getElementById('msg'),'Zahlung erfolgreich. Die Freischaltung wird mit Stripe abgeglichen...','status success');
+    setTimeout(()=>loadLicense().catch(()=>{}),2500);
+  }else if(checkout==='cancelled'){
+    status(document.getElementById('msg'),'Checkout abgebrochen. Es wurde nichts geändert.','status');
+  }
+}
+
+initLicense().catch(e=>status(document.getElementById('msg'),e.message,'status error'));
 </script>
 </body>
 </html>

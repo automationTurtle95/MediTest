@@ -20,8 +20,63 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
-    match /users/{userId}/{document=**} {
-      allow read, write: if signedIn() && request.auth.uid == userId;
+    match /users/{userId} {
+      function ownsUserData() {
+        return signedIn() && request.auth.uid == userId;
+      }
+
+      allow read: if ownsUserData();
+      allow write: if false;
+
+      match /settings/{document=**} {
+        allow read, write: if ownsUserData();
+      }
+
+      match /documents/{document=**} {
+        allow read, write: if ownsUserData();
+      }
+
+      match /testSessions/{document=**} {
+        allow read, write: if ownsUserData();
+      }
+
+      match /meta/{document=**} {
+        allow read, write: if ownsUserData();
+      }
+
+      match /billing/{document=**} {
+        allow read: if ownsUserData();
+        allow write: if false;
+      }
+    }
+
+    match /customers/{userId} {
+      function ownsStripeData() {
+        return signedIn() && request.auth.uid == userId;
+      }
+
+      allow read: if ownsStripeData();
+      allow write: if false;
+
+      match /checkout_sessions/{document=**} {
+        allow read: if ownsStripeData();
+        allow write: if false;
+      }
+
+      match /subscriptions/{document=**} {
+        allow read: if ownsStripeData();
+        allow write: if false;
+      }
+
+      match /payments/{document=**} {
+        allow read: if ownsStripeData();
+        allow write: if false;
+      }
+    }
+
+    match /products/{document=**} {
+      allow read: if signedIn();
+      allow write: if false;
     }
   }
 }

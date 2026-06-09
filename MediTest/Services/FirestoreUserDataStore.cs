@@ -50,24 +50,24 @@ public sealed class FirestoreUserDataStore
 
     public async Task<UserLicenseState> GetLicenseStateAsync(int trialDays, CancellationToken ct)
     {
-        trialDays = Math.Clamp(trialDays <= 0 ? 7 : trialDays, 1, 60);
-        var fields = await GetDocAsync($"{UserRoot()}/billing/license", ct);
-        if (fields == null)
-        {
-            var now = DateTime.UtcNow;
-            var created = new UserLicenseState
-            {
-                TrialStartedAt = now,
-                TrialEndsAt = now.AddDays(trialDays),
-                UpdatedAt = now
-            };
-            await SaveLicenseStateAsync(created, ct);
-            return created;
-        }
+        _ = trialDays;
+        var configuredUrl = (_configuration["Billing:LicenseStatusFunctionUrl"] ?? string.Empty).Trim();
+        var functionUrl = string.IsNullOrWhiteSpace(configuredUrl)
+            ? $"https://europe-west3-{ProjectId()}.cloudfunctions.net/meditestLicenseStatus"
+            : configuredUrl;
+        using var request = new HttpRequestMessage(HttpMethod.Get, functionUrl);
+        request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {BearerToken()}");
+        using var response = await _httpClientFactory.CreateClient().SendAsync(request, ct);
+        var raw = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException(FunctionError(raw, "Der Lizenzstatus konnte nicht geladen werden."));
 
-        var state = JsonSerializer.Deserialize<UserLicenseState>(FirestoreString(fields.Value, "dataJson"), JsonOptions) ?? new UserLicenseState();
+        using var json = JsonDocument.Parse(raw);
+        if (!json.RootElement.TryGetProperty("state", out var stateElement))
+            throw new InvalidOperationException("Der Lizenzdienst hat keinen gültigen Status geliefert.");
+        var state = stateElement.Deserialize<UserLicenseState>(JsonOptions) ?? new UserLicenseState();
         if (state.TrialStartedAt == default) state.TrialStartedAt = DateTime.UtcNow;
-        if (state.TrialEndsAt == default) state.TrialEndsAt = state.TrialStartedAt.AddDays(trialDays);
+        if (state.TrialEndsAt == default) state.TrialEndsAt = state.TrialStartedAt.AddDays(7);
         state.SubscriptionProvider ??= string.Empty;
         state.SubscriptionCustomerId ??= string.Empty;
         state.PremiumProvider ??= string.Empty;
@@ -925,6 +925,21 @@ public sealed class FirestoreUserDataStore
         }
         catch (JsonException) { }
         throw new InvalidOperationException(string.IsNullOrWhiteSpace(raw) ? $"Firestore-Fehler: {(int)response.StatusCode}" : raw);
+    }
+
+    private static string FunctionError(string raw, string fallback)
+    {
+        try
+        {
+            using var json = JsonDocument.Parse(raw);
+            if (json.RootElement.TryGetProperty("error", out var error))
+            {
+                if (error.ValueKind == JsonValueKind.String) return error.GetString() ?? fallback;
+                if (error.TryGetProperty("message", out var message)) return message.GetString() ?? fallback;
+            }
+        }
+        catch (JsonException) { }
+        return string.IsNullOrWhiteSpace(raw) ? fallback : raw;
     }
 
     private static IEnumerable<string> SplitText(string text)
