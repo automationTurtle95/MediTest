@@ -61,6 +61,7 @@ if (firebaseAuthConfigured)
         .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         .AddJwtBearer(options =>
         {
+            options.MapInboundClaims = false;
             options.Authority = $"https://securetoken.google.com/{firebaseProjectId}";
             options.TokenValidationParameters = new TokenValidationParameters
             {
@@ -108,6 +109,18 @@ app.Use(async (context, next) =>
     {
         if (context.User.Identity?.IsAuthenticated == true)
         {
+            if (!FirebaseEmailVerified(context.User))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                context.Response.ContentType = "application/json; charset=utf-8";
+                await context.Response.WriteAsJsonAsync(new
+                {
+                    error = "Bitte bestätige zuerst deine E-Mail-Adresse.",
+                    emailVerificationRequired = true
+                });
+                return;
+            }
+
             context.Items["CurrentUser"] = ToFirebaseUserDto(context.User, app.Configuration);
             await next();
             return;
@@ -245,7 +258,13 @@ static AuthUserDto ToFirebaseUserDto(ClaimsPrincipal principal, IConfiguration c
         plan,
         licenseStatus,
         (cfg["Auth:Mode"] ?? "firebase").Trim().ToLowerInvariant(),
+        FirebaseEmailVerified(principal),
         expiresAt);
+}
+
+static bool FirebaseEmailVerified(ClaimsPrincipal principal)
+{
+    return IsTruthy(FirstClaim(principal, "email_verified", "emailVerified"));
 }
 
 static string FirstClaim(ClaimsPrincipal principal, params string[] names)
@@ -622,7 +641,7 @@ app.MapPost("/api/license/redeem-premium-code", async (RedeemPremiumCodeRequest 
     return Results.Ok(ToLicenseStatusDto(state, context, cfg));
 });
 
-app.MapPost("/api/license/redeem-catalog-code", async (RedeemCatalogCodeRequest req, HttpContext context, IConfiguration cfg, FirestoreUserDataStore store, CancellationToken ct) =>
+app.MapPost("/api/license/redeem-catalog-code", async (RedeemCatalogCodeRequest req, HttpContext context, IConfiguration cfg, FirestoreUserDataStore store, IHttpClientFactory httpClientFactory, CancellationToken ct) =>
 {
     var normalizedCode = NormalizePremiumCode(req.Code);
     if (string.IsNullOrWhiteSpace(normalizedCode))
@@ -639,18 +658,41 @@ app.MapPost("/api/license/redeem-catalog-code", async (RedeemCatalogCodeRequest 
     }
 
     var state = await store.GetLicenseStateAsync(BillingTrialDays(cfg), ct);
-    if (!string.IsNullOrWhiteSpace(state.FreeCatalogCreditRedeemedCatalogId))
+    if (state.FreeCatalogCreditActive ||
+        !string.IsNullOrWhiteSpace(state.FreeCatalogCreditCodeHash) ||
+        !string.IsNullOrWhiteSpace(state.FreeCatalogCreditRedeemedCatalogId))
     {
-        return Results.BadRequest(new { error = "Der Gratis-Katalog-Code wurde für dieses Konto bereits verwendet." });
+        return Results.BadRequest(new { error = "Für dieses Konto wurde bereits ein Gratis-Katalog-Code verwendet." });
     }
 
-    var now = DateTime.UtcNow;
-    state.FreeCatalogCreditActive = true;
-    state.FreeCatalogCreditGrantedAt ??= now;
-    state.FreeCatalogCreditCodeHash = PremiumCodeHash(normalizedCode);
-    await store.SaveLicenseStateAsync(state, ct);
+    var functionUrl = FirebaseFunctionUrl(cfg, "Billing:CatalogCodeRedemptionFunctionUrl", "meditestRedeemCatalogCode");
+    var functionResult = await SendProtectedFirebaseFunctionAsync(
+        httpClientFactory,
+        context,
+        HttpMethod.Post,
+        functionUrl,
+        new { code = req.Code },
+        "Der Gratis-Katalog-Code konnte nicht eingelöst werden.",
+        ct);
+    if (functionResult.Error != null) return functionResult.Error;
 
+    state = await store.GetLicenseStateAsync(BillingTrialDays(cfg), ct);
     return Results.Ok(ToLicenseStatusDto(state, context, cfg));
+});
+
+app.MapDelete("/api/account", async (HttpContext context, IConfiguration cfg, IHttpClientFactory httpClientFactory, CancellationToken ct) =>
+{
+    var functionUrl = FirebaseFunctionUrl(cfg, "Auth:Firebase:DeleteAccountFunctionUrl", "meditestDeleteAccount");
+    var functionResult = await SendProtectedFirebaseFunctionAsync(
+        httpClientFactory,
+        context,
+        HttpMethod.Delete,
+        functionUrl,
+        null,
+        "Das Konto konnte nicht gelöscht werden.",
+        ct);
+    if (functionResult.Error != null) return functionResult.Error;
+    return Results.Ok(new { deleted = true, message = "Konto und zugehörige Nutzerdaten wurden gelöscht." });
 });
 
 app.MapPost("/api/license/checkout/subscription", async (IConfiguration cfg) =>
@@ -927,7 +969,7 @@ app.MapPost("/api/catalog/tests/publish", async (CatalogPublishRequest req, Http
             ["difficulty"] = FirestoreValue(difficulty),
             ["questionCount"] = FirestoreIntValue(questions.Count),
             ["schemaVersion"] = FirestoreIntValue(1),
-            ["appVersion"] = FirestoreValue("4.1.2"),
+            ["appVersion"] = FirestoreValue("4.1.3"),
             ["questionsJson"] = FirestoreValue(questionsJson),
             ["createdByUid"] = FirestoreValue(user.UserId),
             ["createdByEmail"] = FirestoreValue(user.Email),
@@ -1618,6 +1660,58 @@ static string NormalizePremiumCode(string? code)
 static string PremiumCodeHash(string normalizedCode)
 {
     return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedCode)));
+}
+
+static string FirebaseFunctionUrl(IConfiguration cfg, string configKey, string functionName)
+{
+    var configured = (cfg[configKey] ?? string.Empty).Trim();
+    if (!string.IsNullOrWhiteSpace(configured)) return configured;
+    return $"https://europe-west3-{FirebaseProjectId(cfg)}.cloudfunctions.net/{functionName}";
+}
+
+static async Task<(JsonDocument? Json, IResult? Error)> SendProtectedFirebaseFunctionAsync(
+    IHttpClientFactory httpClientFactory,
+    HttpContext context,
+    HttpMethod method,
+    string url,
+    object? body,
+    string fallbackError,
+    CancellationToken ct)
+{
+    var token = FirebaseBearerToken(context);
+    if (string.IsNullOrWhiteSpace(token))
+        return (null, Results.Unauthorized());
+
+    using var request = new HttpRequestMessage(method, url);
+    request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {token}");
+    if (body != null)
+        request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+
+    var response = await httpClientFactory.CreateClient().SendAsync(request, ct);
+    var raw = await response.Content.ReadAsStringAsync(ct);
+    if (!response.IsSuccessStatusCode)
+    {
+        var message = FirebaseFunctionError(raw, fallbackError);
+        return (null, Results.Json(new { error = message }, statusCode: (int)response.StatusCode));
+    }
+
+    if (string.IsNullOrWhiteSpace(raw)) return (null, null);
+    return (JsonDocument.Parse(raw), null);
+}
+
+static string FirebaseFunctionError(string raw, string fallback)
+{
+    try
+    {
+        using var json = JsonDocument.Parse(raw);
+        if (json.RootElement.TryGetProperty("error", out var error))
+        {
+            if (error.ValueKind == JsonValueKind.String) return error.GetString() ?? fallback;
+            if (error.TryGetProperty("message", out var message)) return message.GetString() ?? fallback;
+        }
+    }
+    catch (JsonException) { }
+    return string.IsNullOrWhiteSpace(raw) ? fallback : raw;
 }
 
 static async Task<(JsonDocument? Json, IResult? Error)> SendFirestoreAsync(

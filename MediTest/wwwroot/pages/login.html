@@ -13,7 +13,7 @@
       <h1>MediTest</h1>
       <p>Multiple-Choice-Prüfungssimulation für Medizinstudenten.</p>
     </div>
-    <div class="auth-version">Version 4.1.2</div>
+    <div class="auth-version">Version 4.1.3</div>
   </section>
   <section class="auth-main">
     <div class="card auth-panel">
@@ -36,6 +36,7 @@
         <div class="actions">
           <button id="submitBtn" class="primary" type="submit">Einloggen</button>
           <button id="resetPasswordBtn" type="button">Passwort vergessen?</button>
+          <button id="resendVerificationBtn" class="hidden" type="button">Bestätigungs-E-Mail erneut senden</button>
         </div>
       </form>
       <div class="auth-meta">
@@ -68,6 +69,7 @@ const authHint=document.getElementById('authHint');
 const modeBadge=document.getElementById('modeBadge');
 const loginSuccess=document.getElementById('loginSuccess');
 const resetPasswordBtn=document.getElementById('resetPasswordBtn');
+const resendVerificationBtn=document.getElementById('resendVerificationBtn');
 let mode='login';
 let loginRedirectTimer=null;
 
@@ -86,6 +88,7 @@ function setMode(next){
   title.textContent=registering?'Konto erstellen':'Einloggen';
   submitBtn.textContent=registering?'Registrieren':'Einloggen';
   resetPasswordBtn.classList.toggle('hidden',registering);
+  resendVerificationBtn.classList.add('hidden');
   document.getElementById('password').autocomplete=registering?'new-password':'current-password';
   msg.classList.add('hidden');
 }
@@ -113,6 +116,19 @@ resetPasswordBtn.onclick=async()=>{
     status(msg,err.message,'status error');
   }
 };
+resendVerificationBtn.onclick=async()=>{
+  try{
+    status(msg,'Sende Bestätigungs-E-Mail...');
+    const r=await resendFirebaseEmailVerification({
+      email:document.getElementById('email').value.trim(),
+      password:document.getElementById('password').value
+    });
+    status(msg,r.message,'status success');
+    if(r.verified)resendVerificationBtn.classList.add('hidden');
+  }catch(err){
+    status(msg,err.message,'status error');
+  }
+};
 form.addEventListener('submit',async e=>{
   e.preventDefault();
   const payload={
@@ -125,6 +141,14 @@ form.addEventListener('submit',async e=>{
     const res=mode==='register'
       ? await registerWithFirebase(payload)
       : await loginWithFirebase(payload);
+    if(res.verificationRequired){
+      setMode('login');
+      document.getElementById('email').value=res.email||payload.email;
+      document.getElementById('password').value='';
+      resendVerificationBtn.classList.remove('hidden');
+      status(msg,res.message,'status success');
+      return;
+    }
     status(msg,`Willkommen, ${res.user.displayName||res.user.email}.`,'status success');
     loginSuccess.classList.remove('hidden');
     setTimeout(async()=>{
@@ -135,11 +159,19 @@ form.addEventListener('submit',async e=>{
       loginRedirectTimer=setTimeout(()=>{location.href=safeReturnUrl();},350);
     },1450);
   }catch(err){
+    resendVerificationBtn.classList.toggle('hidden',err?.emailVerificationRequired!==true);
     status(msg,err.message,'status error');
   }
 });
 currentAuthUser(false).then(user=>{if(user) location.href=safeReturnUrl();}).catch(()=>{});
 loadConfig();
+if(qs('verificationRequired')==='1'){
+  resendVerificationBtn.classList.remove('hidden');
+  status(msg,'Bitte bestätige zuerst deine E-Mail-Adresse.','status error');
+}
+if(qs('accountDeleted')==='1'){
+  status(msg,qs('message')||'Konto und zugehörige Daten wurden gelöscht.','status success');
+}
 enhanceTooltips();
 </script>
 </body>

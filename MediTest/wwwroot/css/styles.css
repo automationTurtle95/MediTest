@@ -357,6 +357,36 @@ button:disabled,.button:disabled{cursor:not-allowed;opacity:.55;transform:none}
 .modal-panel h2{margin-top:2px}
 .modal-panel p{margin:10px 0}
 .modal-panel .actions{margin-top:22px}
+.catalog-price{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:12px 14px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--field-alt);
+}
+.catalog-price span{color:var(--muted);font-weight:700}
+.catalog-price strong{font-size:22px;color:var(--primary-dark)}
+.catalog-purchase-modal{width:min(650px,100%)}
+.catalog-purchase-summary{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+  gap:10px;
+  margin:18px 0;
+}
+.catalog-purchase-summary>div{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  padding:14px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--field-alt);
+}
+.catalog-purchase-summary span{color:var(--muted);font-size:13px;font-weight:700}
+.account-delete-card{border-color:color-mix(in srgb,var(--danger) 50%,var(--border))}
 .ai-generation-modal{width:min(720px,100%)}
 .ai-generation-document,.ai-generation-metrics{
   display:grid;

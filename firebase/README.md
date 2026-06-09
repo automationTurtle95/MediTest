@@ -40,6 +40,8 @@ Wenn ein Gemini-Key versehentlich in Chat, Logs oder Screenshots gelandet ist, l
    npx firebase-tools deploy --only functions,firestore:rules
    ```
 
+Zusätzlich zur KI stellt das Projekt `meditestRedeemCatalogCode` für die atomare Einmalverwendung von Gratis-Codes und `meditestDeleteAccount` für die vollständige Kontolöschung bereit. Alle geschützten Funktionen prüfen das Firebase-ID-Token; KI und Code-Einlösung verlangen außerdem eine bestätigte E-Mail-Adresse.
+
 ## KI-Nutzung begrenzen
 
 Die Function erzwingt die Kontingente serverseitig und schreibt die Reservierung atomar in Firestore. Dadurch können parallele Anfragen ein Kontingent nicht mehrfach verbrauchen. Standardwerte:
@@ -64,6 +66,7 @@ AI_DAILY_REQUEST_LIMIT=10
 AI_COOLDOWN_SECONDS=30
 AI_USAGE_RETENTION_DAYS=90
 AI_MAX_PROMPT_CHARS=50000
+FREE_CATALOG_CODE_HASHES=33D660B54A9FFBD438D6D99EBDB7650EADCC2F871EE04C058205E5DCB0BE0876
 ```
 
 Anschließend die Functions erneut bereitstellen:
@@ -80,6 +83,7 @@ Die Function speichert keine Skripttexte und keine Prompts. Gespeichert werden N
 - `aiUsage/{uid}/days/{YYYY-MM-DD}`: Tagesstand
 - `aiUsage/{uid}/months/{YYYY-MM}`: Monatsstand
 - `aiGenerationEvents/{eventId}`: einzelne Generierungsversuche
+- `catalogCodeRedemptions/{codeHash}`: systemweit verbrauchte Gratis-Katalog-Codes
 
 Angemeldete Nutzer erhalten ihr persönliches Restkontingent über `meditestAiStatus`; MediTest zeigt diese Werte im KI-Startfenster vor der Generierung. Admins mit Firebase Custom Claim `admin=true` sehen die gesammelten Daten in MediTest unter `Katalog -> KI-Nutzung`. Die Admin-Function `meditestAiUsage` liefert dafür eine geschützte Übersicht. Strukturierte Laufzeitprotokolle sind außerdem in Cloud Logging und über folgenden Befehl verfügbar:
 
@@ -141,4 +145,4 @@ MediTest V4.0.2 bereitet das Lizenzmodell vor:
 - 5,99 EUR pro Monat für das Abo
 - Katalogzugang und Premium-Freischaltung per Code
 
-Produktive Zahlungen sollten serverseitig über einen Zahlungsanbieter laufen. Der Webhook muss nach erfolgreicher Zahlung den Abo-Status bzw. gekaufte Katalogtest-IDs unter `users/{uid}/billing/license` speichern oder passende Firebase Custom Claims setzen. Checkout-URLs werden in MediTest über `Billing:SubscriptionCheckoutUrl` und `Billing:CatalogCheckoutUrl` konfiguriert. Premium- und Admin-Konten haben Zugriff auf alle Katalogtests.
+Produktive Zahlungen sollten serverseitig über einen Zahlungsanbieter laufen. Der Webhook muss nach erfolgreicher Zahlung den Abo-Status bzw. gekaufte Katalogtest-IDs unter `users/{uid}/billing/license` speichern oder passende Firebase Custom Claims setzen. Checkout-URLs werden in MediTest über `Billing:SubscriptionCheckoutUrl` und `Billing:CatalogCheckoutUrl` konfiguriert. Premium- und Admin-Konten haben Zugriff auf alle Katalogtests. Bei einer Kontolöschung werden private Firestore-Daten, KI-Nutzungsdaten und das Authentication-Konto entfernt; der verbrauchte Code bleibt anonymisiert gesperrt.

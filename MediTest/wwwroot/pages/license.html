@@ -55,7 +55,7 @@ async function loadLicense(){
       <p>Ein gültiger Gratis-Code schaltet genau einen Katalogtest deiner Wahl frei.</p>
       <form id="catalogCodeForm" onsubmit="redeemCatalogCode(event)">
         <label for="catalogCode">Gratis-Katalog-Code</label>
-        <input id="catalogCode" autocomplete="off" placeholder="MT-GRATIS-KATALOG-2026" ${freeCreditAvailable||freeCreditRedeemed?'disabled':''}>
+        <input id="catalogCode" autocomplete="off" placeholder="Gratis-Katalog-Code eingeben" ${freeCreditAvailable||freeCreditRedeemed?'disabled':''}>
         <div class="actions">
           ${freeCreditAvailable?'<a class="button primary" href="/pages/catalog.html">Gratis-Test auswählen</a>':`<button class="primary" type="submit" ${freeCreditRedeemed?'disabled':''}>Code einlösen</button>`}
         </div>

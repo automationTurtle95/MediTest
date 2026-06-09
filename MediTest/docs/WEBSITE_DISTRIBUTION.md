@@ -5,32 +5,32 @@
 Nach dem Release-Build liegen die verkaufbaren Pakete hier:
 
 ```text
-MediTest-Setup-4.1.2-win-x64.msi
-MediTest-4.1.2-win-x64-portable.zip
-MediTest-4.1.2-macos-x64-setup.zip
-MediTest-4.1.2-macos-arm64-setup.zip
+MediTest-Setup-4.1.3-win-x64.msi
+MediTest-4.1.3-win-x64-portable.zip
+MediTest-4.1.3-macos-x64-setup.zip
+MediTest-4.1.3-macos-arm64-setup.zip
 SHA256SUMS.txt
 ```
 
 Für normale Kunden sollten auf der Webseite primär diese Downloads sichtbar sein:
 
-- Windows: `MediTest-Setup-4.1.2-win-x64.msi`
-- Mac Intel: `MediTest-4.1.2-macos-x64-setup.zip`
-- Mac Apple Silicon: `MediTest-4.1.2-macos-arm64-setup.zip`
+- Windows: `MediTest-Setup-4.1.3-win-x64.msi`
+- Mac Intel: `MediTest-4.1.3-macos-x64-setup.zip`
+- Mac Apple Silicon: `MediTest-4.1.3-macos-arm64-setup.zip`
 
 Das portable Windows-ZIP ist praktisch für Support oder Tests, sollte aber nicht der Hauptdownload sein.
 
 ## GitHub-Downloadlinks
 
-Wenn der GitHub Release `v4.1.2` veröffentlicht ist, können die Buttons auf der Webseite direkt auf die Release-Assets zeigen:
+Wenn der GitHub Release `v4.1.3` veröffentlicht ist, können die Buttons auf der Webseite direkt auf die Release-Assets zeigen:
 
 ```html
-<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-Setup-4.1.2-win-x64.msi">Windows herunterladen</a>
-<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-4.1.2-macos-arm64-setup.zip">Mac Apple Silicon herunterladen</a>
-<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-4.1.2-macos-x64-setup.zip">Mac Intel herunterladen</a>
+<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-Setup-4.1.3-win-x64.msi">Windows herunterladen</a>
+<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-4.1.3-macos-arm64-setup.zip">Mac Apple Silicon herunterladen</a>
+<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-4.1.3-macos-x64-setup.zip">Mac Intel herunterladen</a>
 ```
 
-Alternativ kannst du die Dateien des GitHub Release `v4.1.2` auf deinen eigenen Webserver hochladen. Dann müssen die Links auf deiner Webseite auf die dortigen Dateien zeigen.
+Alternativ kannst du die Dateien des GitHub Release `v4.1.3` auf deinen eigenen Webserver hochladen. Dann müssen die Links auf deiner Webseite auf die dortigen Dateien zeigen.
 
 ## Verkauf und Freischaltung
 
@@ -44,15 +44,9 @@ MediTest ist technisch für Verkauf vorbereitet:
 
 Für echte Zahlungen muss ein Zahlungsanbieter angebunden werden. Empfohlen ist Stripe Checkout mit Webhooks. Der Webhook sollte nach erfolgreicher Zahlung den Abo-Status oder die gekauften Katalogtest-IDs im Firebase-/Firestore-Nutzerkonto setzen.
 
-## Aktueller Gratis-Code
+## Gratis-Katalog-Code
 
-Der in Version 4.1.2 konfigurierte Gratis-Code lautet:
-
-```text
-MT-GRATIS-KATALOG-2026
-```
-
-Er wird in `appsettings.json` nur als SHA-256-Hash gespeichert. Nach dem Einlösen kann der Nutzer genau einen gesperrten Katalogtest herunterladen; dieser Test bleibt danach für dieses Konto freigeschaltet.
+Der Klartext eines Gratis-Codes sollte nicht auf einer öffentlichen Webseite oder in der App als Beispiel angezeigt werden. In `appsettings.json` liegt nur der SHA-256-Hash. Die geschützte Cloud Function markiert den Code beim Einlösen atomar als verbraucht, sodass er systemweit nur einmal verwendet werden kann. Danach kann das einlösende Konto genau einen gesperrten Katalogtest dauerhaft freischalten.
 
 ## Produktive Hinweise
 

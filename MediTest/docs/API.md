@@ -6,7 +6,7 @@ MediTest stellt eine lokale HTTP-API bereit. Standardadresse:
 http://127.0.0.1:55000
 ```
 
-Alle Endpunkte liefern JSON, außer der TXT-Export und der PDF-Download. Ab Version 4.0.1 sind die App-Endpunkte mit Firebase Authentication geschützt und private Nutzerdaten werden in Firestore unter `users/{uid}/...` gespeichert. Der Browser meldet sich direkt bei Firebase an und sendet danach `Authorization: Bearer <firebase-id-token>` an die lokale API.
+Alle Endpunkte liefern JSON, außer der TXT-Export und der PDF-Download. Die App-Endpunkte sind mit Firebase Authentication geschützt und verlangen eine bestätigte E-Mail-Adresse. Private Nutzerdaten werden in Firestore unter `users/{uid}/...` gespeichert. Der Browser sendet `Authorization: Bearer <firebase-id-token>` an die lokale API.
 
 ## Anmeldung
 
@@ -44,7 +44,11 @@ Validiert den Firebase-ID-Token und liefert den aktuellen Benutzer.
 
 Bestätigt die Abmeldung für das Frontend. Das lokale Token wird clientseitig aus `sessionStorage` entfernt.
 
-Passwort-Reset und Passwortänderung laufen direkt im Browser über Firebase Authentication. Die lokale MediTest-API speichert keine Passwörter und kennt keine Passwort-Hashes.
+E-Mail-Bestätigung, Passwort-Reset und Passwortänderung laufen direkt im Browser über Firebase Authentication. Die lokale MediTest-API speichert keine Passwörter und kennt keine Passwort-Hashes.
+
+`DELETE /api/account`
+
+Ruft die geschützte Function `meditestDeleteAccount` auf. Sie entfernt das Firebase-Authentication-Konto, alle Dokumente unter `users/{uid}`, persönliche KI-Nutzungsstände und KI-Ereignisse. Einmalig verwendete Katalogcodes bleiben ohne persönliche Nutzerzuordnung als verbraucht markiert.
 
 ## Dokumente
 
@@ -118,7 +122,7 @@ Beispiel:
 
 `POST /api/catalog/tests/{catalogId}/checkout`
 
-Bereitet den Checkout für einen Katalogtest vor. Ohne konfigurierte `Billing:CatalogCheckoutUrl` liefert der Endpunkt `501`, damit die Oberfläche klar meldet, dass der Zahlungsanbieter noch nicht verbunden ist.
+Bereitet den Checkout für einen Katalogtest vor. Die Oberfläche zeigt vorher Preis, Fragenanzahl, Thema und Schwierigkeit in einem Kaufdialog. Ohne konfigurierte `Billing:CatalogCheckoutUrl` liefert der Endpunkt `501`.
 
 `POST /api/catalog/tests/publish`
 
@@ -162,7 +166,7 @@ Prüft einen Premium-Code aus `{ "code": "..." }`. Ein gültiger Code setzt den 
 
 `POST /api/license/redeem-catalog-code`
 
-Prüft einen Gratis-Katalog-Code aus `{ "code": "..." }`. Ein gültiger Code setzt einen offenen Gratis-Credit im Nutzerkonto. Der nächste gesperrte Katalogtest, den der Nutzer herunterlädt, wird damit dauerhaft freigeschaltet.
+Prüft einen Gratis-Katalog-Code aus `{ "code": "..." }`. Die geschützte Function `meditestRedeemCatalogCode` reserviert den Code atomar. Jeder konfigurierte Code kann dadurch systemweit nur einmal verwendet werden. Der nächste gesperrte Katalogtest wird für das einlösende Konto dauerhaft freigeschaltet.
 
 `GET /api/questions/by-topic?topic={topic}`
 
@@ -280,15 +284,15 @@ Prüft die konfigurierte GitHub-Release-Quelle oder `latest.json` und liefert di
 ```json
 {
   "configured": true,
-  "currentVersion": "4.1.2",
+  "currentVersion": "4.1.3",
   "currentPlatform": "windows-x64",
-  "latestVersion": "4.1.2",
+  "latestVersion": "4.1.3",
   "updateAvailable": false,
-  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v4.1.2",
+  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v4.1.3",
   "recommendedDownload": {
     "platform": "windows-x64",
-    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v4.1.2/MediTest-Setup-4.1.2-win-x64.msi",
-    "fileName": "MediTest-Setup-4.1.2-win-x64.msi",
+    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v4.1.3/MediTest-Setup-4.1.3-win-x64.msi",
+    "fileName": "MediTest-Setup-4.1.3-win-x64.msi",
     "sha256": "...",
     "sizeBytes": 42400000
   }

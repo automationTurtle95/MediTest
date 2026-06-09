@@ -125,6 +125,7 @@ function saveFirebaseSession(auth, displayName = '') {
     plan: 'Kostenlos',
     licenseStatus: 'Aktiv',
     authMode: 'firebase',
+    emailVerified: auth.emailVerified === true,
     expiresAt: new Date(expiresAt).toISOString()
   };
   writeAuthSession({
@@ -151,9 +152,16 @@ async function registerWithFirebase(payload) {
     });
     auth = { ...created, ...updated, localId: updated.localId || created.localId, email: updated.email || created.email };
   }
-  saveFirebaseSession(auth, payload.displayName);
-  try { return await api('/api/auth/me'); }
-  catch (err) { clearAuthSession(); throw err; }
+  await firebaseAuthRequest('sendOobCode', {
+    requestType: 'VERIFY_EMAIL',
+    idToken: auth.idToken
+  });
+  clearAuthSession();
+  return {
+    verificationRequired: true,
+    email: auth.email || payload.email,
+    message: 'Konto erstellt. Bitte bestätige deine E-Mail-Adresse über den Link in der zugesandten E-Mail.'
+  };
 }
 
 async function loginWithFirebase(payload) {
@@ -162,9 +170,37 @@ async function loginWithFirebase(payload) {
     password: payload.password,
     returnSecureToken: true
   });
+  const lookup = await firebaseAuthRequest('lookup', { idToken: auth.idToken });
+  const account = Array.isArray(lookup.users) ? lookup.users[0] : null;
+  if (account?.emailVerified !== true) {
+    const error = new Error('Bitte bestätige zuerst deine E-Mail-Adresse. Danach kannst du dich anmelden.');
+    error.emailVerificationRequired = true;
+    error.email = auth.email || payload.email;
+    throw error;
+  }
+  auth.emailVerified = true;
   saveFirebaseSession(auth, auth.displayName);
   try { return await api('/api/auth/me'); }
   catch (err) { clearAuthSession(); throw err; }
+}
+
+async function resendFirebaseEmailVerification(payload) {
+  const email = String(payload?.email || '').trim();
+  const password = String(payload?.password || '');
+  if (!email || !password) throw new Error('Gib E-Mail-Adresse und Passwort ein, um die Bestätigungs-E-Mail erneut zu senden.');
+  const auth = await firebaseAuthRequest('signInWithPassword', {
+    email,
+    password,
+    returnSecureToken: true
+  });
+  const lookup = await firebaseAuthRequest('lookup', { idToken: auth.idToken });
+  const account = Array.isArray(lookup.users) ? lookup.users[0] : null;
+  if (account?.emailVerified === true) return { verified: true, message: 'Die E-Mail-Adresse ist bereits bestätigt. Du kannst dich jetzt anmelden.' };
+  await firebaseAuthRequest('sendOobCode', {
+    requestType: 'VERIFY_EMAIL',
+    idToken: auth.idToken
+  });
+  return { verified: false, message: 'Bestätigungs-E-Mail wurde erneut gesendet.' };
 }
 
 async function sendFirebasePasswordReset(email) {
@@ -240,6 +276,12 @@ async function api(path, options = {}) {
   const res = await fetch(path, { ...options, headers });
   const data = await parseResponse(res);
   if (!res.ok) {
+    if (res.status === 403 && data?.emailVerificationRequired) {
+      clearAuthSession();
+      if (!location.pathname.endsWith('/pages/login.html')) {
+        location.href = '/pages/login.html?verificationRequired=1';
+      }
+    }
     if (res.status === 401 && !location.pathname.endsWith('/pages/login.html')) {
       clearAuthSession();
       redirectToLogin();
@@ -281,6 +323,7 @@ async function downloadApiFile(path, fallbackName = 'MediTest.pdf') {
 window.getAuthConfig = getAuthConfig;
 window.registerWithFirebase = registerWithFirebase;
 window.loginWithFirebase = loginWithFirebase;
+window.resendFirebaseEmailVerification = resendFirebaseEmailVerification;
 window.sendFirebasePasswordReset = sendFirebasePasswordReset;
 window.changeFirebasePassword = changeFirebasePassword;
 window.currentAuthUser = currentAuthUser;
@@ -466,6 +509,8 @@ const TOOLTIP_BY_TEXT = new Map([
   ['Auswertung öffnen', 'Auswertung dieses Tests öffnen.'],
   ['PDF herunterladen', 'Testprotokoll mit Profilangaben als PDF herunterladen.'],
   ['Kaufen', 'Kauf oder Checkout für diesen Katalogtest vorbereiten.'],
+  ['Konto endgültig löschen', 'Konto und sämtliche zugehörigen Nutzerdaten dauerhaft entfernen.'],
+  ['Bestätigungs-E-Mail erneut senden', 'Neue E-Mail mit einem Link zur Bestätigung der Konto-Adresse senden.'],
   ['Abo starten', 'Monatsabo nach der Testphase vorbereiten.'],
   ['Code einlösen', 'Premium-Code prüfen und dieses Konto freischalten.'],
   ['Aktualisieren', 'Statistik mit der aktuellen Auswahl neu laden.'],

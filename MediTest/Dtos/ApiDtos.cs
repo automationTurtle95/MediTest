@@ -342,6 +342,7 @@ public sealed record AuthUserDto(
     string Plan,
     string LicenseStatus,
     string AuthMode,
+    bool EmailVerified,
     DateTime ExpiresAt);
 
 public sealed record AuthResponse(AuthUserDto User);

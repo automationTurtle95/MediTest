@@ -2,9 +2,10 @@ import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
-import { defineInt, defineSecret } from "firebase-functions/params";
+import { defineInt, defineSecret, defineString } from "firebase-functions/params";
 import { onRequest } from "firebase-functions/v2/https";
 import { setGlobalOptions } from "firebase-functions/v2/options";
+import { createHash } from "node:crypto";
 
 initializeApp();
 
@@ -21,6 +22,9 @@ const aiDailyRequestLimit = defineInt("AI_DAILY_REQUEST_LIMIT", { default: 10 })
 const aiCooldownSeconds = defineInt("AI_COOLDOWN_SECONDS", { default: 30 });
 const aiUsageRetentionDays = defineInt("AI_USAGE_RETENTION_DAYS", { default: 90 });
 const aiMaxPromptChars = defineInt("AI_MAX_PROMPT_CHARS", { default: 50000 });
+const freeCatalogCodeHashList = defineString("FREE_CATALOG_CODE_HASHES", {
+  default: "33D660B54A9FFBD438D6D99EBDB7650EADCC2F871EE04C058205E5DCB0BE0876"
+});
 const db = getFirestore();
 
 type GenerateQuestionsRequest = {
@@ -104,6 +108,11 @@ export const meditestAi = onRequest(
     }
 
     const request = (req.body ?? {}) as GenerateQuestionsRequest;
+    if (user.email_verified !== true) {
+      res.status(403).json({ error: { message: "Bitte bestätige zuerst deine E-Mail-Adresse." } });
+      return;
+    }
+
     const requestedQuestions = readRequestedQuestionCount(request);
     if (!requestedQuestions) {
       res.status(400).json({
@@ -217,6 +226,10 @@ export const meditestAiUsage = onRequest(
 
     try {
       const user = await getAuth().verifyIdToken(idToken);
+      if (user.email_verified !== true) {
+        res.status(403).json({ error: { message: "Bitte bestätige zuerst deine E-Mail-Adresse." } });
+        return;
+      }
       if (user.admin !== true && user.isAdmin !== true) {
         res.status(403).json({ error: { message: "Nur Administratoren dürfen die KI-Nutzung einsehen." } });
         return;
@@ -267,6 +280,11 @@ export const meditestAiStatus = onRequest(
     }
 
     const limits = getLimitConfiguration();
+    if (user.email_verified !== true) {
+      res.status(403).json({ error: { message: "Bitte bestätige zuerst deine E-Mail-Adresse." } });
+      return;
+    }
+
     const now = Timestamp.now();
     const dayKey = now.toDate().toISOString().slice(0, 10);
     const monthKey = dayKey.slice(0, 7);
@@ -301,6 +319,160 @@ export const meditestAiStatus = onRequest(
         lastStatus: typeof summary.lastStatus === "string" ? summary.lastStatus : "",
         updatedAt: serializeFirestoreValue(summary.updatedAt)
       }
+    });
+  }
+);
+
+export const meditestRedeemCatalogCode = onRequest(
+  {
+    invoker: "public",
+    memory: "256MiB",
+    timeoutSeconds: 30
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.set("Allow", "POST").status(405).json({ error: { message: "Nur POST-Anfragen sind erlaubt." } });
+      return;
+    }
+
+    const idToken = readBearerToken(req.header("authorization") ?? "");
+    if (!idToken) {
+      res.status(401).json({ error: { message: "Anmeldetoken fehlt." } });
+      return;
+    }
+
+    let user;
+    try {
+      user = await getAuth().verifyIdToken(idToken);
+    } catch {
+      res.status(401).json({ error: { message: "Anmeldetoken ist ungültig oder abgelaufen." } });
+      return;
+    }
+    if (user.email_verified !== true) {
+      res.status(403).json({ error: { message: "Bitte bestätige zuerst deine E-Mail-Adresse." } });
+      return;
+    }
+
+    const normalizedCode = normalizeAccessCode(req.body?.code);
+    const codeHash = hashAccessCode(normalizedCode);
+    if (!normalizedCode || !configuredFreeCatalogCodeHashes().has(codeHash)) {
+      res.status(400).json({ error: { message: "Dieser Gratis-Katalog-Code ist ungültig." } });
+      return;
+    }
+
+    const redemptionRef = db.collection("catalogCodeRedemptions").doc(codeHash);
+    const licenseRef = db.doc(`users/${user.uid}/billing/license`);
+    try {
+      await db.runTransaction(async (transaction) => {
+        const [redemptionSnapshot, licenseSnapshot] = await Promise.all([
+          transaction.get(redemptionRef),
+          transaction.get(licenseRef)
+        ]);
+        if (redemptionSnapshot.exists) {
+          throw new Error("catalog_code_already_redeemed");
+        }
+
+        const now = Timestamp.now();
+        const state = parseJsonObject((licenseSnapshot.data() ?? {}).dataJson);
+        const alreadyUsed = state.freeCatalogCreditActive === true ||
+          (typeof state.freeCatalogCreditRedeemedCatalogId === "string" && state.freeCatalogCreditRedeemedCatalogId.length > 0) ||
+          (typeof state.freeCatalogCreditCodeHash === "string" && state.freeCatalogCreditCodeHash.length > 0);
+        if (alreadyUsed) {
+          throw new Error("account_already_used_catalog_code");
+        }
+
+        state.freeCatalogCreditActive = true;
+        state.freeCatalogCreditGrantedAt = state.freeCatalogCreditGrantedAt || now.toDate().toISOString();
+        state.freeCatalogCreditCodeHash = codeHash;
+        state.updatedAt = now.toDate().toISOString();
+
+        transaction.create(redemptionRef, {
+          codeHash,
+          redeemedByUid: user.uid,
+          redeemedByEmail: user.email ?? "",
+          redeemedAt: now
+        });
+        transaction.set(licenseRef, {
+          dataJson: JSON.stringify(state)
+        }, { merge: true });
+      });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      if (code === "catalog_code_already_redeemed") {
+        res.status(409).json({ error: { message: "Dieser Gratis-Katalog-Code wurde bereits verwendet." } });
+        return;
+      }
+      if (code === "account_already_used_catalog_code") {
+        res.status(409).json({ error: { message: "Für dieses Konto wurde bereits ein Gratis-Katalog-Code verwendet." } });
+        return;
+      }
+      logger.error("Catalog code redemption failed", { uid: user.uid, message: code });
+      res.status(503).json({ error: { message: "Der Gratis-Katalog-Code konnte momentan nicht eingelöst werden." } });
+      return;
+    }
+
+    res.status(200).json({
+      redeemed: true,
+      message: "Gratis-Test wurde aktiviert."
+    });
+  }
+);
+
+export const meditestDeleteAccount = onRequest(
+  {
+    invoker: "public",
+    memory: "256MiB",
+    timeoutSeconds: 120
+  },
+  async (req, res) => {
+    if (req.method !== "DELETE") {
+      res.set("Allow", "DELETE").status(405).json({ error: { message: "Nur DELETE-Anfragen sind erlaubt." } });
+      return;
+    }
+
+    const idToken = readBearerToken(req.header("authorization") ?? "");
+    if (!idToken) {
+      res.status(401).json({ error: { message: "Anmeldetoken fehlt." } });
+      return;
+    }
+
+    let user;
+    try {
+      user = await getAuth().verifyIdToken(idToken);
+    } catch {
+      res.status(401).json({ error: { message: "Anmeldetoken ist ungültig oder abgelaufen." } });
+      return;
+    }
+
+    try {
+      const userRef = db.collection("users").doc(user.uid);
+      const aiUsageRef = db.collection("aiUsage").doc(user.uid);
+      const [eventsSnapshot, redemptionsSnapshot] = await Promise.all([
+        db.collection("aiGenerationEvents").where("uid", "==", user.uid).get(),
+        db.collection("catalogCodeRedemptions").where("redeemedByUid", "==", user.uid).get()
+      ]);
+
+      await Promise.all([
+        db.recursiveDelete(userRef),
+        db.recursiveDelete(aiUsageRef),
+        deleteDocuments(eventsSnapshot.docs.map((doc) => doc.ref)),
+        anonymizeCatalogRedemptions(redemptionsSnapshot.docs.map((doc) => doc.ref))
+      ]);
+      await getAuth().deleteUser(user.uid);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      logger.error("Account deletion failed", { uid: user.uid, message });
+      res.status(503).json({
+        error: {
+          message: "Das Konto konnte nicht vollständig gelöscht werden. Bitte versuche es später erneut."
+        }
+      });
+      return;
+    }
+
+    res.status(200).json({
+      deleted: true,
+      message: "Konto und zugehörige Nutzerdaten wurden gelöscht."
     });
   }
 );
@@ -680,6 +852,51 @@ function readBearerToken(authorization: string): string {
 function normalizeGeminiModel(model: unknown): string {
   const value = typeof model === "string" ? model.trim() : "";
   return value.startsWith("gemini-") ? value : "gemini-2.5-flash";
+}
+
+function normalizeAccessCode(code: unknown): string {
+  return typeof code === "string" ? code.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") : "";
+}
+
+function hashAccessCode(code: string): string {
+  return code ? createHash("sha256").update(code, "utf8").digest("hex").toUpperCase() : "";
+}
+
+function configuredFreeCatalogCodeHashes(): Set<string> {
+  return new Set(freeCatalogCodeHashList.value()
+    .split(/[,\s;]+/)
+    .map((value) => value.trim().toUpperCase())
+    .filter(Boolean));
+}
+
+function parseJsonObject(value: unknown): Record<string, any> {
+  if (typeof value !== "string" || !value.trim()) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+async function deleteDocuments(refs: Array<FirebaseFirestore.DocumentReference>): Promise<void> {
+  for (let offset = 0; offset < refs.length; offset += 400) {
+    const batch = db.batch();
+    refs.slice(offset, offset + 400).forEach((ref) => batch.delete(ref));
+    await batch.commit();
+  }
+}
+
+async function anonymizeCatalogRedemptions(refs: Array<FirebaseFirestore.DocumentReference>): Promise<void> {
+  for (let offset = 0; offset < refs.length; offset += 400) {
+    const batch = db.batch();
+    refs.slice(offset, offset + 400).forEach((ref) => batch.update(ref, {
+      redeemedByUid: "",
+      redeemedByEmail: "",
+      accountDeletedAt: Timestamp.now()
+    }));
+    await batch.commit();
+  }
 }
 
 function buildPrompt(messages: unknown): string {

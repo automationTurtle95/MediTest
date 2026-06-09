@@ -1,6 +1,6 @@
 # MediTest
 
-MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choice-Fragen aus medizinischen Unterlagen. Version 4.1.2 nutzt Firebase Authentication und speichert alle Nutzerdaten getrennt vom Katalog in Firestore.
+MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choice-Fragen aus medizinischen Unterlagen. Version 4.1.3 nutzt Firebase Authentication und speichert alle Nutzerdaten getrennt vom Katalog in Firestore.
 
 ## Funktionen
 
@@ -18,9 +18,10 @@ MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choic
 - Auswertung mit Punktzahl, Bestehensgrenze, Erklärungen und Fehlerschwerpunkten
 - Erweiterte Statistik mit Themenanalyse, Schwierigkeitsauswertung, Verlauf, Kreisdiagrammen und Lernempfehlungen
 - Themensprung: Fragen eines Themas direkt öffnen und gezielt wiederholen
-- Anmeldeseite mit Firebase-Kontoerstellung, Passwort-Reset und browserbasierter Sitzung
-- Firestore-Katalog für themenspezifische Tests mit Admin-Veröffentlichung
-- Lizenzmodell vorbereitet: 7 Tage Testphase, 5,99 EUR/Monat, Katalogzugang, Gratis-Katalog-Code und Premium-Freischaltung per Code
+- Anmeldeseite mit E-Mail-Bestätigung, Firebase-Kontoerstellung, Passwort-Reset und browserbasierter Sitzung
+- Vollständige Kontolöschung inklusive privater Firestore- und KI-Nutzungsdaten
+- Firestore-Katalog mit sichtbaren Preisen, Kaufübersicht und Admin-Veröffentlichung
+- Lizenzmodell vorbereitet: 7 Tage Testphase, 5,99 EUR/Monat, Katalogzugang, systemweit einmaliger Gratis-Katalog-Code und Premium-Freischaltung per Code
 
 ## Technik
 
@@ -55,7 +56,7 @@ Alternativ unter Windows: `Start_MediTest.bat` doppelklicken. Die App läuft sta
 
 ## Anmeldung mit Firebase
 
-V4.1.2 speichert keine Nutzerdaten mehr in einer lokalen `meditest.db`. Registrierung, Anmeldung, Passwort-Reset und Passwortänderung laufen über Firebase Authentication. Im Browser werden ID-Token und Refresh-Token nur in `sessionStorage` gehalten und verschwinden beim Schließen der Browser-Sitzung.
+V4.1.3 speichert keine Nutzerdaten mehr in einer lokalen `meditest.db`. Registrierung, Anmeldung, E-Mail-Bestätigung, Passwort-Reset und Passwortänderung laufen über Firebase Authentication. Nach der Registrierung muss die E-Mail-Adresse bestätigt werden; erst danach ist die Anmeldung in MediTest möglich. Im Browser werden ID-Token und Refresh-Token nur in `sessionStorage` gehalten und verschwinden beim Schließen der Browser-Sitzung.
 
 In Firebase muss unter `Authentication -> Sign-in method` der Anbieter `Email/Password` aktiviert sein. Die Firebase-Web-Konfiguration steht in `appsettings.json`:
 
@@ -85,11 +86,11 @@ Die Firebase-Function-Vorlage liegt unter `../firebase`. Die App ist fest auf `f
 
 Die Function begrenzt die KI-Nutzung standardmäßig auf 25 Fragen pro Generierung, 50 Fragen pro Nutzer und Tag, 500 Fragen pro Nutzer und Monat sowie 10 Anfragen pro Tag. Zwischen akzeptierten Anfragen liegen mindestens 30 Sekunden. Administratoren mit Firebase Custom Claim `admin=true` sehen Kontingente und die letzten Generierungsversuche unter `Katalog -> KI-Nutzung`. Skripttexte und Prompts werden dabei nicht protokolliert.
 
-Die Seite `Einstellungen` speichert Profil und Programmeinstellungen unter `users/{uid}/settings/profile` in Firestore. Profilfelder bleiben beim ersten Start leer und werden nicht automatisch aus Firebase übernommen.
+Die Seite `Einstellungen` speichert Profil und Programmeinstellungen unter `users/{uid}/settings/profile` in Firestore. Die bestätigte Konto-E-Mail wird schreibgeschützt angezeigt. Über `Konto löschen` werden Firebase Authentication, private Firestore-Daten und persönliche KI-Nutzungsdaten dauerhaft entfernt.
 
 ## Firestore-Katalog und Admin-Konto
 
-Die Seite `Katalog` liest themenspezifische Tests aus der Firestore-Collection `catalogTests` und zeigt vorhandene Legacy-Einträge aus `thematicTests` weiterhin an. Angemeldete Nutzer sehen verfügbare Tests, dürfen sie aber erst nach Freischaltung herunterladen; Premium- und Admin-Konten haben Zugriff auf alle Katalogtests. Heruntergeladene Tests werden als private Nutzerdaten unter `users/{uid}/documents` gespeichert. Optional kann `Auth:AdminEmails` als lokaler UI-Fallback gesetzt werden, die eigentliche Schreibberechtigung sollte über Firestore-Regeln abgesichert bleiben.
+Die Seite `Katalog` liest themenspezifische Tests aus der Firestore-Collection `catalogTests` und zeigt vorhandene Legacy-Einträge aus `thematicTests` weiterhin an. Jede Karte zeigt den berechneten Preis. Vor einem Checkout öffnet sich eine Kaufübersicht mit Preis, Umfang, Thema und Schwierigkeit. Premium- und Admin-Konten haben Zugriff auf alle Katalogtests. Heruntergeladene Tests werden als private Nutzerdaten unter `users/{uid}/documents` gespeichert.
 
 ## Lizenzmodell
 
@@ -98,7 +99,7 @@ Die Seite `Lizenz` zeigt Testphase, Abo-Status, Katalogzugang und Premium-Code-E
 - 7 Tage Testphase pro Firebase-Nutzer ab erster erfolgreicher Anmeldung
 - 5,99 EUR pro Monat für das MediTest-Abo
 - Premium-Codes werden serverseitig über `Billing:PremiumCodeHashes` konfiguriert und schalten alle Katalogtests frei
-- Gratis-Katalog-Codes werden über `Billing:FreeCatalogCodeHashes` konfiguriert und schalten genau einen Katalogtest pro Konto frei
+- Gratis-Katalog-Codes werden über `Billing:FreeCatalogCodeHashes` konfiguriert, serverseitig atomar eingelöst und können systemweit nur einmal verwendet werden
 
 Die App enthält Checkout-Endpunkte und Konfiguration (`Billing:*`), aber keine echten Zahlungsdaten. Für produktiven Verkauf sollte ein Zahlungsanbieter wie Stripe Checkout genutzt werden; Webhooks müssen danach den Abo-Status bzw. gekaufte Katalogtest-IDs serverseitig in Firestore oder als Firebase Custom Claims setzen. Eingelöste Premium- und Gratis-Katalog-Codes werden im Firebase-Nutzerkonto unter `billing/license` gespeichert.
 
@@ -113,7 +114,7 @@ cd MediTest
 powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 ```
 
-Die fertigen Artefakte liegen danach unter `dist/MediTest-4.1.2/`. Bestehende Releases wie `dist/MediTest-2.0.0/`, `dist/MediTest-3.0.0/`, `dist/MediTest-3.1.1/`, `dist/MediTest-3.1.2/`, `dist/MediTest-3.1.3/`, `dist/MediTest-4.0.0/`, `dist/MediTest-4.0.3/`, `dist/MediTest-4.0.4/`, `dist/MediTest-4.0.5/`, `dist/MediTest-4.0.6/`, `dist/MediTest-4.0.7/`, `dist/MediTest-4.0.8/`, `dist/MediTest-4.0.9/`, `dist/MediTest-4.1.0/` und `dist/MediTest-4.1.1/` bleiben erhalten.
+Die fertigen Artefakte liegen danach unter `dist/MediTest-4.1.3/`. Bestehende Releases wie `dist/MediTest-2.0.0/`, `dist/MediTest-3.0.0/`, `dist/MediTest-3.1.1/`, `dist/MediTest-3.1.2/`, `dist/MediTest-3.1.3/`, `dist/MediTest-4.0.0/`, `dist/MediTest-4.0.3/`, `dist/MediTest-4.0.4/`, `dist/MediTest-4.0.5/`, `dist/MediTest-4.0.6/`, `dist/MediTest-4.0.7/`, `dist/MediTest-4.0.8/`, `dist/MediTest-4.0.9/`, `dist/MediTest-4.1.0/`, `dist/MediTest-4.1.1/` und `dist/MediTest-4.1.2/` bleiben erhalten.
 
 Ohne `-WindowsOnly` entstehen zusätzlich vorläufige, unsignierte macOS-Setup-ZIPs für Intel und Apple Silicon. Sind die Apple-Secrets in GitHub eingerichtet, ersetzt der Release-Workflow diese automatisch durch signierte und notarisierte PKG-Installer.
 

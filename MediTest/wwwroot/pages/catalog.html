@@ -57,6 +57,7 @@
 <script>
 let catalogState={canPublish:false,freeCatalogCreditAvailable:false,freeCatalogCreditRedeemed:false,tests:[]};
 let localDocs=[];
+let catalogPurchaseOpen=false;
 
 function dateLabel(value){return value?new Date(value).toLocaleDateString():'ohne Datum';}
 function safeJsId(id){return esc(id).replace(/'/g,'&#39;');}
@@ -76,14 +77,16 @@ async function loadCatalog(){
       const id=safeJsId(t.id);
       const canUseFree=t.requiresPurchase&&!catalogState.canPublish&&!t.purchased&&catalogState.freeCatalogCreditAvailable;
       const freeButton=canUseFree?`<button class="primary" type="button" onclick="downloadTest('${id}',true)">Gratis-Test verwenden</button>`:'';
-      const buyButton=t.requiresPurchase&&!catalogState.canPublish&&!t.purchased?`<button type="button" onclick="buyTest('${id}')">Kaufen</button>`:'';
+      const buyButton=t.requiresPurchase&&!catalogState.canPublish&&!t.purchased?`<button type="button" onclick="openCatalogPurchaseModal('${id}')">Kaufen</button>`:'';
       const downloadButton=t.requiresPurchase&&!t.purchased?'':`<button class="primary" type="button" onclick="downloadTest('${id}')">Herunterladen</button>`;
       const accessLabel=t.purchased?'Freigeschaltet':catalogState.canPublish?'Admin-Zugriff':canUseFree?'Gratis-Code verfügbar':t.requiresPurchase?'Einzelzugang':'Verfügbar';
+      const price=priceLabel(t.priceCents,t.currency);
       return `<article class="card doc-card">
         <div><span class="badge">${Number(t.questionCount)||0} Fragen</span> <span class="badge new-badge">${accessLabel}</span></div>
         <h2>${esc(t.title)}</h2>
         <p class="muted">${esc(t.topic||'Allgemein')} · ${esc(t.difficulty||'mittel')} · ${esc(t.version||'')} · ${dateLabel(t.publishedAt)}</p>
         ${t.description?`<p>${esc(t.description)}</p>`:''}
+        <p class="catalog-price"><span>${t.purchased?'Kaufpreis':'Preis'}</span><strong>${esc(price)}</strong></p>
         <div class="actions">${freeButton}${buyButton}${downloadButton}</div>
       </article>`;
     }).join('');
@@ -164,14 +167,53 @@ function updatePublishTitle(){
   if(selected&&!document.getElementById('title').value.trim()) document.getElementById('title').value=selected.fileName;
 }
 
-async function buyTest(id){
-  const msg=document.getElementById('msg');
-  status(msg,'Bereite Checkout vor...');
+function closeCatalogPurchaseModal(){
+  document.getElementById('catalogPurchaseModal')?.remove();
+  catalogPurchaseOpen=false;
+}
+function openCatalogPurchaseModal(id){
+  if(catalogPurchaseOpen)return;
+  const test=(catalogState.tests||[]).find(item=>String(item.id)===String(id));
+  if(!test)return;
+  catalogPurchaseOpen=true;
+  const modal=document.createElement('div');
+  modal.id='catalogPurchaseModal';
+  modal.className='modal-backdrop';
+  modal.addEventListener('click',event=>{if(event.target===modal)closeCatalogPurchaseModal();});
+  modal.innerHTML=`
+    <section class="modal-panel catalog-purchase-modal" role="dialog" aria-modal="true" aria-labelledby="catalogPurchaseTitle">
+      <p class="eyebrow">Katalogtest kaufen</p>
+      <h2 id="catalogPurchaseTitle">${esc(test.title)}</h2>
+      <div class="catalog-purchase-summary">
+        <div><span>Preis</span><strong>${esc(priceLabel(test.priceCents,test.currency))}</strong></div>
+        <div><span>Umfang</span><strong>${Number(test.questionCount)||0} Fragen</strong></div>
+        <div><span>Thema</span><strong>${esc(test.topic||'Allgemein')}</strong></div>
+        <div><span>Schwierigkeit</span><strong>${esc(test.difficulty||'mittel')}</strong></div>
+      </div>
+      <p>Nach erfolgreichem Kauf wird der Test deinem Konto dauerhaft zugeordnet und kann erneut heruntergeladen werden.</p>
+      <p class="muted">Der Kauf wird erst über den folgenden Button gestartet. Es werden noch keine Kosten ausgelöst, solange kein Checkout bestätigt wurde.</p>
+      <div id="catalogPurchaseStatus" class="hidden"></div>
+      <div class="actions">
+        <button type="button" onclick="closeCatalogPurchaseModal()">Abbrechen</button>
+        <button class="primary" id="catalogPurchaseButton" type="button" onclick="confirmCatalogPurchase('${safeJsId(test.id)}')">Jetzt kaufen · ${esc(priceLabel(test.priceCents,test.currency))}</button>
+      </div>
+    </section>`;
+  document.body.appendChild(modal);
+  enhanceTooltips(modal);
+}
+async function confirmCatalogPurchase(id){
+  const msg=document.getElementById('catalogPurchaseStatus');
+  const button=document.getElementById('catalogPurchaseButton');
+  status(msg,'Bereite sicheren Checkout vor...');
+  button.disabled=true;
   try{
     const r=await api(`/api/catalog/tests/${encodeURIComponent(id)}/checkout`,{method:'POST'});
     if(r.available&&r.url) location.href=r.url;
     else status(msg,r.message,'status error');
-  }catch(e){status(msg,e.message,'status error');}
+  }catch(e){
+    status(msg,e.message,'status error');
+    button.disabled=false;
+  }
 }
 
 async function downloadTest(id,usesFreeCode=false){

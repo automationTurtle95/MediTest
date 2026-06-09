@@ -5,7 +5,7 @@
 Empfohlen ist das MSI-Paket aus dem Release-Ordner:
 
 ```text
-dist/MediTest-4.1.2/windows/MediTest-Setup-4.1.2-win-x64.msi
+dist/MediTest-4.1.3/windows/MediTest-Setup-4.1.3-win-x64.msi
 ```
 
 Das MSI installiert MediTest benutzerbezogen nach:
@@ -23,8 +23,8 @@ Updates funktionieren über dasselbe MSI: Eine neuere `MediTest-Setup-<Version>-
 Solange die Apple-Signing-Secrets noch nicht eingerichtet sind, werden zwei unsignierte Setup-ZIPs veröffentlicht:
 
 ```text
-MediTest-4.1.2-macos-x64-setup.zip
-MediTest-4.1.2-macos-arm64-setup.zip
+MediTest-4.1.3-macos-x64-setup.zip
+MediTest-4.1.3-macos-arm64-setup.zip
 ```
 
 `macos-x64` ist für Intel-Macs, `macos-arm64` für Apple-Silicon-Macs.
@@ -40,7 +40,7 @@ Die App öffnet automatisch den Browser unter `http://127.0.0.1:55000`.
 
 Sobald die Apple-Secrets eingerichtet sind, veröffentlicht derselbe Workflow stattdessen native, signierte und notarisierte PKGs. Diese lassen sich ohne den vorläufigen ZIP-Installationsweg über den normalen macOS-Installer installieren.
 
-Version 4.1.2 legt keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden von V4 ignoriert.
+Version 4.1.3 legt keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden von V4 ignoriert.
 
 Die Einrichtung der benötigten Apple-Zertifikate und GitHub-Secrets steht in [MACOS_SIGNING.md](MACOS_SIGNING.md).
 
@@ -62,7 +62,7 @@ Windows-Updates laufen über das neue MSI. macOS-Updates laufen vorerst über da
 
 ## Erster Start und Anmeldung
 
-Version 4.1.2 startet mit einer Anmeldeseite. Kontoerstellung, Anmeldung und Passwort-Reset laufen über Firebase Authentication. Angemeldete Nutzer können ihr Passwort in den Einstellungen ändern. Die Sitzung bleibt nur in der aktuellen Browser-Sitzung gespeichert. Nach erfolgreicher Anmeldung wird kurz eine Erfolgsanimation angezeigt. Wenn eine neuere Version verfügbar ist, erscheint nach dem Login ein Update-Popup mit dem passenden Download.
+Version 4.1.3 startet mit einer Anmeldeseite. Nach der Kontoerstellung sendet Firebase eine Bestätigungs-E-Mail. Erst nach Bestätigung der Adresse ist die Anmeldung möglich. Passwort-Reset und Passwortänderung laufen ebenfalls über Firebase Authentication. Die Sitzung bleibt nur in der aktuellen Browser-Sitzung gespeichert.
 
 Vor dem ersten produktiven Test muss in Firebase unter `Authentication -> Sign-in method` der Anbieter `Email/Password` aktiviert sein. Die App erwartet folgende Auth-Konfiguration:
 
@@ -121,7 +121,7 @@ Vor dem eigentlichen Start zeigt MediTest beim Klick auf `Generieren` ein KI-Sta
 
 Hochgeladene PDF-, PPTX- und TXT-Dateien erhalten in der Dokumentübersicht die Aktion `Dokument ansehen`. Die Vorschau zeigt den für die Verarbeitung gespeicherten Inhalt. Bei PDF und PowerPoint wird der extrahierte Text nach Seiten beziehungsweise Folien gegliedert; das ursprüngliche Layout wird nicht dauerhaft gespeichert.
 
-Die Einstellungsseite speichert Profilangaben und Darstellung.
+Die Einstellungsseite speichert Profilangaben und Darstellung. Die bestätigte Konto-E-Mail ist nicht als Profilwert änderbar. Der Bereich `Konto löschen` entfernt nach doppelter Bestätigung das Authentication-Konto und alle zugehörigen privaten Daten.
 
 ## Datenhaltung
 
@@ -159,4 +159,4 @@ Die Standardkonfiguration ist in `appsettings.json` unter `Billing` hinterlegt:
 }
 ```
 
-Die Testphase startet bei der ersten erfolgreichen Anmeldung des Firebase-Nutzers. Premium-Codes werden als SHA-256-Hashes unter `Billing:PremiumCodeHashes` hinterlegt; ein eingelöster Code speichert `premiumActive=true` im Firebase-Nutzerkonto und schaltet alle Katalogtests frei. Gratis-Katalog-Codes werden als SHA-256-Hashes unter `Billing:FreeCatalogCodeHashes` hinterlegt und schalten den ersten gesperrten Katalogtest frei, den der Nutzer danach herunterlädt. Solange keine Checkout-URLs hinterlegt sind, zeigt MediTest das Lizenzmodell und bereitet Käufe vor, führt aber keine echten Zahlungen aus. Für produktiven Verkauf muss ein Zahlungsanbieter mit Webhook angebunden werden, der Abo-Status und Katalogkäufe in Firestore/Firebase aktualisiert.
+Die Testphase startet bei der ersten erfolgreichen Anmeldung des bestätigten Firebase-Nutzers. Premium-Codes werden als SHA-256-Hashes unter `Billing:PremiumCodeHashes` hinterlegt. Gratis-Katalog-Codes werden zusätzlich in `catalogCodeRedemptions` atomar als verbraucht markiert und können systemweit nur einmal eingelöst werden. Solange keine Checkout-URLs hinterlegt sind, zeigt MediTest Preise und Kaufübersicht, führt aber keine echten Zahlungen aus.
