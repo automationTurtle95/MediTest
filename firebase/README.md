@@ -119,7 +119,11 @@ Wenn `gcloud` nicht angemeldet ist, kann der Functions-Deploy trotzdem über `np
 Firestore trennt Katalog und Nutzerdaten:
 
 - `catalogTests`: Angemeldete Nutzer dürfen lesen; schreiben darf nur ein Konto mit Firebase Custom Claim `admin=true`.
-- `users/{uid}/...`: Private Profil-, Dokument-, Fragen- und Testdaten; den Lizenzpfad darf der Nutzer nur lesen.
+- `users/{uid}/...`: Private Profil-, Dokument-, Fragen- und Testdaten; das Nutzer-Stammdokument wird nur serverseitig gepflegt.
+- `licenses/{uid}`: Lizenztyp, Status, Laufzeit und Gerätebegrenzung; Nutzer dürfen nur die eigene Lizenz lesen.
+- `deviceActivations/{uid}/devices/{deviceId}`: Serververwaltete Geräteaktivierungen.
+- `termsAcceptances/{uid}`: Nachvollziehbare Zustimmung zu den aktuellen AGB- und Datenschutzversionen.
+- `appConfig/global`: Globale Versionsstände, Offline-Tage, Links und Standardwerte.
 - `thematicTests`: Legacy-Katalogpfad mit denselben Admin-Regeln, falls ältere Katalogdaten noch vorhanden sind.
 
 1. Admin-Benutzer in Firebase Authentication anlegen oder über MediTest registrieren.
@@ -145,13 +149,18 @@ Danach läuft die Fragegenerierung über Firebase. Der echte Gemini-Key liegt ni
 
 ## Lizenz und Zahlungen
 
-MediTest V4.1.7 integriert das Lizenzmodell:
+MediTest V5.0.0 integriert das Lizenzmodell:
 
 - 7 Tage Testphase pro Firebase-Nutzer
 - 5,99 EUR pro Monat für das Abo
 - Katalogzugang und Premium-Freischaltung per Code
+- MedAT-Katalogtests für 49,99 EUR pro Test
+- serverseitige Geräteaktivierung, Gerätebegrenzung und Sperrstatusprüfung
+- versionierte AGB-/Datenschutz-Zustimmung und globale `appConfig`
 
-Die geschützte Function `meditestCreateCheckout` erstellt Stripe Checkout direkt mit dem Secret `MEDITEST_STRIPE_API_KEY`. Preise werden ausschließlich über `STRIPE_SUBSCRIPTION_PRICE_ID`, `STRIPE_CATALOG_UNIT_PRICE_ID` und `STRIPE_CATALOG_ENDING_PRICE_ID` festgelegt. `meditestStripeWebhook` prüft jedes Ereignis mit `MEDITEST_STRIPE_WEBHOOK_SECRET` und aktualisiert anschließend `users/{uid}/billing/license`. `meditestStripePortal` verwendet `STRIPE_PORTAL_CONFIGURATION_ID`.
+Die geschützte Function `meditestLicenseAccess` legt Nutzer-, Lizenz-, Geräte- und Zustimmungsdaten ausschließlich mit dem verifizierten Firebase-Token an. Der Client kann diese sicherheitsrelevanten Dokumente nicht direkt schreiben.
+
+Die geschützte Function `meditestCreateCheckout` erstellt Stripe Checkout direkt mit dem Secret `MEDITEST_STRIPE_API_KEY`. Bestehende Katalogpreise verwenden `STRIPE_CATALOG_UNIT_PRICE_ID` und `STRIPE_CATALOG_ENDING_PRICE_ID`; MedAT verwendet einen serverseitigen Festpreis von 49,99 EUR. `meditestStripeWebhook` prüft jedes Ereignis mit `MEDITEST_STRIPE_WEBHOOK_SECRET` und aktualisiert anschließend `users/{uid}/billing/license`. `meditestStripePortal` verwendet `STRIPE_PORTAL_CONFIGURATION_ID`.
 
 Die Payments-Extension kann für diese Datenbank nicht verwendet werden, weil ihre Gen-1-Firestore-Trigger mit dem Firestore-Multiregionsstandort `eur3` nicht bereitgestellt werden können. Die direkten Functions liefern denselben Checkout-, Webhook- und Portalablauf ohne diese Standortbeschränkung.
 

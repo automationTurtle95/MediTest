@@ -13,7 +13,7 @@
       <h1>MediTest</h1>
       <p>Multiple-Choice-Prüfungssimulation für Medizinstudenten.</p>
     </div>
-    <div class="auth-version">Version 4.1.7</div>
+    <div class="auth-version">Version 5.0.0</div>
   </section>
   <section class="auth-main">
     <div class="card auth-panel">
@@ -59,9 +59,6 @@
           <button id="resendVerificationBtn" class="hidden" type="button">Bestätigungs-E-Mail erneut senden</button>
         </div>
       </form>
-      <div class="auth-meta">
-        <span id="modeBadge" class="pill">Anmeldung</span>
-      </div>
       <div id="msg" class="hidden"></div>
     </div>
   </section>
@@ -86,7 +83,6 @@ const title=document.getElementById('formTitle');
 const submitBtn=document.getElementById('submitBtn');
 const displayNameWrap=document.getElementById('displayNameWrap');
 const authHint=document.getElementById('authHint');
-const modeBadge=document.getElementById('modeBadge');
 const loginSuccess=document.getElementById('loginSuccess');
 const resetPasswordBtn=document.getElementById('resetPasswordBtn');
 const resendVerificationBtn=document.getElementById('resendVerificationBtn');
@@ -120,17 +116,14 @@ async function loadConfig(){
     const cfg=await getAuthConfig(true);
     const googleEnabled=cfg.firebase?.googleEnabled===true;
     const appleEnabled=cfg.firebase?.appleEnabled===true;
-    modeBadge.textContent=cfg.cloudConfigured?'Firebase-Anmeldung':'Firebase fehlt';
     authHint.textContent=cfg.cloudConfigured
       ? 'Melde dich mit E-Mail, Google oder Apple an.'
-      : 'Firebase ist noch nicht vollständig konfiguriert.';
+      : 'Die Anmeldung ist noch nicht vollständig konfiguriert.';
     registerTab.classList.toggle('hidden',!cfg.registrationEnabled);
     googleLoginBtn.classList.toggle('hidden',!googleEnabled);
     appleLoginBtn.classList.toggle('hidden',!appleEnabled);
     socialAuth.classList.toggle('hidden',!googleEnabled&&!appleEnabled);
-  }catch(e){
-    modeBadge.textContent='Anmeldung';
-  }
+  }catch(e){}
 }
 async function completeLogin(res){
   status(msg,`Willkommen, ${res.user.displayName||res.user.email}.`,'status success');

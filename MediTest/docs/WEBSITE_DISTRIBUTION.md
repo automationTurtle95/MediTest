@@ -5,32 +5,32 @@
 Nach dem Release-Build liegen die verkaufbaren Pakete hier:
 
 ```text
-MediTest-Setup-4.1.7-win-x64.msi
-MediTest-4.1.7-win-x64-portable.zip
-MediTest-4.1.7-macos-x64-setup.zip
-MediTest-4.1.7-macos-arm64-setup.zip
+MediTest-Setup-5.0.0-win-x64.msi
+MediTest-5.0.0-win-x64-portable.zip
+MediTest-5.0.0-macos-x64-setup.zip
+MediTest-5.0.0-macos-arm64-setup.zip
 SHA256SUMS.txt
 ```
 
 Für normale Kunden sollten auf der Webseite primär diese Downloads sichtbar sein:
 
-- Windows: `MediTest-Setup-4.1.7-win-x64.msi`
-- Mac Intel: `MediTest-4.1.7-macos-x64-setup.zip`
-- Mac Apple Silicon: `MediTest-4.1.7-macos-arm64-setup.zip`
+- Windows: `MediTest-Setup-5.0.0-win-x64.msi`
+- Mac Intel: `MediTest-5.0.0-macos-x64-setup.zip`
+- Mac Apple Silicon: `MediTest-5.0.0-macos-arm64-setup.zip`
 
 Das portable Windows-ZIP ist praktisch für Support oder Tests, sollte aber nicht der Hauptdownload sein.
 
 ## GitHub-Downloadlinks
 
-Wenn der GitHub Release `v4.1.7` veröffentlicht ist, können die Buttons auf der Webseite direkt auf die Release-Assets zeigen:
+Wenn der GitHub Release `v5.0.0` veröffentlicht ist, können die Buttons auf der Webseite direkt auf die Release-Assets zeigen:
 
 ```html
-<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-Setup-4.1.7-win-x64.msi">Windows herunterladen</a>
-<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-4.1.7-macos-arm64-setup.zip">Mac Apple Silicon herunterladen</a>
-<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-4.1.7-macos-x64-setup.zip">Mac Intel herunterladen</a>
+<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-Setup-5.0.0-win-x64.msi">Windows herunterladen</a>
+<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-5.0.0-macos-arm64-setup.zip">Mac Apple Silicon herunterladen</a>
+<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-5.0.0-macos-x64-setup.zip">Mac Intel herunterladen</a>
 ```
 
-Alternativ kannst du die Dateien des GitHub Release `v4.1.7` auf deinen eigenen Webserver hochladen. Dann müssen die Links auf deiner Webseite auf die dortigen Dateien zeigen.
+Alternativ kannst du die Dateien des GitHub Release `v5.0.0` auf deinen eigenen Webserver hochladen. Dann müssen die Links auf deiner Webseite auf die dortigen Dateien zeigen.
 
 ## Verkauf und Freischaltung
 

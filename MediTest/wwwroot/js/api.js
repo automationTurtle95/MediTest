@@ -586,7 +586,7 @@ const TOOLTIP_BY_TEXT = new Map([
   ['Manuell', 'Eigene Multiple-Choice-Fragen ohne Datei anlegen.'],
   ['Tests', 'Gestartete und abgeschlossene Tests ansehen.'],
   ['Statistik', 'Ergebnisse und Fehlerschwerpunkte auswerten.'],
-  ['Lizenz', 'Testphase, Abo und Katalogzugang ansehen.'],
+  ['Rechtliches & Lizenz', 'Produktdaten, Rechtstexte, Geräte und Lizenzstatus ansehen.'],
   ['Einstellungen', 'Profil und Darstellung konfigurieren.'],
   ['Einloggen', 'Mit deinem MediTest-Konto anmelden.'],
   ['Konto erstellen', 'Neuen MediTest-Zugang anlegen.'],
@@ -794,6 +794,91 @@ async function logoutApp() {
   location.href = '/pages/login.html';
 }
 
+let pendingLegalLicenseState = null;
+
+function showTermsAcceptanceModal(state) {
+  pendingLegalLicenseState = state;
+  if (document.getElementById('termsAcceptanceModal')) return;
+  const legal = state?.legal || {};
+  const config = state?.access?.appConfig || {};
+  const modal = document.createElement('div');
+  modal.id = 'termsAcceptanceModal';
+  modal.className = 'modal-backdrop';
+  modal.innerHTML = `
+    <section class="modal-panel terms-modal" role="dialog" aria-modal="true" aria-labelledby="termsAcceptanceTitle">
+      <p class="eyebrow">Zustimmung erforderlich</p>
+      <h2 id="termsAcceptanceTitle">Nutzungsbedingungen & Datenschutz</h2>
+      <p>Bitte bestätige die aktuell hinterlegten Versionen, bevor du MediTest weiter nutzt.</p>
+      <p class="muted">AGB-Version ${esc(config.currentTermsVersion || '-')} · Datenschutz-Version ${esc(config.currentPrivacyVersion || '-')}</p>
+      <label class="checkline"><input id="acceptTermsCheck" type="checkbox"> <span>Ich akzeptiere die Nutzungsbedingungen.</span></label>
+      <label class="checkline"><input id="acceptPrivacyCheck" type="checkbox"> <span>Ich akzeptiere die Datenschutzerklärung.</span></label>
+      <div class="actions">
+        ${config.termsOfUseUrl || legal.termsOfUseUrl ? `<a class="button" href="${esc(config.termsOfUseUrl || legal.termsOfUseUrl)}" target="_blank" rel="noopener">AGB öffnen</a>` : ''}
+        ${config.privacyPolicyUrl || legal.privacyPolicyUrl ? `<a class="button" href="${esc(config.privacyPolicyUrl || legal.privacyPolicyUrl)}" target="_blank" rel="noopener">Datenschutz öffnen</a>` : ''}
+        <button id="acceptTermsContinue" class="primary" type="button" disabled>Fortfahren</button>
+        <button type="button" onclick="logoutApp()">Abmelden</button>
+      </div>
+      <div id="termsAcceptanceStatus" class="hidden"></div>
+    </section>`;
+  document.body.appendChild(modal);
+  const terms = document.getElementById('acceptTermsCheck');
+  const privacy = document.getElementById('acceptPrivacyCheck');
+  const button = document.getElementById('acceptTermsContinue');
+  const update = () => { button.disabled = !(terms.checked && privacy.checked); };
+  terms.addEventListener('change', update);
+  privacy.addEventListener('change', update);
+  button.addEventListener('click', async () => {
+    const msg = document.getElementById('termsAcceptanceStatus');
+    button.disabled = true;
+    status(msg, 'Speichere Zustimmung...');
+    try {
+      const access = await api('/api/legal-license/terms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acceptTerms: true, acceptPrivacy: true })
+      });
+      pendingLegalLicenseState = { ...(pendingLegalLicenseState || {}), access };
+      location.reload();
+    } catch (error) {
+      status(msg, error.message, 'status error');
+      update();
+    }
+  });
+  enhanceTooltips(modal);
+}
+
+function showLicenseAccessModal(state) {
+  if (location.pathname.endsWith('/pages/license.html')) return;
+  const result = state?.access?.result || {};
+  if (result.isValid || document.getElementById('licenseAccessModal')) return;
+  const modal = document.createElement('div');
+  modal.id = 'licenseAccessModal';
+  modal.className = 'modal-backdrop';
+  modal.innerHTML = `
+    <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="licenseAccessTitle">
+      <p class="eyebrow">Lizenzprüfung</p>
+      <h2 id="licenseAccessTitle">${esc(result.status === 'expired' ? 'Lizenz abgelaufen' : 'Zugriff nicht freigegeben')}</h2>
+      <p>${esc(result.message || 'Keine gültige Lizenz gefunden.')}</p>
+      <div class="actions">
+        <a class="button primary" href="/pages/license.html">Rechtliches & Lizenz öffnen</a>
+        <button type="button" onclick="logoutApp()">Abmelden</button>
+      </div>
+    </section>`;
+  document.body.appendChild(modal);
+  enhanceTooltips(modal);
+}
+
+async function ensureLegalLicenseCompliance() {
+  if (location.pathname.endsWith('/pages/login.html')) return null;
+  const user = await currentAuthUser(false);
+  if (!user) return null;
+  const state = await api('/api/legal-license/status');
+  pendingLegalLicenseState = state;
+  if (state.access?.result?.requiresTermsAcceptance) showTermsAcceptanceModal(state);
+  else if (!state.access?.result?.isValid) showLicenseAccessModal(state);
+  return state;
+}
+
 function renderAccountDock(user) {
   if (!user || document.getElementById('accountDock')) return;
 
@@ -834,7 +919,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!nav.querySelector('a[href="/pages/license.html"]')) {
     const license = document.createElement('a');
     license.href = '/pages/license.html';
-    license.textContent = 'Lizenz';
+    license.textContent = 'Rechtliches & Lizenz';
     nav.appendChild(license);
   }
   if (!nav.querySelector('a[href="/pages/settings.html"]')) {
@@ -862,6 +947,9 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('DOMContentLoaded', () => {
   if (location.pathname.endsWith('/pages/login.html')) return;
   getAppSettings().catch(() => {});
+  ensureLegalLicenseCompliance().catch(error => {
+    console.warn('Lizenzprüfung nicht verfügbar:', error?.message || 'Unbekannter Fehler');
+  });
 });
 
 document.addEventListener('DOMContentLoaded', () => {

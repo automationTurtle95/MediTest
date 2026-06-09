@@ -3,28 +3,109 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Lizenz · MediTest</title>
+  <title>Rechtliches & Lizenz · MediTest</title>
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
 <header class="topbar"><a class="brand" href="/pages/documents.html">MediTest</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/catalog.html">Katalog</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
 <main>
   <section class="card">
-    <p class="eyebrow">Lizenz</p>
-    <h1>Lizenz und Premium</h1>
-    <p class="muted">Verwalte Testphase, Abo und Premium-Freischaltung.</p>
+    <p class="eyebrow">Produkt, Konto und Nutzung</p>
+    <h1>Rechtliches & Lizenz</h1>
+    <p class="muted">Produktdaten, rechtliche Verweise, Gerätebindung und Lizenzstatus an einem Ort.</p>
     <div id="msg" class="status">Lade Lizenzstatus...</div>
   </section>
-  <section id="licenseBox" class="grid"></section>
+
+  <section id="legalLicenseBox" class="grid"></section>
+  <section id="billingBox" class="grid"></section>
 </main>
 <script src="/js/api.js"></script>
 <script>
-async function loadLicense(){
-  const statusBox=document.getElementById('msg');
-  const box=document.getElementById('licenseBox');
-  const s=await api('/api/license/status');
-  status(statusBox,s.message,s.accessActive?'status success':'status error');
-  const trialEnd=new Date(s.trialEndsAt).toLocaleDateString();
+let legalLicenseState=null;
+
+function valueOr(value,fallback='Noch nicht konfiguriert'){return String(value||'').trim()||fallback;}
+function dateOr(value,fallback='Unbefristet'){return value?new Date(value).toLocaleDateString('de-AT'):fallback;}
+function legalLinkButton(label,url){
+  return url
+    ? `<a class="button" href="${esc(url)}" target="_blank" rel="noopener">${esc(label)}</a>`
+    : `<button type="button" disabled>${esc(label)}</button>`;
+}
+function showImpressum(){
+  const legal=legalLicenseState?.legal||{};
+  const modal=document.createElement('div');
+  modal.className='modal-backdrop';
+  modal.id='impressumModal';
+  modal.innerHTML=`<section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="impressumTitle">
+    <p class="eyebrow">Rechtlicher Hinweis</p>
+    <h2 id="impressumTitle">Impressum</h2>
+    <p>${esc(valueOr(legal.impressumText))}</p>
+    <div class="actions">${legal.impressumUrl?`<a class="button primary" href="${esc(legal.impressumUrl)}" target="_blank" rel="noopener">Impressum öffnen</a>`:''}<button type="button" onclick="document.getElementById('impressumModal')?.remove()">Schließen</button></div>
+  </section>`;
+  document.body.appendChild(modal);
+}
+
+function renderLegalLicense(data){
+  legalLicenseState=data;
+  const legal=data.legal||{};
+  const access=data.access||{};
+  const license=access.license||{};
+  const user=access.user||{};
+  const result=access.result||{};
+  const config=access.appConfig||{};
+  const device=access.device||{};
+  const statusClass=result.isValid?'status success':'status error';
+  document.getElementById('msg').className=statusClass;
+  document.getElementById('msg').textContent=result.message||'Lizenzstatus unbekannt.';
+  document.getElementById('legalLicenseBox').innerHTML=`
+    <article class="card doc-card">
+      <span class="badge">${esc(legal.productName||'MediTest')}</span>
+      <h2>Produkt</h2>
+      <dl class="legal-details">
+        <div><dt>Version</dt><dd>${esc(valueOr(legal.productVersion,'-'))}</dd></div>
+        <div><dt>Buildnummer</dt><dd>${esc(valueOr(legal.buildNumber,'-'))}</dd></div>
+        <div><dt>Veröffentlichung</dt><dd>${esc(dateOr(legal.releaseDate,'-'))}</dd></div>
+        <div><dt>Entwickler</dt><dd>${esc(valueOr(legal.developerName,'Lukas Hofer'))}</dd></div>
+        <div><dt>Rechteinhaber</dt><dd>${esc(valueOr(legal.legalOwner,'Lukas Hofer'))}</dd></div>
+        <div><dt>Land</dt><dd>${esc(valueOr(legal.country,'Österreich'))}</dd></div>
+      </dl>
+      <p class="muted">${esc(valueOr(legal.copyrightText))}</p>
+    </article>
+    <article class="card doc-card">
+      <span class="badge">${esc(result.status||'unbekannt')}</span>
+      <h2>Firebase-Konto & Lizenz</h2>
+      <dl class="legal-details">
+        <div><dt>Nutzer</dt><dd>${esc(valueOr(user.displayName,user.email||'-'))}</dd></div>
+        <div><dt>E-Mail</dt><dd>${esc(valueOr(user.email,'-'))}</dd></div>
+        <div><dt>Lizenztyp</dt><dd>${esc(valueOr(license.licenseType,'-'))}</dd></div>
+        <div><dt>Lizenzstatus</dt><dd>${esc(valueOr(license.licenseStatus,'-'))}</dd></div>
+        <div><dt>Gültig bis</dt><dd>${esc(dateOr(license.licenseEndDate))}</dd></div>
+        <div><dt>Geräte</dt><dd>${Number(license.currentDeviceCount)||0} / ${Number(license.maxDevices)||0}</dd></div>
+        <div><dt>Dieses Gerät</dt><dd>${result.deviceActivated?'Aktiviert':'Nicht aktiviert'}</dd></div>
+        <div><dt>Prüfmodus</dt><dd>${access.isOfflineMode?'Offline-Cache':'Online'}</dd></div>
+      </dl>
+      <div class="actions">
+        <button class="primary" type="button" onclick="checkLicense()">Lizenz prüfen</button>
+        <button type="button" onclick="activateDevice()" ${result.deviceActivated?'disabled':''}>Gerät aktivieren</button>
+        <button type="button" onclick="logoutApp()">Abmelden</button>
+      </div>
+    </article>
+    <article class="card doc-card">
+      <span class="badge">Rechtliches</span>
+      <h2>Links & Kontakt</h2>
+      <p><strong>Support:</strong> ${esc(valueOr(config.supportEmail||legal.supportEmail))}</p>
+      <p class="muted">${esc(valueOr(legal.legalDisclaimerText,'Die finalen Rechtstexte werden separat juristisch geprüft.'))}</p>
+      <div class="actions">
+        <button type="button" onclick="showImpressum()">Impressum anzeigen</button>
+        ${legalLinkButton('Datenschutz öffnen',config.privacyPolicyUrl||legal.privacyPolicyUrl)}
+        ${legalLinkButton('AGB öffnen',config.termsOfUseUrl||legal.termsOfUseUrl)}
+        ${legalLinkButton('Lizenzbedingungen öffnen',config.licenseAgreementUrl||legal.licenseAgreementUrl)}
+      </div>
+      ${Array.isArray(legal.configurationWarnings)&&legal.configurationWarnings.length?`<div class="status error">${legal.configurationWarnings.map(esc).join('<br>')}</div>`:''}
+    </article>`;
+}
+
+function renderBilling(s){
+  const trialEnd=dateOr(s.trialEndsAt,'-');
   const isPremium=s.premiumActive||s.status==='premium';
   const hasSubscription=s.status==='active'&&!isPremium;
   const freeCreditAvailable=!!s.freeCatalogCreditAvailable;
@@ -34,9 +115,9 @@ async function loadLicense(){
     : freeCreditRedeemed
       ? `Bereits verwendet für Katalogtest ${esc(s.freeCatalogCreditRedeemedCatalogId||'')}.`
       : 'Noch nicht aktiviert.';
-  box.innerHTML=`
+  document.getElementById('billingBox').innerHTML=`
     <article class="card doc-card">
-      <span class="badge">${esc(s.status)}</span>
+      <span class="badge">Zugang</span>
       <h2>${esc(s.plan)}</h2>
       <p class="muted">${isPremium?'Dauerhaft freigeschaltet':`Testphase bis ${trialEnd} · ${Number(s.trialDaysRemaining)||0} Tag(e) übrig`}</p>
       <p>${isPremium?'Premium ist aktiv. MediTest und alle Katalogtests sind freigeschaltet.':`Nach der Testphase kostet MediTest <b>${priceLabel(s.monthlyPriceCents,s.currency)} pro Monat</b>.`}</p>
@@ -49,84 +130,68 @@ async function loadLicense(){
       }</div>
     </article>
     <article class="card doc-card">
-      <span class="badge">Einzelzugang</span>
-      <h2>Katalogtests</h2>
-      <p class="muted">Themenspezifische Fragenpools können einzeln freigeschaltet werden.</p>
-      <p>Käufe werden nach erfolgreichem Checkout dem Firebase-Konto zugeordnet. Bereits freigeschaltete Tests bleiben im Katalog verfügbar und können erneut heruntergeladen werden.</p>
-      <div class="actions"><a class="button primary" href="/pages/catalog.html">Katalog öffnen</a></div>
-    </article>
-    <article class="card doc-card">
       <span class="badge">Gratis-Test</span>
       <h2>Katalog-Code</h2>
       <p class="muted">${freeCreditText}</p>
-      <p>Ein gültiger Gratis-Code schaltet genau einen Katalogtest deiner Wahl frei.</p>
-      <form id="catalogCodeForm" onsubmit="redeemCatalogCode(event)">
+      <form onsubmit="redeemCatalogCode(event)">
         <label for="catalogCode">Gratis-Katalog-Code</label>
         <input id="catalogCode" autocomplete="off" placeholder="Gratis-Katalog-Code eingeben" ${freeCreditAvailable||freeCreditRedeemed?'disabled':''}>
-        <div class="actions">
-          ${freeCreditAvailable?'<a class="button primary" href="/pages/catalog.html">Gratis-Test auswählen</a>':`<button class="primary" type="submit" ${freeCreditRedeemed?'disabled':''}>Code einlösen</button>`}
-        </div>
+        <div class="actions">${freeCreditAvailable?'<a class="button primary" href="/pages/catalog.html">Gratis-Test auswählen</a>':`<button class="primary" type="submit" ${freeCreditRedeemed?'disabled':''}>Code einlösen</button>`}</div>
       </form>
     </article>
     <article class="card doc-card">
       <span class="badge">Premium-Code</span>
       <h2>Code einlösen</h2>
       <p class="muted">Ein gültiger Code schaltet MediTest und alle Katalogtests kostenlos frei.</p>
-      <form id="premiumForm" onsubmit="redeemPremiumCode(event)">
+      <form onsubmit="redeemPremiumCode(event)">
         <label for="premiumCode">Premium-Code</label>
         <input id="premiumCode" autocomplete="off" placeholder="MT-PREMIUM-XXXX-XXXX-XXXX-XXXX" ${isPremium?'disabled':''}>
         <div class="actions"><button class="primary" type="submit" ${isPremium?'disabled':''}>Code einlösen</button></div>
       </form>
     </article>`;
+}
+
+async function loadLicense(){
+  const [legal,billing]=await Promise.all([
+    api('/api/legal-license/status'),
+    api('/api/license/status')
+  ]);
+  renderLegalLicense(legal);
+  renderBilling(billing);
+  if(legal.access?.result?.requiresTermsAcceptance) showTermsAcceptanceModal(legal);
   enhanceTooltips();
 }
-
+async function checkLicense(){
+  status(document.getElementById('msg'),'Prüfe Lizenz...');
+  try{renderLegalLicense({legal:legalLicenseState.legal,access:await api('/api/legal-license/check',{method:'POST'})});}
+  catch(e){status(document.getElementById('msg'),e.message,'status error');}
+}
+async function activateDevice(){
+  status(document.getElementById('msg'),'Aktiviere Gerät...');
+  try{renderLegalLicense({legal:legalLicenseState.legal,access:await api('/api/legal-license/device',{method:'POST'})});}
+  catch(e){status(document.getElementById('msg'),e.message,'status error');}
+}
 async function manageSubscription(){
-  const msg=document.getElementById('msg');
-  status(msg,'Öffne Stripe-Kundenportal...');
-  try{
-    const r=await api('/api/license/portal',{method:'POST'});
-    if(r.available&&r.url) location.href=r.url;
-    else status(msg,r.message,'status error');
-  }catch(e){status(msg,e.message,'status error');}
+  try{const r=await api('/api/license/portal',{method:'POST'});if(r.available&&r.url)location.href=r.url;else status(document.getElementById('msg'),r.message,'status error');}
+  catch(e){status(document.getElementById('msg'),e.message,'status error');}
 }
-
 async function startSubscription(){
-  const msg=document.getElementById('msg');
-  status(msg,'Bereite Checkout vor...');
-  try{
-    const r=await api('/api/license/checkout/subscription',{method:'POST'});
-    if(r.available&&r.url) location.href=r.url;
-    else status(msg,r.message,'status error');
-  }catch(e){status(msg,e.message,'status error');}
+  try{const r=await api('/api/license/checkout/subscription',{method:'POST'});if(r.available&&r.url)location.href=r.url;else status(document.getElementById('msg'),r.message,'status error');}
+  catch(e){status(document.getElementById('msg'),e.message,'status error');}
 }
-
 async function redeemPremiumCode(e){
   e.preventDefault();
-  const msg=document.getElementById('msg');
-  const input=document.getElementById('premiumCode');
-  const code=input.value.trim();
-  if(!code){status(msg,'Bitte gib einen Premium-Code ein.','status error');return;}
-  status(msg,'Prüfe Premium-Code...');
-  try{
-    const r=await api('/api/license/redeem-premium-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
-    status(msg,r.message||'Premium wurde aktiviert.','status success');
-    await loadLicense();
-  }catch(e){status(msg,e.message,'status error');}
+  const code=document.getElementById('premiumCode').value.trim();
+  if(!code){status(document.getElementById('msg'),'Bitte gib einen Premium-Code ein.','status error');return;}
+  try{const r=await api('/api/license/redeem-premium-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});status(document.getElementById('msg'),r.message||'Premium wurde aktiviert.','status success');await loadLicense();}
+  catch(err){status(document.getElementById('msg'),err.message,'status error');}
 }
-
 async function redeemCatalogCode(e){
   e.preventDefault();
-  const msg=document.getElementById('msg');
-  const input=document.getElementById('catalogCode');
-  const code=input.value.trim();
-  if(!code){status(msg,'Bitte gib einen Gratis-Katalog-Code ein.','status error');return;}
-  status(msg,'Prüfe Gratis-Katalog-Code...');
-  try{
-    const r=await api('/api/license/redeem-catalog-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
-    status(msg,r.freeCatalogCreditAvailable?'Gratis-Test aktiviert. Wähle jetzt im Katalog einen Test aus.':'Gratis-Katalog-Code wurde verarbeitet.','status success');
-    await loadLicense();
-  }catch(e){status(msg,e.message,'status error');}
+  const code=document.getElementById('catalogCode').value.trim();
+  if(!code){status(document.getElementById('msg'),'Bitte gib einen Gratis-Katalog-Code ein.','status error');return;}
+  try{await api('/api/license/redeem-catalog-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});status(document.getElementById('msg'),'Gratis-Test aktiviert.','status success');await loadLicense();}
+  catch(err){status(document.getElementById('msg'),err.message,'status error');}
 }
 
 async function initLicense(){
@@ -139,7 +204,6 @@ async function initLicense(){
     status(document.getElementById('msg'),'Checkout abgebrochen. Es wurde nichts geändert.','status');
   }
 }
-
 initLicense().catch(e=>status(document.getElementById('msg'),e.message,'status error'));
 </script>
 </body>

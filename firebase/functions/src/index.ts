@@ -113,6 +113,34 @@ type LicenseState = {
   updatedAt: string;
 };
 
+type GlobalAppConfig = {
+  currentAppVersion: string;
+  currentTermsVersion: string;
+  currentPrivacyVersion: string;
+  allowedOfflineDays: number;
+  supportEmail: string;
+  termsOfUseUrl: string;
+  privacyPolicyUrl: string;
+  impressumUrl: string;
+  licenseAgreementUrl: string;
+  defaultMaxDevices: number;
+  trialDurationDays: number;
+};
+
+type CommercialLicense = {
+  userId: string;
+  userEmail: string;
+  licenseType: string;
+  licenseStatus: string;
+  licenseStartDate: string | null;
+  licenseEndDate: string | null;
+  maxDevices: number;
+  currentDeviceCount: number;
+  lastLicenseCheck: string;
+  serverValidationRequired: boolean;
+  managedBy: string;
+};
+
 let telemetryPromise: Promise<void> | null = null;
 let genkitRuntimePromise: Promise<GenkitRuntime> | null = null;
 let generateQuestionsFlow: GenerateQuestionsFlow | null = null;
@@ -147,6 +175,17 @@ export const meditestAi = onRequest(
     const request = (req.body ?? {}) as GenerateQuestionsRequest;
     if (user.email_verified !== true) {
       res.status(403).json({ error: { message: "Bitte bestätige zuerst deine E-Mail-Adresse." } });
+      return;
+    }
+
+    const entitlement = await cloudEntitlement(user);
+    if (!entitlement.allowed) {
+      res.status(403).json({
+        error: {
+          code: "license_required",
+          message: entitlement.message
+        }
+      });
       return;
     }
 
@@ -380,6 +419,110 @@ export const meditestLicenseStatus = onRequest(
   }
 );
 
+export const meditestLicenseAccess = onRequest(
+  {
+    invoker: "public",
+    memory: "256MiB",
+    timeoutSeconds: 30
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.set("Allow", "POST").status(405).json({ error: { message: "Nur POST-Anfragen sind erlaubt." } });
+      return;
+    }
+
+    const user = await verifiedUser(req.header("authorization") ?? "", res);
+    if (!user) return;
+
+    const action = stringValue(req.body?.action) || "check";
+    const deviceId = stringValue(req.body?.deviceId).toLowerCase();
+    const deviceName = stringValue(req.body?.deviceName).slice(0, 200);
+    const appVersion = stringValue(req.body?.appVersion).slice(0, 40) || "0.0.0";
+    if (!/^[a-f0-9]{64}$/.test(deviceId)) {
+      res.status(400).json({ error: { message: "Die Geräte-ID ist ungültig." } });
+      return;
+    }
+
+    try {
+      const appConfig = await ensureGlobalAppConfig();
+      const billingState = await ensureLicenseState(user.uid);
+      const userStatus = await ensureCommercialUser(user);
+      let license = await ensureCommercialLicense(user, billingState, appConfig);
+
+      if (action === "acceptTerms") {
+        if (req.body?.acceptTerms !== true || req.body?.acceptPrivacy !== true) {
+          res.status(400).json({ error: { message: "AGB und Datenschutzerklärung müssen beide akzeptiert werden." } });
+          return;
+        }
+        await saveTermsAcceptance(user, deviceId, appVersion, appConfig);
+      } else if (action === "activateDevice") {
+        await activateDevice(user.uid, deviceId, deviceName, appVersion);
+      } else if (action === "check") {
+        const currentDevice = await db.doc(`deviceActivations/${user.uid}/devices/${deviceId}`).get();
+        const deviceEligible = (license.licenseStatus === "active" || license.licenseStatus === "trial") &&
+          (!license.licenseEndDate || Date.parse(license.licenseEndDate) > Date.now());
+        if (!currentDevice.exists && deviceEligible && !userStatus.isBlocked) {
+          try {
+            await activateDevice(user.uid, deviceId, deviceName, appVersion);
+          } catch (error) {
+            if (!(error instanceof Error) || error.message !== "device_limit_reached") throw error;
+          }
+        } else if (currentDevice.exists) {
+          await currentDevice.ref.set({
+            lastUsedAt: Timestamp.now(),
+            appVersion
+          }, { merge: true });
+        }
+      } else {
+        res.status(400).json({ error: { message: "Unbekannte Lizenzaktion." } });
+        return;
+      }
+
+      const [deviceSnapshot, termsSnapshot, licenseSnapshot] = await Promise.all([
+        db.doc(`deviceActivations/${user.uid}/devices/${deviceId}`).get(),
+        db.doc(`termsAcceptances/${user.uid}`).get(),
+        db.doc(`licenses/${user.uid}`).get()
+      ]);
+      license = commercialLicenseFromData(user.uid, stringValue(user.email), licenseSnapshot.data() ?? {}, appConfig);
+      const terms = termsAcceptanceResponse(termsSnapshot.data());
+      const device = deviceActivationResponse(deviceSnapshot.data());
+      const result = evaluateCommercialAccess(userStatus, license, !!device, terms, appConfig);
+
+      await db.doc(`licenses/${user.uid}`).set({
+        lastLicenseCheck: Timestamp.now()
+      }, { merge: true });
+
+      res.status(200).json({
+        appConfig,
+        user: userStatus,
+        license,
+        device,
+        termsAcceptance: terms,
+        result,
+        online: true,
+        isOfflineMode: false,
+        lastSuccessfulOnlineCheck: new Date().toISOString()
+      });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      if (code === "device_limit_reached") {
+        res.status(409).json({ error: { message: "Maximale Geräteanzahl erreicht." } });
+        return;
+      }
+      if (code === "license_not_active") {
+        res.status(409).json({ error: { message: "Keine gültige Lizenz gefunden." } });
+        return;
+      }
+      logger.error("License access failed", {
+        uid: user.uid,
+        action,
+        message: code || String(error)
+      });
+      res.status(503).json({ error: { message: "Die Lizenzprüfung ist momentan nicht erreichbar." } });
+    }
+  }
+);
+
 export const meditestRedeemPremiumCode = onRequest(
   {
     invoker: "public",
@@ -552,15 +695,16 @@ export const meditestCreateCheckout = onRequest(
         return;
       }
 
-      const unitPriceId = stripeCatalogUnitPriceId.value().trim();
-      const endingPriceId = stripeCatalogEndingPriceId.value().trim();
-      if (!isStripePriceId(unitPriceId) || !isStripePriceId(endingPriceId)) {
-        res.status(503).json({ error: { message: "Die Stripe-Preise für Katalogtests sind noch nicht konfiguriert." } });
-        return;
-      }
       const catalog = await findCatalogTest(catalogId);
       if (!catalog) {
         res.status(404).json({ error: { message: "Katalogtest nicht gefunden." } });
+        return;
+      }
+      const isMedAt = catalog.category.toLowerCase() === "medat";
+      const unitPriceId = stripeCatalogUnitPriceId.value().trim();
+      const endingPriceId = stripeCatalogEndingPriceId.value().trim();
+      if (!isMedAt && (!isStripePriceId(unitPriceId) || !isStripePriceId(endingPriceId))) {
+        res.status(503).json({ error: { message: "Die Stripe-Preise für Katalogtests sind noch nicht konfiguriert." } });
         return;
       }
       await expireOpenCheckoutSessions(
@@ -569,26 +713,40 @@ export const meditestCreateCheckout = onRequest(
         (session) => session.mode === "payment" && session.metadata?.catalogId === catalogId
       );
 
+      const expectedPriceCents = isMedAt
+        ? catalog.priceCents
+        : catalog.questionCount * Math.max(0, billingCatalogQuestionPriceCents.value()) +
+          Math.max(0, billingCatalogPriceEndingCents.value());
       const metadata = {
         meditestPurchaseType: "catalog",
         catalogId,
         firebaseUid: user.uid,
+        category: catalog.category,
         questionCount: String(catalog.questionCount),
         questionPriceCents: String(Math.max(0, billingCatalogQuestionPriceCents.value())),
         priceEndingCents: String(Math.max(0, billingCatalogPriceEndingCents.value())),
-        expectedPriceCents: String(
-          catalog.questionCount * Math.max(0, billingCatalogQuestionPriceCents.value()) +
-          Math.max(0, billingCatalogPriceEndingCents.value())
-        ),
-        currency: billingCurrency.value().trim().toUpperCase()
+        expectedPriceCents: String(expectedPriceCents),
+        currency: catalog.currency
       };
       checkoutData = {
         mode: "payment",
         customer: customerId,
-        line_items: [
-          { price: unitPriceId, quantity: catalog.questionCount },
-          { price: endingPriceId, quantity: 1 }
-        ],
+        line_items: isMedAt
+          ? [{
+            price_data: {
+              currency: catalog.currency.toLowerCase(),
+              unit_amount: expectedPriceCents,
+              product_data: {
+                name: catalog.title,
+                description: "MediTest MedAT-Katalogtest"
+              }
+            },
+            quantity: 1
+          }]
+          : [
+            { price: unitPriceId, quantity: catalog.questionCount },
+            { price: endingPriceId, quantity: 1 }
+          ],
         client_reference_id: user.uid,
         success_url: `${returnBaseUrl}/pages/catalog.html?checkout=success&catalogId=${encodeURIComponent(catalogId)}`,
         cancel_url: `${returnBaseUrl}/pages/catalog.html?checkout=cancelled&catalogId=${encodeURIComponent(catalogId)}`,
@@ -791,6 +949,9 @@ export const meditestDeleteAccount = onRequest(
 
     try {
       const userRef = db.collection("users").doc(user.uid);
+      const licenseRef = db.collection("licenses").doc(user.uid);
+      const deviceRef = db.collection("deviceActivations").doc(user.uid);
+      const termsRef = db.collection("termsAcceptances").doc(user.uid);
       const customerRef = db.collection(stripeCustomersCollection.value()).doc(user.uid);
       const aiUsageRef = db.collection("aiUsage").doc(user.uid);
       const eventsSnapshot = await db.collection("aiGenerationEvents").where("uid", "==", user.uid).get();
@@ -801,6 +962,9 @@ export const meditestDeleteAccount = onRequest(
 
       await Promise.all([
         db.recursiveDelete(userRef),
+        db.recursiveDelete(deviceRef),
+        licenseRef.delete(),
+        termsRef.delete(),
         db.recursiveDelete(customerRef),
         db.recursiveDelete(aiUsageRef),
         deleteDocuments(eventsSnapshot.docs.map((doc) => doc.ref))
@@ -823,6 +987,302 @@ export const meditestDeleteAccount = onRequest(
     });
   }
 );
+
+async function ensureGlobalAppConfig(): Promise<GlobalAppConfig> {
+  const ref = db.doc("appConfig/global");
+  const snapshot = await ref.get();
+  const source = snapshot.data() ?? {};
+  const config: GlobalAppConfig = {
+    currentAppVersion: stringValue(source.currentAppVersion) || "5.0.0",
+    currentTermsVersion: stringValue(source.currentTermsVersion) || "5.0",
+    currentPrivacyVersion: stringValue(source.currentPrivacyVersion) || "5.0",
+    allowedOfflineDays: boundedInt(source.allowedOfflineDays, 7, 0, 30),
+    supportEmail: stringValue(source.supportEmail),
+    termsOfUseUrl: safeHttpUrl(source.termsOfUseUrl),
+    privacyPolicyUrl: safeHttpUrl(source.privacyPolicyUrl),
+    impressumUrl: safeHttpUrl(source.impressumUrl),
+    licenseAgreementUrl: safeHttpUrl(source.licenseAgreementUrl),
+    defaultMaxDevices: boundedInt(source.defaultMaxDevices, 2, 1, 20),
+    trialDurationDays: boundedInt(source.trialDurationDays, 7, 1, 60)
+  };
+  if (!snapshot.exists) {
+    await ref.set({
+      ...config,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    });
+  }
+  return config;
+}
+
+async function ensureCommercialUser(user: any): Promise<{
+  userId: string;
+  email: string;
+  displayName: string;
+  role: string;
+  isBlocked: boolean;
+}> {
+  const ref = db.doc(`users/${user.uid}`);
+  const snapshot = await ref.get();
+  const existing = snapshot.data() ?? {};
+  const role = user.admin === true || user.isAdmin === true
+    ? "admin"
+    : stringValue(existing.role) || "user";
+  const data = {
+    email: stringValue(user.email),
+    displayName: stringValue(user.name) || stringValue(existing.displayName),
+    createdAt: existing.createdAt ?? Timestamp.now(),
+    lastLoginAt: Timestamp.now(),
+    role,
+    isBlocked: existing.isBlocked === true
+  };
+  await ref.set(data, { merge: true });
+  return {
+    userId: user.uid,
+    email: data.email,
+    displayName: data.displayName,
+    role,
+    isBlocked: data.isBlocked
+  };
+}
+
+async function ensureCommercialLicense(
+  user: any,
+  billing: LicenseState,
+  config: GlobalAppConfig
+): Promise<CommercialLicense> {
+  const ref = db.doc(`licenses/${user.uid}`);
+  const snapshot = await ref.get();
+  const existing = snapshot.data() ?? {};
+  if (stringValue(existing.managedBy).toLowerCase() === "manual") {
+    const manual = commercialLicenseFromData(user.uid, stringValue(user.email), existing, config);
+    await ref.set({
+      userEmail: manual.userEmail,
+      lastLicenseCheck: Timestamp.now()
+    }, { merge: true });
+    return manual;
+  }
+
+  const now = Date.now();
+  const admin = user.admin === true || user.isAdmin === true;
+  const premium = billing.premiumActive;
+  const subscription = billing.subscriptionActive;
+  const trialActive = Date.parse(billing.trialEndsAt) > now;
+  const licenseType = admin ? "Admin" :
+    premium ? "Lifetime" :
+      subscription ? "Subscription" : "Trial";
+  const licenseStatus = admin || premium || subscription ? "active" :
+    trialActive ? "trial" : "expired";
+  const licenseEndDate = admin || premium ? null :
+    subscription ? billing.subscriptionRenewsAt : billing.trialEndsAt;
+  const maxDevices = boundedInt(existing.maxDevices, config.defaultMaxDevices, 1, 20);
+  const currentDeviceCount = boundedInt(existing.currentDeviceCount, 0, 0, maxDevices);
+  const data = {
+    userId: user.uid,
+    userEmail: stringValue(user.email),
+    licenseType,
+    licenseStatus,
+    licenseStartDate: Timestamp.fromDate(new Date(billing.trialStartedAt)),
+    licenseEndDate: licenseEndDate ? Timestamp.fromDate(new Date(licenseEndDate)) : null,
+    maxDevices,
+    currentDeviceCount,
+    lastLicenseCheck: Timestamp.now(),
+    serverValidationRequired: existing.serverValidationRequired === true,
+    managedBy: "billing",
+    updatedAt: Timestamp.now()
+  };
+  await ref.set(data, { merge: true });
+  return commercialLicenseFromData(user.uid, stringValue(user.email), data, config);
+}
+
+async function activateDevice(
+  userId: string,
+  deviceId: string,
+  deviceName: string,
+  appVersion: string
+): Promise<void> {
+  const licenseRef = db.doc(`licenses/${userId}`);
+  const deviceRef = db.doc(`deviceActivations/${userId}/devices/${deviceId}`);
+  await db.runTransaction(async (transaction) => {
+    const [licenseSnapshot, deviceSnapshot] = await Promise.all([
+      transaction.get(licenseRef),
+      transaction.get(deviceRef)
+    ]);
+    const license = licenseSnapshot.data() ?? {};
+    const status = stringValue(license.licenseStatus).toLowerCase();
+    if (status !== "active" && status !== "trial") throw new Error("license_not_active");
+
+    const maxDevices = boundedInt(license.maxDevices, 1, 1, 20);
+    const currentDeviceCount = boundedInt(license.currentDeviceCount, 0, 0, maxDevices);
+    if (!deviceSnapshot.exists && currentDeviceCount >= maxDevices)
+      throw new Error("device_limit_reached");
+
+    const now = Timestamp.now();
+    transaction.set(deviceRef, {
+      deviceId,
+      deviceName: deviceName || "Unbenanntes Gerät",
+      firstActivatedAt: deviceSnapshot.data()?.firstActivatedAt ?? now,
+      lastUsedAt: now,
+      appVersion
+    }, { merge: true });
+    if (!deviceSnapshot.exists) {
+      transaction.set(licenseRef, {
+        currentDeviceCount: currentDeviceCount + 1,
+        updatedAt: now
+      }, { merge: true });
+    }
+  });
+}
+
+async function saveTermsAcceptance(
+  user: any,
+  deviceId: string,
+  appVersion: string,
+  config: GlobalAppConfig
+): Promise<void> {
+  await db.doc(`termsAcceptances/${user.uid}`).set({
+    userId: user.uid,
+    userEmail: stringValue(user.email),
+    termsVersion: config.currentTermsVersion,
+    privacyVersion: config.currentPrivacyVersion,
+    acceptedAt: Timestamp.now(),
+    appVersion,
+    deviceId
+  });
+}
+
+function commercialLicenseFromData(
+  userId: string,
+  email: string,
+  source: Record<string, any>,
+  config: GlobalAppConfig
+): CommercialLicense {
+  return {
+    userId,
+    userEmail: stringValue(source.userEmail) || email,
+    licenseType: stringValue(source.licenseType) || "Free",
+    licenseStatus: stringValue(source.licenseStatus) || "inactive",
+    licenseStartDate: dateValue(source.licenseStartDate),
+    licenseEndDate: dateValue(source.licenseEndDate),
+    maxDevices: boundedInt(source.maxDevices, config.defaultMaxDevices, 1, 20),
+    currentDeviceCount: boundedInt(source.currentDeviceCount, 0, 0, 20),
+    lastLicenseCheck: dateValue(source.lastLicenseCheck) ?? new Date().toISOString(),
+    serverValidationRequired: source.serverValidationRequired === true,
+    managedBy: stringValue(source.managedBy) || "billing"
+  };
+}
+
+function deviceActivationResponse(source: Record<string, any> | undefined): Record<string, unknown> | null {
+  if (!source) return null;
+  return {
+    deviceId: stringValue(source.deviceId),
+    deviceName: stringValue(source.deviceName),
+    firstActivatedAt: dateValue(source.firstActivatedAt),
+    lastUsedAt: dateValue(source.lastUsedAt),
+    appVersion: stringValue(source.appVersion)
+  };
+}
+
+function termsAcceptanceResponse(source: Record<string, any> | undefined): Record<string, unknown> | null {
+  if (!source) return null;
+  return {
+    userId: stringValue(source.userId),
+    userEmail: stringValue(source.userEmail),
+    termsVersion: stringValue(source.termsVersion),
+    privacyVersion: stringValue(source.privacyVersion),
+    acceptedAt: dateValue(source.acceptedAt),
+    appVersion: stringValue(source.appVersion),
+    deviceId: stringValue(source.deviceId)
+  };
+}
+
+function evaluateCommercialAccess(
+  user: { isBlocked: boolean },
+  license: CommercialLicense,
+  deviceActivated: boolean,
+  terms: Record<string, unknown> | null,
+  config: GlobalAppConfig
+): Record<string, unknown> {
+  const status = license.licenseStatus.toLowerCase();
+  const expired = !!license.licenseEndDate && Date.parse(license.licenseEndDate) <= Date.now();
+  const requiresTermsAcceptance = !terms ||
+    terms.termsVersion !== config.currentTermsVersion ||
+    terms.privacyVersion !== config.currentPrivacyVersion;
+  let isValid = true;
+  let message = status === "trial" && license.licenseEndDate
+    ? `Testversion aktiv bis ${new Date(license.licenseEndDate).toLocaleDateString("de-AT")}.`
+    : "Lizenz aktiv.";
+
+  if (user.isBlocked || status === "blocked") {
+    isValid = false;
+    message = "Konto wurde gesperrt. Bitte Support kontaktieren.";
+  } else if (status === "expired" || expired) {
+    isValid = false;
+    message = "Lizenz abgelaufen.";
+  } else if (status !== "active" && status !== "trial") {
+    isValid = false;
+    message = "Keine gültige Lizenz gefunden.";
+  } else if (!deviceActivated) {
+    isValid = false;
+    message = license.currentDeviceCount >= license.maxDevices
+      ? "Maximale Geräteanzahl erreicht."
+      : "Dieses Gerät ist nicht für diese Lizenz aktiviert.";
+  }
+
+  return {
+    isValid,
+    status,
+    message,
+    validUntil: license.licenseEndDate,
+    requiresOnlineCheck: license.serverValidationRequired,
+    requiresTermsAcceptance,
+    deviceActivated,
+    canActivateDevice: !deviceActivated && license.currentDeviceCount < license.maxDevices
+  };
+}
+
+async function cloudEntitlement(user: any): Promise<{ allowed: boolean; message: string }> {
+  const config = await ensureGlobalAppConfig();
+  const billing = await ensureLicenseState(user.uid);
+  const userStatus = await ensureCommercialUser(user);
+  const license = await ensureCommercialLicense(user, billing, config);
+  const result = evaluateCommercialAccess(
+    userStatus,
+    license,
+    true,
+    {
+      termsVersion: config.currentTermsVersion,
+      privacyVersion: config.currentPrivacyVersion
+    },
+    config
+  );
+  return {
+    allowed: result.isValid === true,
+    message: stringValue(result.message) || "Keine gültige Lizenz gefunden."
+  };
+}
+
+function boundedInt(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
+}
+
+function safeHttpUrl(value: unknown): string {
+  const text = stringValue(value);
+  if (!text) return "";
+  try {
+    const url = new URL(text);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
+function dateValue(value: unknown): string | null {
+  if (value instanceof Timestamp) return value.toDate().toISOString();
+  if (value instanceof Date) return value.toISOString();
+  return validIsoString(value);
+}
 
 async function verifiedUser(authorization: string, res: any): Promise<any | null> {
   const idToken = readBearerToken(authorization);
@@ -996,7 +1456,13 @@ function normalizeLicenseState(source: Record<string, any>, createdAt: string): 
   };
 }
 
-async function findCatalogTest(catalogId: string): Promise<{ questionCount: number } | null> {
+async function findCatalogTest(catalogId: string): Promise<{
+  questionCount: number;
+  title: string;
+  category: string;
+  priceCents: number;
+  currency: string;
+} | null> {
   for (const collection of ["catalogTests", "thematicTests"]) {
     const snapshot = await db.collection(collection).doc(catalogId).get();
     if (!snapshot.exists) continue;
@@ -1010,7 +1476,25 @@ async function findCatalogTest(catalogId: string): Promise<{ questionCount: numb
         questionCount = 0;
       }
     }
-    if (questionCount > 0) return { questionCount: Math.min(1000, questionCount) };
+    if (questionCount > 0) {
+      const category = stringValue(data.category) || "Allgemein";
+      const priceCents = category.toLowerCase() === "medat"
+        ? boundedInt(data.priceCents, 4999, 1, 1_000_000)
+        : boundedInt(
+          data.priceCents,
+          questionCount * Math.max(0, billingCatalogQuestionPriceCents.value()) +
+            Math.max(0, billingCatalogPriceEndingCents.value()),
+          1,
+          1_000_000
+        );
+      return {
+        questionCount: Math.min(1000, questionCount),
+        title: stringValue(data.title) || "MediTest Katalogtest",
+        category,
+        priceCents,
+        currency: (stringValue(data.currency) || billingCurrency.value() || "EUR").toUpperCase()
+      };
+    }
   }
   return null;
 }

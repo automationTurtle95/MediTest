@@ -154,6 +154,22 @@ Aktualisiert eine vorhandene Frage. Optional können `imageDataUrl`, `imageAltTe
 
 ## Lizenz
 
+`GET /api/legal-license/status`
+
+Liefert zentrale Produkt- und Entwicklerdaten sowie den serverseitig geprüften Firebase-Nutzer, Lizenztyp, Lizenzstatus, Gerätebelegung, Zustimmungsstand und Offline-Konfiguration.
+
+`POST /api/legal-license/check`
+
+Prüft Lizenz, Sperrstatus, Laufzeit, Gerätebindung und aktuelle AGB-/Datenschutzversion erneut über `meditestLicenseAccess`.
+
+`POST /api/legal-license/device`
+
+Aktiviert das lokal identifizierte Gerät, sofern das serverseitige Gerätelimit noch nicht erreicht ist.
+
+`POST /api/legal-license/terms`
+
+Speichert die aktive Zustimmung mit `{ "acceptTerms": true, "acceptPrivacy": true }` unter `termsAcceptances/{uid}`.
+
 `GET /api/license/status`
 
 Liefert Testphase, Abo-Status und Preisangaben.
@@ -290,15 +306,15 @@ Prüft die konfigurierte GitHub-Release-Quelle oder `latest.json` und liefert di
 ```json
 {
   "configured": true,
-  "currentVersion": "4.1.7",
+  "currentVersion": "5.0.0",
   "currentPlatform": "windows-x64",
-  "latestVersion": "4.1.7",
+  "latestVersion": "5.0.0",
   "updateAvailable": false,
-  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v4.1.7",
+  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v5.0.0",
   "recommendedDownload": {
     "platform": "windows-x64",
-    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v4.1.7/MediTest-Setup-4.1.7-win-x64.msi",
-    "fileName": "MediTest-Setup-4.1.7-win-x64.msi",
+    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.0/MediTest-Setup-5.0.0-win-x64.msi",
+    "fileName": "MediTest-Setup-5.0.0-win-x64.msi",
     "sha256": "...",
     "sizeBytes": 42400000
   }

@@ -11,6 +11,7 @@ using MediTest.Dtos;
 using MediTest.Models;
 using MediTest.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.IdentityModel.Tokens;
 
@@ -46,6 +47,12 @@ builder.Services.Configure<FormOptions>(options =>
 
 builder.Services.AddScoped<ITextExtractionService, TextExtractionService>();
 builder.Services.AddScoped<FirestoreUserDataStore>();
+builder.Services.AddSingleton<ProductInfoService>();
+builder.Services.AddSingleton<DeviceIdentityService>();
+builder.Services.AddSingleton<LicenseCacheStore>();
+builder.Services.AddScoped<LicenseAccessService>();
+builder.Services.AddDataProtection().SetApplicationName("MediTest");
+builder.Services.AddMemoryCache();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient();
 builder.Services.AddHttpClient<IQuestionGenerationService, OpenAiQuestionService>(client =>
@@ -89,7 +96,7 @@ app.Use(async (context, next) =>
         logger.LogError(ex, "Unhandled request error");
         context.Response.StatusCode = StatusCodes.Status500InternalServerError;
         context.Response.ContentType = "application/json; charset=utf-8";
-        await context.Response.WriteAsJsonAsync(new { error = ex.Message });
+        await context.Response.WriteAsJsonAsync(new { error = "Ein unerwarteter Fehler ist aufgetreten. Bitte versuche es erneut." });
     }
 });
 if (firebaseAuthConfigured)
@@ -133,6 +140,40 @@ app.Use(async (context, next) =>
 
     await next();
 });
+app.Use(async (context, next) =>
+{
+    if (!RequiresLicenseGate(context))
+    {
+        await next();
+        return;
+    }
+
+    var access = await context.RequestServices.GetRequiredService<LicenseAccessService>()
+        .CheckAsync(context.RequestAborted);
+    if (access.Result.RequiresTermsAcceptance)
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            error = "Bitte akzeptiere zuerst die aktuellen Nutzungsbedingungen und die Datenschutzerklärung.",
+            termsAcceptanceRequired = true
+        });
+        return;
+    }
+    if (!access.Result.IsValid)
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            error = access.Result.Message,
+            licenseRequired = true,
+            licenseStatus = access.Result.Status
+        });
+        return;
+    }
+
+    await next();
+});
 app.UseDefaultFiles();
 app.UseStaticFiles(new StaticFileOptions
 {
@@ -159,7 +200,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     var url = app.Urls.FirstOrDefault(u => u.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase))
         ?? app.Urls.FirstOrDefault()
         ?? "http://127.0.0.1:55000";
-    OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=4090");
+    OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=5000");
 });
 
 static void OpenBrowser(string url)
@@ -194,6 +235,17 @@ static bool IsPublicRequest(HttpContext context)
 static bool IsApiRequest(HttpContext context)
 {
     return context.Request.Path.StartsWithSegments("/api");
+}
+
+static bool RequiresLicenseGate(HttpContext context)
+{
+    if (!IsApiRequest(context) || context.User.Identity?.IsAuthenticated != true) return false;
+    var path = context.Request.Path;
+    return !path.StartsWithSegments("/api/auth") &&
+           !path.StartsWithSegments("/api/legal-license") &&
+           !path.StartsWithSegments("/api/license") &&
+           !path.StartsWithSegments("/api/account") &&
+           !path.StartsWithSegments("/api/system");
 }
 
 static string FirebaseProjectId(IConfiguration cfg)
@@ -615,6 +667,27 @@ app.MapGet("/api/license/status", async (HttpContext context, IConfiguration cfg
     return Results.Ok(ToLicenseStatusDto(state, context, cfg));
 });
 
+app.MapGet("/api/legal-license/status", async (ProductInfoService productInfo, LicenseAccessService licenseAccess, CancellationToken ct) =>
+{
+    var access = await licenseAccess.CheckAsync(ct);
+    return Results.Ok(new LegalLicenseStatusDto(productInfo.GetLegalInfo(), access));
+});
+
+app.MapPost("/api/legal-license/check", async (LicenseAccessService licenseAccess, CancellationToken ct) =>
+{
+    return Results.Ok(await licenseAccess.CheckAsync(ct, force: true));
+});
+
+app.MapPost("/api/legal-license/device", async (LicenseAccessService licenseAccess, CancellationToken ct) =>
+{
+    return Results.Ok(await licenseAccess.ActivateDeviceAsync(ct));
+});
+
+app.MapPost("/api/legal-license/terms", async (AcceptTermsRequest req, LicenseAccessService licenseAccess, CancellationToken ct) =>
+{
+    return Results.Ok(await licenseAccess.AcceptTermsAsync(req, ct));
+});
+
 app.MapPost("/api/license/redeem-premium-code", async (RedeemPremiumCodeRequest req, HttpContext context, IConfiguration cfg, FirestoreUserDataStore store, IHttpClientFactory httpClientFactory, CancellationToken ct) =>
 {
     var normalizedCode = NormalizePremiumCode(req.Code);
@@ -787,13 +860,18 @@ app.MapGet("/api/catalog/tests", async (HttpContext context, IConfiguration cfg,
             if (!seenIds.Add(id)) continue;
             var questionCount = FirestoreInt(fields, "questionCount");
             if (questionCount <= 0) questionCount = DeserializeCatalogQuestions(FirestoreString(fields, "questionsJson")).Count;
-            var priceCents = BillingCatalogTestPriceCents(cfg, questionCount);
+            var category = CatalogCategory(FirestoreString(fields, "category"));
+            var storedPriceCents = FirestoreInt(fields, "priceCents");
+            var priceCents = storedPriceCents > 0
+                ? storedPriceCents
+                : BillingCatalogTestPriceCents(cfg, category, questionCount);
             var purchased = licenseState.PremiumActive || licenseState.PurchasedCatalogTestIds.Contains(id, StringComparer.OrdinalIgnoreCase);
 
             tests.Add(new CatalogTestDto(
                 id,
                 title,
                 FirestoreString(fields, "description"),
+                category,
                 FirestoreString(fields, "topic"),
                 FirestoreString(fields, "difficulty"),
                 questionCount,
@@ -809,7 +887,8 @@ app.MapGet("/api/catalog/tests", async (HttpContext context, IConfiguration cfg,
     if (tests.Count == 0 && firstError != null) return firstError;
 
     tests = tests
-        .OrderByDescending(t => t.PublishedAt ?? DateTime.MinValue)
+        .OrderBy(t => string.Equals(t.Category, "MedAT", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+        .ThenByDescending(t => t.PublishedAt ?? DateTime.MinValue)
         .ThenBy(t => t.Title)
         .ToList();
 
@@ -850,6 +929,7 @@ app.MapPost("/api/catalog/tests/{catalogId}/download", async (string catalogId, 
         return Results.BadRequest(new { error = "Firestore-Test enthält keine gültigen Felder." });
 
     var title = FirestoreString(fields, "title");
+    var category = CatalogCategory(FirestoreString(fields, "category"));
     var questionsJson = FirestoreString(fields, "questionsJson");
     var questions = DeserializeCatalogQuestions(questionsJson);
     if (questions.Count == 0) return Results.BadRequest(new { error = "Firestore-Test enthält keine gültigen Fragen." });
@@ -871,7 +951,7 @@ app.MapPost("/api/catalog/tests/{catalogId}/download", async (string catalogId, 
                 {
                     error = "Dieser Katalogtest muss zuerst gekauft werden.",
                     checkoutRequired = true,
-                    priceCents = BillingCatalogTestPriceCents(cfg, questions.Count),
+                    priceCents = BillingCatalogTestPriceCents(cfg, category, questions.Count),
                     currency = BillingCurrency(cfg)
                 },
                 statusCode: StatusCodes.Status402PaymentRequired);
@@ -960,6 +1040,7 @@ app.MapPost("/api/catalog/tests/publish", async (CatalogPublishRequest req, Http
     var title = TrimTo(req.Title, 200);
     if (string.IsNullOrWhiteSpace(title)) title = doc.FileName;
     var description = TrimTo(req.Description, 600);
+    var category = CatalogCategory(req.Category);
     var topic = TopicLabel(req.Topic);
     var difficulty = DifficultyLabel(req.Difficulty);
     var now = DateTime.UtcNow;
@@ -977,11 +1058,13 @@ app.MapPost("/api/catalog/tests/publish", async (CatalogPublishRequest req, Http
         {
             ["title"] = FirestoreValue(title),
             ["description"] = FirestoreValue(description),
+            ["category"] = FirestoreValue(category),
             ["topic"] = FirestoreValue(topic),
             ["difficulty"] = FirestoreValue(difficulty),
             ["questionCount"] = FirestoreIntValue(questions.Count),
+            ["priceCents"] = FirestoreIntValue(BillingCatalogTestPriceCents(cfg, category, questions.Count)),
             ["schemaVersion"] = FirestoreIntValue(1),
-            ["appVersion"] = FirestoreValue("4.1.7"),
+            ["appVersion"] = FirestoreValue(AppVersion()),
             ["questionsJson"] = FirestoreValue(questionsJson),
             ["createdByUid"] = FirestoreValue(user.UserId),
             ["createdByEmail"] = FirestoreValue(user.Email),
@@ -1559,6 +1642,12 @@ static string TopicLabel(string? topic)
     return string.IsNullOrWhiteSpace(topic) ? "Allgemein" : topic;
 }
 
+static string CatalogCategory(string? category)
+{
+    category = (category ?? string.Empty).Trim();
+    return category.Equals("MedAT", StringComparison.OrdinalIgnoreCase) ? "MedAT" : "Allgemein";
+}
+
 static string DifficultyLabel(string? difficulty)
 {
     difficulty = (difficulty ?? "mittel").Trim().ToLowerInvariant();
@@ -1597,10 +1686,13 @@ static int BillingTrialDays(IConfiguration cfg) => Math.Clamp(cfg.GetValue<int?>
 static int BillingMonthlyPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:MonthlyPriceCents") ?? 599);
 static int BillingCatalogQuestionPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:CatalogQuestionPriceCents") ?? 10);
 static int BillingCatalogPriceEndingCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:CatalogPriceEndingCents") ?? 9);
-static int BillingCatalogExampleQuestionCount(IConfiguration cfg) => Math.Clamp(cfg.GetValue<int?>("Billing:CatalogExampleQuestionCount") ?? 25, 1, 1000);
-static int BillingCatalogExamplePriceCents(IConfiguration cfg) => BillingCatalogTestPriceCents(cfg, BillingCatalogExampleQuestionCount(cfg));
-static int BillingCatalogTestPriceCents(IConfiguration cfg, int questionCount)
+static int BillingCatalogExampleQuestionCount(IConfiguration cfg) => Math.Clamp(cfg.GetValue<int?>("Billing:CatalogPriceExampleQuestionCount") ?? 25, 1, 1000);
+static int BillingCatalogExamplePriceCents(IConfiguration cfg) => BillingCatalogTestPriceCents(cfg, "Allgemein", BillingCatalogExampleQuestionCount(cfg));
+static int BillingMedAtCatalogPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:MedAtCatalogPriceCents") ?? 4999);
+static int BillingCatalogTestPriceCents(IConfiguration cfg, string category, int questionCount)
 {
+    if (string.Equals(category, "MedAT", StringComparison.OrdinalIgnoreCase))
+        return BillingMedAtCatalogPriceCents(cfg);
     if (questionCount <= 0) return 0;
     var cents = (long)questionCount * BillingCatalogQuestionPriceCents(cfg) + BillingCatalogPriceEndingCents(cfg);
     return cents > int.MaxValue ? int.MaxValue : (int)cents;

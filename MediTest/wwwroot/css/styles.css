@@ -405,6 +405,18 @@ button:disabled,.button:disabled{cursor:not-allowed;opacity:.55;transform:none}
   background:var(--field-alt);
 }
 .catalog-purchase-summary span{color:var(--muted);font-size:13px;font-weight:700}
+.catalog-folder{margin:0 0 28px}
+.catalog-folder:last-child{margin-bottom:0}
+.catalog-folder-head{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;margin:0 0 16px;padding:18px;border:1px solid var(--border);border-radius:14px;background:var(--field-alt)}
+.catalog-folder-head h2,.catalog-folder-head p{margin:0}
+.catalog-folder-head .eyebrow{margin-bottom:4px}
+.legal-details{display:grid;gap:0;margin:14px 0}
+.legal-details>div{display:flex;justify-content:space-between;gap:18px;padding:10px 0;border-bottom:1px solid var(--border)}
+.legal-details>div:last-child{border-bottom:0}
+.legal-details dt{color:var(--muted);font-weight:700}
+.legal-details dd{margin:0;text-align:right;font-weight:800;overflow-wrap:anywhere}
+.terms-modal{width:min(660px,100%)}
+.terms-modal .checkline{padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:var(--field-alt)}
 .account-delete-card{border-color:color-mix(in srgb,var(--danger) 50%,var(--border))}
 .ai-generation-modal{width:min(720px,100%)}
 .ai-generation-document,.ai-generation-metrics{
@@ -589,6 +601,9 @@ button:disabled,.button:disabled{cursor:not-allowed;opacity:.55;transform:none}
   .settings-savebar{align-items:stretch;flex-direction:column}
   .settings-savebar .actions{width:100%}
   .topic-jump{grid-template-columns:1fr}
+  .catalog-folder-head{flex-direction:column}
+  .legal-details>div{flex-direction:column;gap:4px}
+  .legal-details dd{text-align:left}
   .topic-row{display:block}
   .topic-row-actions{justify-content:flex-start;margin-top:10px}
   .progress-bars{overflow-x:auto}

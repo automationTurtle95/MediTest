@@ -50,6 +50,31 @@ service cloud.firestore {
       }
     }
 
+    match /licenses/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    match /deviceActivations/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if false;
+
+      match /devices/{deviceId} {
+        allow read: if signedIn() && request.auth.uid == userId;
+        allow write: if false;
+      }
+    }
+
+    match /termsAcceptances/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    match /appConfig/{documentId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
     match /customers/{userId} {
       function ownsStripeData() {
         return signedIn() && request.auth.uid == userId;
