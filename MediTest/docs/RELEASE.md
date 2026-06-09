@@ -5,7 +5,7 @@
 Ein Release besteht aus frisch erzeugten, reproduzierbaren Artefakten unter:
 
 ```text
-dist/MediTest-4.1.5/
+dist/MediTest-4.1.6/
 ```
 
 Bestehende stabile Releases bleiben erhalten. Insbesondere darf `dist/MediTest-2.0.0/` nicht gelöscht werden, solange V2 als lauffähiges Produkt archiviert bleiben soll.
@@ -22,7 +22,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 Das Skript führt aus:
 
 1. die Version aus `MediTest.csproj` lesen, sofern `-Version` nicht explizit gesetzt wurde
-2. nur den Zielordner `dist/MediTest-4.1.5/` entfernen
+2. nur den Zielordner `dist/MediTest-4.1.6/` entfernen
 3. `dotnet restore`
 4. `dotnet build --configuration Release`
 5. self-contained Publish für `win-x64`, `osx-x64` und `osx-arm64`
@@ -45,10 +45,10 @@ Sind die Apple-Secrets konfiguriert, baut der GitHub-Workflow zusätzlich signie
 ## Erwartete Artefakte
 
 ```text
-dist/MediTest-4.1.5/windows/MediTest-Setup-4.1.5-win-x64.msi
-dist/MediTest-4.1.5/windows/MediTest-4.1.5-win-x64-portable.zip
-dist/MediTest-4.1.5/macos/MediTest-4.1.5-macos-x64-setup.zip
-dist/MediTest-4.1.5/macos/MediTest-4.1.5-macos-arm64-setup.zip
+dist/MediTest-4.1.6/windows/MediTest-Setup-4.1.6-win-x64.msi
+dist/MediTest-4.1.6/windows/MediTest-4.1.6-win-x64-portable.zip
+dist/MediTest-4.1.6/macos/MediTest-4.1.6-macos-x64-setup.zip
+dist/MediTest-4.1.6/macos/MediTest-4.1.6-macos-arm64-setup.zip
 latest.json
 SHA256SUMS.txt
 ```
@@ -59,18 +59,18 @@ Wenn alle Apple-Secrets vorhanden sind, ersetzt der Workflow die beiden macOS-ZI
 
 `latest.json` und die abschließende `SHA256SUMS.txt` werden im GitHub-Release-Job aus den erfolgreich gebauten Windows- und macOS-Artefakten erzeugt.
 
-Danach in GitHub einen Release mit dem Tag `v4.1.5` erstellen. Der Workflow veröffentlicht:
+Danach in GitHub einen Release mit dem Tag `v4.1.6` erstellen. Der Workflow veröffentlicht:
 
 ```text
-MediTest-Setup-4.1.5-win-x64.msi
-MediTest-4.1.5-win-x64-portable.zip
-MediTest-4.1.5-macos-arm64-setup.zip
-MediTest-4.1.5-macos-x64-setup.zip
+MediTest-Setup-4.1.6-win-x64.msi
+MediTest-4.1.6-win-x64-portable.zip
+MediTest-4.1.6-macos-arm64-setup.zip
+MediTest-4.1.6-macos-x64-setup.zip
 latest.json
 SHA256SUMS.txt
 ```
 
-Mit eingerichteten Apple-Secrets heißen die beiden Mac-Dateien stattdessen `MediTest-Setup-4.1.5-macos-<arch>.pkg`.
+Mit eingerichteten Apple-Secrets heißen die beiden Mac-Dateien stattdessen `MediTest-Setup-4.1.6-macos-<arch>.pkg`.
 
 Die installierte App kann Updates direkt über die GitHub-Release-API prüfen, wenn in `appsettings.json` konfiguriert ist:
 
@@ -89,9 +89,9 @@ Alternativ kann `ManifestUrl` auf eine veröffentlichte `latest.json` zeigen. We
 Wenn das Repository auf GitHub liegt, kann `.github/workflows/release.yml` den Release automatisch bauen. Dafür die Version in `MediTest.csproj` erhöhen, committen und einen passenden Tag pushen:
 
 ```powershell
-git tag v4.1.5
+git tag v4.1.6
 git push origin main
-git push origin v4.1.5
+git push origin v4.1.6
 ```
 
 Der Workflow prüft, dass der Git-Tag zur Projektversion passt. Fehlen die Apple-Secrets, bleibt der macOS-Signierungsjob erfolgreich übersprungen und die Fallback-ZIPs werden veröffentlicht. Die benötigten Secrets für spätere signierte PKGs sind in [MACOS_SIGNING.md](MACOS_SIGNING.md) beschrieben.
@@ -113,14 +113,14 @@ Der Workflow prüft, dass der Git-Tag zur Projektversion passt. Fehlen die Apple
 ## Nach dem Build prüfen
 
 ```powershell
-Get-ChildItem .\dist\MediTest-4.1.5 -Recurse -File |
+Get-ChildItem .\dist\MediTest-4.1.6 -Recurse -File |
   Where-Object { $_.Name -match '\.pdb$|OPENAI_API_KEY|meditest\.db|start-name\.json' }
 ```
 
 Die Ausgabe muss leer sein.
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\dist\MediTest-4.1.5\windows\MediTest-Setup-4.1.5-win-x64.msi
+Get-FileHash -Algorithm SHA256 .\dist\MediTest-4.1.6\windows\MediTest-Setup-4.1.6-win-x64.msi
 ```
 
 Der Hash muss mit dem Eintrag in `SHA256SUMS.txt` übereinstimmen.

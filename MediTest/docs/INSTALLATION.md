@@ -5,7 +5,7 @@
 Empfohlen ist das MSI-Paket aus dem Release-Ordner:
 
 ```text
-dist/MediTest-4.1.5/windows/MediTest-Setup-4.1.5-win-x64.msi
+dist/MediTest-4.1.6/windows/MediTest-Setup-4.1.6-win-x64.msi
 ```
 
 Das MSI installiert MediTest benutzerbezogen nach:
@@ -23,8 +23,8 @@ Updates funktionieren über dasselbe MSI: Eine neuere `MediTest-Setup-<Version>-
 Solange die Apple-Signing-Secrets noch nicht eingerichtet sind, werden zwei unsignierte Setup-ZIPs veröffentlicht:
 
 ```text
-MediTest-4.1.5-macos-x64-setup.zip
-MediTest-4.1.5-macos-arm64-setup.zip
+MediTest-4.1.6-macos-x64-setup.zip
+MediTest-4.1.6-macos-arm64-setup.zip
 ```
 
 `macos-x64` ist für Intel-Macs, `macos-arm64` für Apple-Silicon-Macs.
@@ -40,7 +40,7 @@ Die App öffnet automatisch den Browser unter `http://127.0.0.1:55000`.
 
 Sobald die Apple-Secrets eingerichtet sind, veröffentlicht derselbe Workflow stattdessen native, signierte und notarisierte PKGs. Diese lassen sich ohne den vorläufigen ZIP-Installationsweg über den normalen macOS-Installer installieren.
 
-Version 4.1.5 legt keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden von V4 ignoriert.
+Version 4.1.6 legt keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden von V4 ignoriert.
 
 Die Einrichtung der benötigten Apple-Zertifikate und GitHub-Secrets steht in [MACOS_SIGNING.md](MACOS_SIGNING.md).
 
@@ -62,7 +62,7 @@ Windows-Updates laufen über das neue MSI. macOS-Updates laufen vorerst über da
 
 ## Erster Start und Anmeldung
 
-Version 4.1.5 startet mit einer Anmeldeseite. Die Anmeldung ist über E-Mail/Passwort, Google oder Apple möglich. Nach einer Kontoerstellung mit E-Mail/Passwort sendet Firebase eine Bestätigungs-E-Mail; erst nach Bestätigung der Adresse ist diese Anmeldemethode nutzbar. Passwort-Reset und Passwortänderung gelten nur für E-Mail/Passwort-Konten. Die Sitzung bleibt nur in der aktuellen Browser-Sitzung gespeichert.
+Version 4.1.6 startet mit einer Anmeldeseite. Die Anmeldung ist über E-Mail/Passwort, Google oder Apple möglich. Nach einer Kontoerstellung mit E-Mail/Passwort sendet Firebase eine Bestätigungs-E-Mail; erst nach Bestätigung der Adresse ist diese Anmeldemethode nutzbar. Passwort-Reset und Passwortänderung gelten nur für E-Mail/Passwort-Konten. Die Sitzung bleibt nur in der aktuellen Browser-Sitzung gespeichert.
 
 Vor dem ersten produktiven Test müssen in Firebase unter `Authentication -> Sign-in method` die gewünschten Anbieter aktiviert sein. Die App erwartet folgende Auth-Konfiguration:
 
@@ -164,3 +164,13 @@ Die Standardkonfiguration ist in `appsettings.json` unter `Billing` hinterlegt:
 ```
 
 Die Testphase startet bei der ersten erfolgreichen Anmeldung des bestätigten Firebase-Nutzers. Premium-Codes werden als SHA-256-Hashes unter `Billing:PremiumCodeHashes` hinterlegt. Gratis-Katalog-Codes werden atomar im persönlichen Lizenzstatus gespeichert. Jedes Benutzerkonto kann die Gratis-Freischaltung genau einmal aktivieren; derselbe Code kann von unterschiedlichen Konten jeweils einmal verwendet werden. Solange keine Checkout-URLs hinterlegt sind, zeigt MediTest Preise und Kaufübersicht, führt aber keine echten Zahlungen aus.
+
+Für produktive Zahlungen dürfen `SubscriptionCheckoutUrl` und `CatalogCheckoutUrl` nicht nur auf allgemeine statische Zahlungslinks zeigen. Empfohlen ist folgende serverseitige Struktur:
+
+1. Eine geschützte Firebase Function erstellt für den angemeldeten Nutzer eine Checkout-Sitzung und hinterlegt Firebase-UID, Kaufart und gegebenenfalls Katalog-ID als serverseitige Metadaten.
+2. Der Zahlungsanbieter sendet signierte Webhooks für erfolgreiche, fehlgeschlagene, erneuerte oder gekündigte Zahlungen.
+3. Nur die Webhook-Function aktualisiert `users/{uid}/billing/license`; die Verarbeitung muss pro Checkout-/Event-ID idempotent sein.
+4. Die Firestore-Regeln erlauben Nutzern das Lesen, aber keine direkten Schreibzugriffe auf `users/{uid}/billing/license`.
+5. Für Abonnements wird zusätzlich ein Kundenportal für Zahlungsmittel, Rechnungen und Kündigung angeboten.
+
+Die aktuellen Firestore-Regeln erlauben noch Schreibzugriff auf den gesamten persönlichen Nutzerpfad. Diese Regel darf erst zusammen mit der Verlagerung aller Lizenzänderungen in vertrauenswürdige Cloud Functions eingeschränkt werden, da andernfalls Testphase, Codes und Gratis-Freischaltung nicht mehr korrekt gespeichert würden.

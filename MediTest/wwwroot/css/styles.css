@@ -299,22 +299,17 @@ button:disabled,.button:disabled{cursor:not-allowed;opacity:.55;transform:none}
 .auth-provider-button{
   width:100%;
   justify-content:center;
+  gap:12px;
   min-height:46px;
-  background:var(--field);
-  color:var(--text);
+  border-radius:8px;
+  font-size:15px;
+  font-weight:700;
 }
+.auth-provider-google{background:#fff;border-color:#dadce0;color:#3c4043}
+.auth-provider-google:hover{background:#f8faff;border-color:#c7cbd1;color:#202124}
 .auth-provider-apple{background:#111827;border-color:#111827;color:#fff}
 .auth-provider-apple:hover{background:#000;border-color:#000;color:#fff}
-.auth-provider-mark{
-  width:24px;
-  height:24px;
-  display:inline-grid;
-  place-items:center;
-  border-radius:50%;
-  background:var(--field-alt);
-  color:var(--text);
-  font-weight:900;
-}
+.auth-provider-icon{width:21px;height:21px;display:block;flex:0 0 21px}
 .auth-divider{display:flex;align-items:center;gap:12px;margin:18px 0 0;color:var(--muted);font-size:13px;font-weight:800}
 .auth-divider::before,.auth-divider::after{content:"";height:1px;flex:1;background:var(--border)}
 .auth-divider span{white-space:nowrap}
