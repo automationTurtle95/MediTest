@@ -5,7 +5,7 @@
 Empfohlen ist das MSI-Paket aus dem Release-Ordner:
 
 ```text
-dist/MediTest-5.0.2/windows/MediTest-Setup-5.0.2-win-x64.msi
+dist/MediTest-5.0.3/windows/MediTest-Setup-5.0.3-win-x64.msi
 ```
 
 Das MSI installiert MediTest benutzerbezogen nach:
@@ -23,8 +23,8 @@ Updates funktionieren über dasselbe MSI: Eine neuere `MediTest-Setup-<Version>-
 Solange die Apple-Signing-Secrets noch nicht eingerichtet sind, werden zwei unsignierte Setup-ZIPs veröffentlicht:
 
 ```text
-MediTest-5.0.2-macos-x64-setup.zip
-MediTest-5.0.2-macos-arm64-setup.zip
+MediTest-5.0.3-macos-x64-setup.zip
+MediTest-5.0.3-macos-arm64-setup.zip
 ```
 
 `macos-x64` ist für Intel-Macs, `macos-arm64` für Apple-Silicon-Macs.
@@ -40,7 +40,7 @@ Die App öffnet automatisch den Browser unter `http://127.0.0.1:55000`.
 
 Sobald die Apple-Secrets eingerichtet sind, veröffentlicht derselbe Workflow stattdessen native, signierte und notarisierte PKGs. Diese lassen sich ohne den vorläufigen ZIP-Installationsweg über den normalen macOS-Installer installieren.
 
-Version 5.0.2 legt keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden von V4 ignoriert.
+Version 5.0.3 legt keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden von V4 ignoriert.
 
 Die Einrichtung der benötigten Apple-Zertifikate und GitHub-Secrets steht in [MACOS_SIGNING.md](MACOS_SIGNING.md).
 
@@ -62,7 +62,7 @@ Windows-Updates laufen über das neue MSI. macOS-Updates laufen vorerst über da
 
 ## Erster Start und Anmeldung
 
-Version 5.0.2 startet mit einer Anmeldeseite. Die Anmeldung ist über E-Mail/Passwort, Google oder Apple möglich. Nach einer Kontoerstellung mit E-Mail/Passwort sendet Firebase eine Bestätigungs-E-Mail; erst nach Bestätigung der Adresse ist diese Anmeldemethode nutzbar. Passwort-Reset und Passwortänderung gelten nur für E-Mail/Passwort-Konten. Die Sitzung bleibt nur in der aktuellen Browser-Sitzung gespeichert.
+Version 5.0.3 startet mit einer Anmeldeseite. Die Anmeldung ist über E-Mail/Passwort, Google oder Apple möglich. Nach einer Kontoerstellung mit E-Mail/Passwort sendet Firebase eine Bestätigungs-E-Mail; erst nach Bestätigung der Adresse ist diese Anmeldemethode nutzbar. Passwort-Reset und Passwortänderung gelten nur für E-Mail/Passwort-Konten. Die Sitzung bleibt nur in der aktuellen Browser-Sitzung gespeichert.
 
 Unter Windows öffnet MediTest ein eigenes App-Fenster mit separatem Browserprofil. Pro Installation läuft nur eine Instanz. Der Befehl `Programm schließen` beendet App-Fenster, lokalen Server und weitere Prozesse derselben Installation.
 
@@ -152,7 +152,8 @@ Die Standardkonfiguration ist in `appsettings.json` unter `Billing` hinterlegt:
   "Billing": {
     "Currency": "EUR",
     "TrialDays": 7,
-    "MonthlyPriceCents": 999,
+    "ProductPriceCents": 999,
+    "MonthlyPriceCents": 599,
     "CatalogQuestionPriceCents": 10,
     "CatalogPriceEndingCents": 9,
     "CatalogPriceExampleQuestionCount": 25,
@@ -162,7 +163,7 @@ Die Standardkonfiguration ist in `appsettings.json` unter `Billing` hinterlegt:
 }
 ```
 
-Die Testphase wird aus dem Erstellungszeitpunkt des bestätigten Firebase-Kontos berechnet. Premium- und Gratis-Code-Hashes liegen in `firebase/functions/.env.<project-id>` und werden nicht mit MediTest ausgeliefert. Jedes Benutzerkonto kann die Gratis-Freischaltung genau einmal aktivieren.
+Die Testphase beginnt erst mit dem serverseitig bestätigten Basiskauf. Nach sieben Tagen wechselt das Konto ohne aktives Abo in den eingeschränkten Modus: vorhandene Tests, Ergebnisse und gekaufte Katalogtests bleiben nutzbar; neue Inhalte, Bearbeitung und KI-Funktionen sind gesperrt. Premium- und Gratis-Code-Hashes liegen in `firebase/functions/.env.<project-id>` und werden nicht mit MediTest ausgeliefert. Jedes Benutzerkonto kann die Gratis-Katalogfreischaltung genau einmal aktivieren.
 
 Die Stripe-Integration verwendet folgende serverseitige Struktur:
 
@@ -172,4 +173,4 @@ Die Stripe-Integration verwendet folgende serverseitige Struktur:
 4. Firestore-Regeln blockieren direkte Nutzer-Schreibzugriffe auf Lizenz- und Stripe-Daten.
 5. Das Stripe-Kundenportal verwaltet Zahlungsmittel und Abos.
 
-Vor dem Checkout müssen in `firebase/functions/.env.<project-id>` der Monatspreis `BILLING_MONTHLY_PRICE_CENTS`, die Katalogparameter `STRIPE_CATALOG_UNIT_PRICE_ID` und `STRIPE_CATALOG_ENDING_PRICE_ID` sowie `STRIPE_PORTAL_CONFIGURATION_ID` gesetzt und die Functions erneut bereitgestellt werden. API-Key und Webhook-Signing-Secret liegen ausschließlich als `MEDITEST_STRIPE_API_KEY` und `MEDITEST_STRIPE_WEBHOOK_SECRET` im Secret Manager.
+Vor dem Checkout müssen in `firebase/functions/.env.<project-id>` der einmalige Kaufpreis `BILLING_PRODUCT_PRICE_CENTS`, der Monatspreis `BILLING_MONTHLY_PRICE_CENTS`, die Katalogparameter `STRIPE_CATALOG_UNIT_PRICE_ID` und `STRIPE_CATALOG_ENDING_PRICE_ID` sowie `STRIPE_PORTAL_CONFIGURATION_ID` gesetzt und die Functions erneut bereitgestellt werden. API-Key und Webhook-Signing-Secret liegen ausschließlich als `MEDITEST_STRIPE_API_KEY` und `MEDITEST_STRIPE_WEBHOOK_SECRET` im Secret Manager.

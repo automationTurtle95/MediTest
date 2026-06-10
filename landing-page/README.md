@@ -26,12 +26,15 @@ Zugriffsregeln und Hosting-Konfiguration bleiben getrennt unter `../firebase`.
 Zentrale Werte stehen am Anfang von `script.js` in `SITE_CONFIG`:
 
 - `brandName`: sichtbarer Produktname
-- `monthlyPrice`: sichtbarer Monatspreis
+- `purchasePrice`: einmaliger Kaufpreis für Installer und 7-tägige Testphase
+- `monthlyPrice`: optionaler Monatspreis für den Vollzugang nach der Testphase
 - `purchaseUrl`: getrennte Kaufseite
 
 `purchase.html` meldet Nutzer über den bestehenden Kontodienst an und startet
-den serverseitigen Checkout. Der Windows-Download wird erst von
-`meditestDownloadAccess` ausgegeben, wenn die serverseitige Lizenz aktiv ist.
+den serverseitigen Einmalkauf-Checkout. Der Windows-Download wird erst von
+`meditestDownloadAccess` ausgegeben, wenn der Basiskauf serverseitig bestätigt
+ist. Das spätere Monatsabo wird ausschließlich innerhalb der Anwendung separat
+abgeschlossen. Katalogtests bleiben eigenständige Kaufartikel.
 Die Landingpage entscheidet niemals selbst über einen Lizenzstatus.
 
 ## Lokal testen

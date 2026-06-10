@@ -474,6 +474,10 @@ button:disabled,.button:disabled{cursor:not-allowed;opacity:.55;transform:none}
 .catalog-file-actions{justify-content:flex-end;margin:0}
 .catalog-file-actions button{white-space:nowrap}
 .catalog-empty{padding:20px;margin:0;color:var(--muted);background:var(--card)}
+.restricted-mode-banner{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:18px;border-color:#d99b2b;background:#fff7df;color:#65430b}
+.restricted-mode-banner div{display:flex;gap:4px;flex-direction:column}
+.restricted-mode-banner strong{font-size:16px}
+.restricted-mode-banner span{line-height:1.5}
 .legal-details{display:grid;gap:0;margin:14px 0}
 .legal-details>div{display:flex;justify-content:space-between;gap:18px;padding:10px 0;border-bottom:1px solid var(--border)}
 .legal-details>div:last-child{border-bottom:0}
@@ -675,6 +679,7 @@ button:disabled,.button:disabled{cursor:not-allowed;opacity:.55;transform:none}
   .catalog-file-price{align-items:flex-start}
   .catalog-file-actions{width:100%;justify-content:flex-start}
   .catalog-file-actions button{width:auto}
+  .restricted-mode-banner{align-items:flex-start;flex-direction:column}
   .legal-details>div{flex-direction:column;gap:4px}
   .legal-details dd{text-align:left}
   .topic-row{display:block}

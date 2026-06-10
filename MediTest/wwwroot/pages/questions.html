@@ -21,6 +21,7 @@
 <script>
 let currentData=null;
 let newQuestionIds=new Set();
+let questionsRestrictedMode=false;
 
 function optionLetter(i){return String.fromCharCode(65+i);}
 function parseNewQuestionIds(){return new Set((qs('new')||'').split(',').map(x=>Number(x)).filter(Number.isInteger));}
@@ -36,6 +37,8 @@ async function loadQuestions(){
   const box=document.getElementById('questions');
   newQuestionIds=parseNewQuestionIds();
   if(!id&&!topic){status(msg,'Dokument-ID oder Thema fehlt.','status error');return;}
+  const license=await api('/api/license/status').catch(()=>null);
+  questionsRestrictedMode=license?.restrictedMode===true;
 
   if(topic&&!id){
     currentData=await api(`/api/questions/by-topic?topic=${encodeURIComponent(topic)}`);
@@ -92,7 +95,7 @@ function viewHtml(q,i){
     ${questionImageHtml(q)}
     <ol class="answers">${options.map(o=>`<li class="${o.isCorrect?'correct-answer':''}"><b>${optionLetter(o.optionIndex)}.</b> ${esc(o.text)}${o.isCorrect?' <b>✓ richtig</b>':''}</li>`).join('')}</ol>
     <p><b>Erklärung:</b> ${esc(q.explanation)}</p>
-    <div class="actions"><button type="button" onclick="editQuestion(${q.questionId})">Bearbeiten</button></div>
+    ${questionsRestrictedMode?'':`<div class="actions"><button type="button" onclick="editQuestion(${q.questionId})">Bearbeiten</button></div>`}
   </article>`;
 }
 

@@ -494,10 +494,10 @@ const HELP_BY_HEADING = new Map([
   ['Firestore-Katalog', 'Im Katalog findest du veröffentlichte, themenspezifische Tests, die du in dein MediTest-Konto herunterladen kannst.'],
   ['Verfügbare Tests', 'Wähle einen Katalogtest aus. Je nach Freischaltung kannst du ihn direkt herunterladen, gratis aktivieren oder kaufen.'],
   ['Admin', 'Administratoren können einen vorhandenen Fragenpool mit Titel, Beschreibung, Thema und Schwierigkeit im Katalog veröffentlichen.'],
-  ['Lizenz und Premium', 'Hier siehst du den Status deiner Testphase oder Premium-Lizenz und verwaltest Abo-, Katalog- und Freischaltcodes.'],
+  ['Lizenz und Premium', 'Hier siehst du Basiskauf, 7-tägige Testphase, Monatsabo und den eingeschränkten Modus. Katalogtests werden separat gekauft.'],
   ['Katalogtests', 'Katalogtests können einzeln freigeschaltet und anschließend in die eigenen Fragenpools heruntergeladen werden.'],
   ['Katalog-Code', 'Ein gültiger Gratis-Code schaltet genau einen noch gesperrten Katalogtest deiner Wahl frei.'],
-  ['Code einlösen', 'Gib hier einen Premium-Code ein, um MediTest und alle Katalogtests für dieses Konto freizuschalten.'],
+  ['Code einlösen', 'Ein administrativer Premium-Code schaltet MediTest-Vollfunktionen frei. Katalogtests bleiben separate Kaufartikel.'],
   ['Auswertung', 'Die Auswertung zeigt Ergebnis, Bestehensstatus und alle Antworten. Falsche Antworten werden mit der richtigen Lösung und Erklärung ergänzt.'],
   ['Fehlerschwerpunkte', 'Diese Übersicht gruppiert deine Fehler nach Thema, damit du erkennst, welche Inhalte du zuerst wiederholen solltest.']
 ]);
@@ -625,7 +625,7 @@ const TOOLTIP_BY_TEXT = new Map([
   ['Kaufen', 'Kauf oder Checkout für diesen Katalogtest vorbereiten.'],
   ['Konto endgültig löschen', 'Konto und sämtliche zugehörigen Nutzerdaten dauerhaft entfernen.'],
   ['Bestätigungs-E-Mail erneut senden', 'Neue E-Mail mit einem Link zur Bestätigung der Konto-Adresse senden.'],
-  ['Abo starten', 'Monatsabo nach der Testphase vorbereiten.'],
+  ['Abo starten', 'Vollzugang für 5,99 € pro Monat nach der Testphase abschließen.'],
   ['Code einlösen', 'Premium-Code prüfen und dieses Konto freischalten.'],
   ['Aktualisieren', 'Statistik mit der aktuellen Auswahl neu laden.'],
   ['Zum Thema springen', 'Ausgewähltes Thema öffnen und alle enthaltenen Fragen anzeigen.'],
@@ -805,6 +805,23 @@ async function logoutApp() {
 
 let pendingLegalLicenseState = null;
 
+function showRestrictedModeBanner() {
+  window.mediTestRestrictedMode = true;
+  if (document.getElementById('restrictedModeBanner')) return;
+  const main = document.querySelector('main');
+  if (!main) return;
+  const banner = document.createElement('section');
+  banner.id = 'restrictedModeBanner';
+  banner.className = 'status restricted-mode-banner';
+  banner.innerHTML = `
+    <div>
+      <strong>Eingeschränkter Modus</strong>
+      <span>Die 7-tägige Testphase ist beendet. Vorhandene Tests, Auswertungen und gekaufte Katalogtests bleiben nutzbar.</span>
+    </div>
+    <a class="button primary" href="/pages/license.html">Vollzugang für 5,99 € / Monat</a>`;
+  main.prepend(banner);
+}
+
 function showTermsAcceptanceModal(state) {
   pendingLegalLicenseState = state;
   if (document.getElementById('termsAcceptanceModal')) return;
@@ -884,6 +901,7 @@ async function ensureLegalLicenseCompliance() {
   const state = await api('/api/legal-license/status');
   pendingLegalLicenseState = state;
   if (state.access?.result?.requiresTermsAcceptance) showTermsAcceptanceModal(state);
+  else if (state.access?.result?.status === 'restricted') showRestrictedModeBanner();
   else if (!state.access?.result?.isValid) showLicenseAccessModal(state);
   return state;
 }

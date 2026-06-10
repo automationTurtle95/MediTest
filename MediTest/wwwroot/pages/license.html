@@ -106,8 +106,11 @@ function renderLegalLicense(data){
 
 function renderBilling(s){
   const trialEnd=dateOr(s.trialEndsAt,'-');
+  const purchaseDate=dateOr(s.baseProductPurchasedAt,'-');
   const isPremium=s.premiumActive||s.status==='premium';
-  const hasSubscription=s.status==='active'&&!isPremium;
+  const hasSubscription=!!s.subscriptionActive&&!isPremium;
+  const isRestricted=!!s.restrictedMode||s.status==='restricted';
+  const productPurchased=!!s.baseProductPurchased;
   const freeCreditAvailable=!!s.freeCatalogCreditAvailable;
   const freeCreditRedeemed=!!s.freeCatalogCreditRedeemed;
   const freeCreditText=freeCreditAvailable
@@ -117,17 +120,46 @@ function renderBilling(s){
       : 'Noch nicht aktiviert.';
   document.getElementById('billingBox').innerHTML=`
     <article class="card doc-card">
-      <span class="badge">Zugang</span>
+      <span class="badge">${isRestricted?'Eingeschränkt':'Zugang'}</span>
       <h2>${esc(s.plan)}</h2>
-      <p class="muted">${isPremium?'Dauerhaft freigeschaltet':`Testphase bis ${trialEnd} · ${Number(s.trialDaysRemaining)||0} Tag(e) übrig`}</p>
-      <p>${isPremium?'Premium ist aktiv. MediTest und alle Katalogtests sind freigeschaltet.':`Nach der Testphase kostet MediTest <b>${priceLabel(s.monthlyPriceCents,s.currency)} pro Monat</b>.`}</p>
+      <p class="muted">${
+        isPremium
+          ? 'Dauerhaft freigeschaltet'
+          : hasSubscription
+            ? `Monatsabo aktiv · ${priceLabel(s.monthlyPriceCents,s.currency)} pro Monat`
+            : s.status==='trial'
+              ? `Testphase bis ${trialEnd} · ${Number(s.trialDaysRemaining)||0} Tag(e) übrig`
+              : productPurchased
+                ? `Basiskauf am ${purchaseDate}`
+                : `Einmaliger Kauf: ${priceLabel(s.productPriceCents,s.currency)}`
+      }</p>
+      <p>${
+        isPremium
+          ? 'Premium ist aktiv. Katalogfreischaltungen per Premium-Code sind eine gesonderte Sonderberechtigung.'
+          : hasSubscription
+            ? 'Alle MediTest-Funktionen sind verfügbar. Katalogtests bleiben separate Kaufartikel.'
+            : s.status==='trial'
+              ? `Der Kauf enthält 7 Tage Vollzugang. Danach kostet das optionale Abo <b>${priceLabel(s.monthlyPriceCents,s.currency)} pro Monat</b>. Katalogtests sind nicht enthalten.`
+              : isRestricted
+                ? `Vorhandene Tests, Ergebnisse und gekaufte Katalogtests bleiben nutzbar. Neue Inhalte, Bearbeitung und KI-Funktionen werden mit dem Abo für <b>${priceLabel(s.monthlyPriceCents,s.currency)} pro Monat</b> wieder freigeschaltet.`
+                : `MediTest muss zuerst einmalig für <b>${priceLabel(s.productPriceCents,s.currency)}</b> gekauft werden. Der Kauf startet die 7-tägige Testphase und schaltet den Installer frei.`
+      }</p>
       <div class="actions">${
         isPremium
           ? '<a class="button primary" href="/pages/catalog.html">Katalog öffnen</a>'
           : hasSubscription
             ? '<button class="primary" type="button" onclick="manageSubscription()">Abo verwalten</button>'
-            : `<button class="primary" type="button" onclick="startSubscription()" ${s.checkoutConfigured?'':'disabled'}>Abo starten</button>`
+            : productPurchased
+              ? `<button class="primary" type="button" onclick="startSubscription()" ${s.checkoutConfigured?'':'disabled'}>${s.status==='trial'?'Abo für danach abschließen':'Vollzugang abonnieren'} · ${priceLabel(s.monthlyPriceCents,s.currency)}/Monat</button>`
+              : '<a class="button primary" href="https://meditest-12354.web.app/purchase" target="_blank" rel="noopener">MediTest kaufen</a>'
       }</div>
+    </article>
+    <article class="card doc-card">
+      <span class="badge">Katalog</span>
+      <h2>Separate Kaufartikel</h2>
+      <p class="muted">Katalogtests sind weder im Basiskauf noch in der Testphase oder im Monatsabo enthalten.</p>
+      <p>Ein gekaufter Katalogtest bleibt dauerhaft deinem Konto zugeordnet und kann auch im eingeschränkten Modus ausgeführt werden.</p>
+      <div class="actions"><a class="button primary" href="/pages/catalog.html">Katalog öffnen</a></div>
     </article>
     <article class="card doc-card">
       <span class="badge">Gratis-Test</span>
@@ -142,7 +174,7 @@ function renderBilling(s){
     <article class="card doc-card">
       <span class="badge">Premium-Code</span>
       <h2>Code einlösen</h2>
-      <p class="muted">Ein gültiger Code schaltet MediTest und alle Katalogtests kostenlos frei.</p>
+      <p class="muted">Ein gültiger administrativer Code schaltet die MediTest-Vollfunktionen frei. Katalogtests bleiben separate Kaufartikel.</p>
       <form onsubmit="redeemPremiumCode(event)">
         <label for="premiumCode">Premium-Code</label>
         <input id="premiumCode" autocomplete="off" placeholder="MT-PREMIUM-XXXX-XXXX-XXXX-XXXX" ${isPremium?'disabled':''}>

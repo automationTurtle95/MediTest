@@ -172,11 +172,11 @@ Speichert die aktive Zustimmung mit `{ "acceptTerms": true, "acceptPrivacy": tru
 
 `GET /api/license/status`
 
-Liefert Testphase, Abo-Status und Preisangaben.
+Liefert Basiskauf, 7-tägige Testphase, eingeschränkten Modus, Abo-Status sowie Kauf- und Monatspreis.
 
 `POST /api/license/checkout/subscription`
 
-Erstellt über `meditestCreateCheckout` eine Stripe-Checkout-Sitzung für das Monatsabo.
+Erstellt über `meditestCreateCheckout` eine separate Stripe-Checkout-Sitzung für das Monatsabo über 5,99 EUR. Der Basiskauf muss bereits bestätigt sein.
 
 `POST /api/license/portal`
 
@@ -184,7 +184,7 @@ Erstellt über `meditestCreateCheckout` eine Stripe-Checkout-Sitzung für das Mo
 
 `POST /api/license/redeem-premium-code`
 
-Prüft einen Premium-Code aus `{ "code": "..." }`. Ein gültiger Code setzt den Nutzerstatus auf Premium und schaltet alle Katalogtests frei.
+Prüft einen administrativen Premium-Code aus `{ "code": "..." }`. Ein gültiger Code setzt den Nutzerstatus auf Premium; Katalogtests bleiben separate Kaufartikel.
 
 `POST /api/license/redeem-catalog-code`
 
@@ -306,15 +306,15 @@ Prüft die konfigurierte GitHub-Release-Quelle oder `latest.json` und liefert di
 ```json
 {
   "configured": true,
-  "currentVersion": "5.0.2",
+  "currentVersion": "5.0.3",
   "currentPlatform": "windows-x64",
-  "latestVersion": "5.0.2",
+  "latestVersion": "5.0.3",
   "updateAvailable": false,
-  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v5.0.2",
+  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v5.0.3",
   "recommendedDownload": {
     "platform": "windows-x64",
-    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.2/MediTest-Setup-5.0.2-win-x64.msi",
-    "fileName": "MediTest-Setup-5.0.2-win-x64.msi",
+    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.3/MediTest-Setup-5.0.3-win-x64.msi",
+    "fileName": "MediTest-Setup-5.0.3-win-x64.msi",
     "sha256": "...",
     "sizeBytes": 42400000
   }

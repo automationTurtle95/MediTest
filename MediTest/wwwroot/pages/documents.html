@@ -48,6 +48,7 @@
 <script>
 let pageSettings={defaultGenerateQuestionCount:25,defaultTestQuestionCount:25};
 let pageDocuments=[];
+let pageRestrictedMode=false;
 let aiGenerationContext=null;
 let documentPreviewOpen=false;
 function questionCountOptions(selected){const counts=[5,10,15,25]; selected=Math.min(25,Math.max(1,Number(selected)||25)); if(!counts.includes(selected))counts.unshift(selected); return counts.map(c=>`<option value="${c}" ${c===selected?'selected':''}>${c}</option>`).join('');}
@@ -57,13 +58,24 @@ function documentTypeLabel(doc){
 }
 async function loadDocs(){
   const box=document.getElementById('docs');
-  const [docs,settings]=await Promise.all([api('/api/documents'),getAppSettings().catch(()=>null)]);
+  const [docs,settings,license]=await Promise.all([
+    api('/api/documents'),
+    getAppSettings().catch(()=>null),
+    api('/api/license/status').catch(()=>null)
+  ]);
   pageDocuments=docs;
+  pageRestrictedMode=license?.restrictedMode===true;
+  document.getElementById('uploadPanel').classList.toggle('hidden',pageRestrictedMode);
   if(settings) pageSettings=settings;
-  if(!docs.length){box.innerHTML='<p class="muted">Noch keine Dokumente. Nutze oben den Hochladen-Bereich oder importiere eine TXT-Fragenliste.</p>'; return;}
+  if(!docs.length){
+    box.innerHTML=pageRestrictedMode
+      ? '<p class="muted">Es sind noch keine vorhandenen Fragenpools verfügbar. Neue Inhalte können mit einem aktiven Monatsabo erstellt werden.</p>'
+      : '<p class="muted">Noch keine Dokumente. Nutze oben den Hochladen-Bereich oder importiere eine TXT-Fragenliste.</p>';
+    return;
+  }
   const generateDefault=Number(pageSettings.defaultGenerateQuestionCount)||25;
   const testDefault=Number(pageSettings.defaultTestQuestionCount)||25;
-  box.innerHTML=docs.map(d=>`<article class="card doc-card"><div><span class="badge">${d.questionCount} Fragen</span> <span class="badge">${documentTypeLabel(d)}</span></div><h2>${esc(d.fileName)}</h2><p class="muted">${d.textLength} Zeichen · ${new Date(d.createdAt).toLocaleString()}</p><label>Testname (optional)</label><input id="testname-${d.id}" placeholder="z. B. Kardiologie Probe 1"><div class="field-row"><div><label>Fragen generieren</label><select id="count-${d.id}">${questionCountOptions(generateDefault)}</select></div><div><label>Testlänge</label><input id="testcount-${d.id}" type="number" min="1" max="100" step="1" value="${testDefault}"></div></div><div class="actions"><button onclick="openAiGenerationModal(${d.id})">Generieren</button><button onclick="openDocumentPreview(${d.id})">Dokument ansehen</button><a class="button" href="/pages/questions.html?id=${d.id}">Fragen ansehen</a><button class="primary" onclick="startTest(${d.id})">Test starten</button><button onclick="exportTxt(${d.id})">Export .txt</button><button class="danger" onclick="deleteDocument(${d.id}, '${esc(d.fileName).replace(/'/g, "&#39;")}')">Löschen</button></div></article>`).join('');
+  box.innerHTML=docs.map(d=>`<article class="card doc-card"><div><span class="badge">${d.questionCount} Fragen</span> <span class="badge">${documentTypeLabel(d)}</span>${pageRestrictedMode?' <span class="badge">Vorhandener Inhalt</span>':''}</div><h2>${esc(d.fileName)}</h2><p class="muted">${d.textLength} Zeichen · ${new Date(d.createdAt).toLocaleString()}</p><label>Testname (optional)</label><input id="testname-${d.id}" placeholder="z. B. Kardiologie Probe 1"><div class="field-row">${pageRestrictedMode?'':`<div><label>Fragen generieren</label><select id="count-${d.id}">${questionCountOptions(generateDefault)}</select></div>`}<div><label>Testlänge</label><input id="testcount-${d.id}" type="number" min="1" max="100" step="1" value="${testDefault}"></div></div><div class="actions">${pageRestrictedMode?'':`<button onclick="openAiGenerationModal(${d.id})">Generieren</button>`}<button onclick="openDocumentPreview(${d.id})">Dokument ansehen</button><a class="button" href="/pages/questions.html?id=${d.id}">Fragen ansehen</a><button class="primary" onclick="startTest(${d.id})">Test starten</button><button onclick="exportTxt(${d.id})">Export .txt</button>${pageRestrictedMode?'':`<button class="danger" onclick="deleteDocument(${d.id}, '${esc(d.fileName).replace(/'/g, "&#39;")}')">Löschen</button>`}</div></article>`).join('');
   enhanceTooltips(box);
 }
 function closeDocumentPreview(){

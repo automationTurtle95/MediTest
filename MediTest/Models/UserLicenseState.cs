@@ -2,8 +2,12 @@ namespace MediTest.Models;
 
 public sealed class UserLicenseState
 {
-    public DateTime TrialStartedAt { get; set; } = DateTime.UtcNow;
-    public DateTime TrialEndsAt { get; set; } = DateTime.UtcNow.AddDays(7);
+    public bool BaseProductPurchased { get; set; }
+    public DateTime? BaseProductPurchasedAt { get; set; }
+    public string BaseProductProvider { get; set; } = string.Empty;
+    public string BaseProductCheckoutSessionId { get; set; } = string.Empty;
+    public DateTime? TrialStartedAt { get; set; }
+    public DateTime? TrialEndsAt { get; set; }
     public bool SubscriptionActive { get; set; }
     public DateTime? SubscriptionRenewsAt { get; set; }
     public string SubscriptionProvider { get; set; } = string.Empty;

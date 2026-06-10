@@ -50,12 +50,26 @@ public sealed class LicensePolicyTests
 
     [Theory]
     [InlineData("Trial", "trial")]
+    [InlineData("Base", "restricted")]
     [InlineData("Free", "active")]
     [InlineData("Student", "active")]
     public void SupportedLicenseTypesAreValid(string type, string status)
     {
         var result = LicensePolicy.Evaluate(License(type, status), User(), true, Now);
         Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void RestrictedBaseLicenseKeepsExistingTestsAccessible()
+    {
+        var license = License("Base", "restricted");
+        license.LicenseEndDate = null;
+
+        var result = LicensePolicy.Evaluate(license, User(), true, Now);
+
+        Assert.True(result.IsValid);
+        Assert.Equal("restricted", result.Status);
+        Assert.Contains("Vorhandene Tests", result.Message);
     }
 
     [Fact]
@@ -156,7 +170,7 @@ public sealed class LicensePolicyTests
 
     private static AppConfig Config() => new()
     {
-        CurrentTermsVersion = "5.0",
+        CurrentTermsVersion = "5.1",
         CurrentPrivacyVersion = "5.0",
         AllowedOfflineDays = 7
     };
@@ -164,7 +178,7 @@ public sealed class LicensePolicyTests
     private static TermsAcceptance Acceptance() => new()
     {
         UserId = "user-1",
-        TermsVersion = "5.0",
+        TermsVersion = "5.1",
         PrivacyVersion = "5.0",
         DeviceId = "device-1",
         AcceptedAt = Now

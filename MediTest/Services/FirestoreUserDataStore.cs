@@ -66,8 +66,8 @@ public sealed class FirestoreUserDataStore
         if (!json.RootElement.TryGetProperty("state", out var stateElement))
             throw new InvalidOperationException("Der Lizenzdienst hat keinen gültigen Status geliefert.");
         var state = stateElement.Deserialize<UserLicenseState>(JsonOptions) ?? new UserLicenseState();
-        if (state.TrialStartedAt == default) state.TrialStartedAt = DateTime.UtcNow;
-        if (state.TrialEndsAt == default) state.TrialEndsAt = state.TrialStartedAt.AddDays(7);
+        state.BaseProductProvider ??= string.Empty;
+        state.BaseProductCheckoutSessionId ??= string.Empty;
         state.SubscriptionProvider ??= string.Empty;
         state.SubscriptionCustomerId ??= string.Empty;
         state.PremiumProvider ??= string.Empty;
@@ -81,6 +81,8 @@ public sealed class FirestoreUserDataStore
     public async Task SaveLicenseStateAsync(UserLicenseState state, CancellationToken ct)
     {
         state.UpdatedAt = DateTime.UtcNow;
+        state.BaseProductProvider ??= string.Empty;
+        state.BaseProductCheckoutSessionId ??= string.Empty;
         state.SubscriptionProvider ??= string.Empty;
         state.SubscriptionCustomerId ??= string.Empty;
         state.PremiumProvider ??= string.Empty;
@@ -99,7 +101,7 @@ public sealed class FirestoreUserDataStore
     public async Task<bool> HasCatalogPurchaseAsync(string catalogId, int trialDays, CancellationToken ct)
     {
         var state = await GetLicenseStateAsync(trialDays, ct);
-        return state.PremiumActive || state.PurchasedCatalogTestIds.Contains(catalogId, StringComparer.OrdinalIgnoreCase);
+        return state.PurchasedCatalogTestIds.Contains(catalogId, StringComparer.OrdinalIgnoreCase);
     }
 
     public async Task<List<DocumentDto>> ListDocumentsAsync(CancellationToken ct, bool seedDemo = true)

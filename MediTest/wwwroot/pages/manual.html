@@ -48,7 +48,12 @@
 <script src="/js/api.js"></script>
 <script>
 async function loadDocs(){
-  const docs=await api('/api/documents');
+  const [docs,license]=await Promise.all([api('/api/documents'),api('/api/license/status')]);
+  if(license.restrictedMode){
+    document.getElementById('manualForm').classList.add('hidden');
+    status(document.getElementById('msg'),'Neue manuelle Fragen sind nach der Testphase im Monatsabo verfügbar. Vorhandene Tests kannst du weiterhin ausführen.','status');
+    return;
+  }
   const sel=document.getElementById('documentId');
   docs.forEach(d=>{const o=document.createElement('option'); o.value=d.id; o.textContent=`${d.fileName} (${d.questionCount} Fragen)`; sel.appendChild(o);});
 }

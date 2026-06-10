@@ -148,18 +148,21 @@ Danach läuft die Fragegenerierung über Firebase. Der echte Gemini-Key liegt ni
 
 ## Lizenz und Zahlungen
 
-MediTest V5.0.2 integriert das Lizenzmodell:
+MediTest integriert folgendes Lizenzmodell:
 
-- 7 Tage Testphase pro Firebase-Nutzer
-- 9,99 EUR pro Monat für das Abo
-- Katalogzugang und Premium-Freischaltung per Code
+- einmaliger Basiskauf für 9,99 EUR
+- 7 Tage vollständige Testphase ab bestätigtem Basiskauf
+- danach optionales Monatsabo für 5,99 EUR
+- ohne Abo eingeschränkter Modus für vorhandene Tests und Auswertungen
+- Katalogtests als separate Kaufartikel
+- Premium-Freischaltung per administrativem Code ohne Kataloginhalte
 - MedAT-Katalogtests für 49,99 EUR pro Test
 - serverseitige Geräteaktivierung, Gerätebegrenzung und Sperrstatusprüfung
 - versionierte AGB-/Datenschutz-Zustimmung und globale `appConfig`
 
 Die geschützte Function `meditestLicenseAccess` legt Nutzer-, Lizenz-, Geräte- und Zustimmungsdaten ausschließlich mit dem verifizierten Firebase-Token an. Der Client kann diese sicherheitsrelevanten Dokumente nicht direkt schreiben.
 
-Die geschützte Function `meditestCreateCheckout` erstellt Stripe Checkout direkt mit dem Secret `MEDITEST_STRIPE_API_KEY` und dem serverseitigen Monatspreis `BILLING_MONTHLY_PRICE_CENTS`. Bestehende Katalogpreise verwenden `STRIPE_CATALOG_UNIT_PRICE_ID` und `STRIPE_CATALOG_ENDING_PRICE_ID`; MedAT verwendet einen serverseitigen Festpreis von 49,99 EUR. `meditestStripeWebhook` prüft jedes Ereignis mit `MEDITEST_STRIPE_WEBHOOK_SECRET` und aktualisiert anschließend `users/{uid}/billing/license`. `meditestDownloadAccess` gibt den Windows-Download nur für Konten mit aktiver Lizenz aus. `meditestStripePortal` verwendet `STRIPE_PORTAL_CONFIGURATION_ID`.
+Die geschützte Function `meditestCreateCheckout` erstellt getrennte Stripe-Checkouts für den Basiskauf (`BILLING_PRODUCT_PRICE_CENTS`), das Monatsabo (`BILLING_MONTHLY_PRICE_CENTS`) und Katalogtests. Bestehende Katalogpreise verwenden `STRIPE_CATALOG_UNIT_PRICE_ID` und `STRIPE_CATALOG_ENDING_PRICE_ID`; MedAT verwendet einen serverseitigen Festpreis von 49,99 EUR. `meditestStripeWebhook` prüft jedes Ereignis mit `MEDITEST_STRIPE_WEBHOOK_SECRET` und startet die Testphase erst nach bestätigtem Basiskauf. `meditestDownloadAccess` gibt den Windows-Download nur nach diesem Kauf oder einer administrativen Freischaltung aus. `meditestStripePortal` verwendet `STRIPE_PORTAL_CONFIGURATION_ID`.
 
 Die Payments-Extension kann für diese Datenbank nicht verwendet werden, weil ihre Gen-1-Firestore-Trigger mit dem Firestore-Multiregionsstandort `eur3` nicht bereitgestellt werden können. Die direkten Functions liefern denselben Checkout-, Webhook- und Portalablauf ohne diese Standortbeschränkung.
 

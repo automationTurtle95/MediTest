@@ -2,7 +2,8 @@
 
 const SITE_CONFIG = Object.freeze({
   brandName: "MediTest",
-  monthlyPrice: "9,99 €",
+  purchasePrice: "9,99 €",
+  monthlyPrice: "5,99 €",
   purchaseUrl: "./purchase.html"
 });
 
@@ -41,7 +42,11 @@ document.querySelectorAll("[data-current-year]").forEach((element) => {
   element.textContent = String(new Date().getFullYear());
 });
 
-document.querySelectorAll("[data-price]").forEach((element) => {
+document.querySelectorAll("[data-purchase-price]").forEach((element) => {
+  element.textContent = SITE_CONFIG.purchasePrice;
+});
+
+document.querySelectorAll("[data-monthly-price]").forEach((element) => {
   element.textContent = SITE_CONFIG.monthlyPrice;
 });
 

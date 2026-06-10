@@ -32,7 +32,8 @@ const premiumCodeHashList = defineString("PREMIUM_CODE_HASHES", {
   default: ""
 });
 const billingTrialDays = defineInt("BILLING_TRIAL_DAYS", { default: 7 });
-const billingMonthlyPriceCents = defineInt("BILLING_MONTHLY_PRICE_CENTS", { default: 999 });
+const billingProductPriceCents = defineInt("BILLING_PRODUCT_PRICE_CENTS", { default: 999 });
+const billingMonthlyPriceCents = defineInt("BILLING_MONTHLY_PRICE_CENTS", { default: 599 });
 const billingCatalogQuestionPriceCents = defineInt("BILLING_CATALOG_QUESTION_PRICE_CENTS", { default: 10 });
 const billingCatalogPriceEndingCents = defineInt("BILLING_CATALOG_PRICE_ENDING_CENTS", { default: 9 });
 const billingCurrency = defineString("BILLING_CURRENCY", { default: "EUR" });
@@ -45,7 +46,7 @@ const stripeCatalogUnitPriceId = defineString("STRIPE_CATALOG_UNIT_PRICE_ID", { 
 const stripeCatalogEndingPriceId = defineString("STRIPE_CATALOG_ENDING_PRICE_ID", { default: "not-configured" });
 const stripePortalConfigurationId = defineString("STRIPE_PORTAL_CONFIGURATION_ID", { default: "not-configured" });
 const windowsDownloadUrl = defineString("WINDOWS_DOWNLOAD_URL", {
-  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.2/MediTest-Setup-5.0.2-win-x64.msi"
+  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.3/MediTest-Setup-5.0.3-win-x64.msi"
 });
 const db = getFirestore();
 
@@ -99,8 +100,12 @@ type UsageReservation = {
 };
 
 type LicenseState = {
-  trialStartedAt: string;
-  trialEndsAt: string;
+  baseProductPurchased: boolean;
+  baseProductPurchasedAt: string | null;
+  baseProductProvider: string;
+  baseProductCheckoutSessionId: string;
+  trialStartedAt: string | null;
+  trialEndsAt: string | null;
   subscriptionActive: boolean;
   subscriptionRenewsAt: string | null;
   subscriptionProvider: string;
@@ -442,6 +447,7 @@ export const meditestDownloadAccess = onRequest(
     const state = await ensureLicenseState(user.uid);
     const downloadAllowed = user.admin === true ||
       user.isAdmin === true ||
+      state.baseProductPurchased ||
       state.premiumActive ||
       state.subscriptionActive;
     if (!downloadAllowed) {
@@ -455,8 +461,8 @@ export const meditestDownloadAccess = onRequest(
 
     res.status(200).json({
       platform: "windows-x64",
-      version: "5.0.2",
-      fileName: "MediTest-Setup-5.0.2-win-x64.msi",
+      version: "5.0.3",
+      fileName: "MediTest-Setup-5.0.3-win-x64.msi",
       url: windowsDownloadUrl.value().trim()
     });
   }
@@ -502,7 +508,11 @@ export const meditestLicenseAccess = onRequest(
         await activateDevice(user.uid, deviceId, deviceName, appVersion);
       } else if (action === "check") {
         const currentDevice = await db.doc(`deviceActivations/${user.uid}/devices/${deviceId}`).get();
-        const deviceEligible = (license.licenseStatus === "active" || license.licenseStatus === "trial") &&
+        const deviceEligible = (
+          license.licenseStatus === "active" ||
+          license.licenseStatus === "trial" ||
+          license.licenseStatus === "restricted"
+        ) &&
           (!license.licenseEndDate || Date.parse(license.licenseEndDate) > Date.now());
         if (!currentDevice.exists && deviceEligible && !userStatus.isBlocked) {
           try {
@@ -622,7 +632,7 @@ export const meditestConsumeCatalogCredit = onRequest(
 
     try {
       const state = await updateLicenseState(user.uid, (current) => {
-        if (current.premiumActive || current.purchasedCatalogTestIds.includes(catalogId)) return current;
+        if (current.purchasedCatalogTestIds.includes(catalogId)) return current;
         if (!current.freeCatalogCreditActive || current.freeCatalogCreditRedeemedCatalogId) {
           throw new Error("catalog_credit_unavailable");
         }
@@ -669,9 +679,58 @@ export const meditestCreateCheckout = onRequest(
     const customerId = await ensureStripeCustomer(stripe, user.uid, stringValue(user.email));
     let checkoutData: any;
 
-    if (kind === "subscription") {
+    if (kind === "product") {
+      if (state.baseProductPurchased || state.premiumActive || state.subscriptionActive) {
+        res.status(409).json({ error: { message: "MediTest wurde für dieses Konto bereits gekauft." } });
+        return;
+      }
+      await expireOpenCheckoutSessions(
+        stripe,
+        customerId,
+        (session) => session.mode === "payment" && session.metadata?.meditestPurchaseType === "base-product"
+      );
+
+      const productPriceCents = Math.max(1, billingProductPriceCents.value());
+      const currency = billingCurrency.value().trim().toLowerCase();
+      const metadata = {
+        meditestPurchaseType: "base-product",
+        firebaseUid: user.uid,
+        purchaseSource: source === "landing" ? "landing" : "app",
+        productPriceCents: String(productPriceCents),
+        trialDays: String(Math.min(60, Math.max(1, Number(billingTrialDays.value()) || 7))),
+        currency: currency.toUpperCase()
+      };
+      checkoutData = {
+        mode: "payment",
+        customer: customerId,
+        line_items: [{
+          price_data: {
+            currency,
+            unit_amount: productPriceCents,
+            product_data: {
+              name: "MediTest für Windows",
+              description: "Einmaliger Softwarekauf inklusive 7 Tagen vollständigem MediTest-Zugang"
+            }
+          },
+          quantity: 1
+        }],
+        client_reference_id: user.uid,
+        success_url: `${websiteBaseUrl}/purchase.html?checkout=success`,
+        cancel_url: `${websiteBaseUrl}/purchase.html?checkout=cancelled`,
+        metadata,
+        payment_intent_data: { metadata }
+      };
+    } else if (kind === "subscription") {
       if (state.premiumActive || state.subscriptionActive) {
         res.status(409).json({ error: { message: "Für dieses Konto ist bereits ein Zugang aktiv." } });
+        return;
+      }
+      if (!state.baseProductPurchased) {
+        res.status(403).json({
+          error: {
+            message: "Das Monatsabo ist nach dem einmaligen Kauf von MediTest verfügbar."
+          }
+        });
         return;
       }
       const subscriptions = await stripe.subscriptions.list({
@@ -703,15 +762,14 @@ export const meditestCreateCheckout = onRequest(
 
       const remainingTrialDays = Math.max(
         0,
-        Math.ceil((Date.parse(state.trialEndsAt) - Date.now()) / 86_400_000)
+        Math.ceil(((state.trialEndsAt ? Date.parse(state.trialEndsAt) : 0) - Date.now()) / 86_400_000)
       );
-      const isLandingCheckout = source === "landing";
       const monthlyPriceCents = Math.max(1, billingMonthlyPriceCents.value());
       const currency = billingCurrency.value().trim().toLowerCase();
       const metadata = {
         meditestPurchaseType: "subscription",
         firebaseUid: user.uid,
-        purchaseSource: isLandingCheckout ? "landing" : "app",
+        purchaseSource: "app",
         monthlyPriceCents: String(monthlyPriceCents),
         currency: currency.toUpperCase()
       };
@@ -731,16 +789,12 @@ export const meditestCreateCheckout = onRequest(
           quantity: 1
         }],
         client_reference_id: user.uid,
-        success_url: isLandingCheckout
-          ? `${websiteBaseUrl}/purchase.html?checkout=success`
-          : `${returnBaseUrl}/pages/license.html?checkout=success`,
-        cancel_url: isLandingCheckout
-          ? `${websiteBaseUrl}/purchase.html?checkout=cancelled`
-          : `${returnBaseUrl}/pages/license.html?checkout=cancelled`,
+        success_url: `${returnBaseUrl}/pages/license.html?checkout=success`,
+        cancel_url: `${returnBaseUrl}/pages/license.html?checkout=cancelled`,
         metadata,
         subscription_data: {
           metadata,
-          ...(!isLandingCheckout && remainingTrialDays > 0
+          ...(remainingTrialDays > 0
             ? { trial_period_days: Math.min(60, remainingTrialDays) }
             : {})
         },
@@ -751,7 +805,7 @@ export const meditestCreateCheckout = onRequest(
         res.status(400).json({ error: { message: "Katalog-ID fehlt." } });
         return;
       }
-      if (state.premiumActive || state.purchasedCatalogTestIds.includes(catalogId)) {
+      if (state.purchasedCatalogTestIds.includes(catalogId)) {
         res.status(409).json({ error: { message: "Dieser Katalogtest ist bereits freigeschaltet." } });
         return;
       }
@@ -1053,9 +1107,11 @@ async function ensureGlobalAppConfig(): Promise<GlobalAppConfig> {
   const ref = db.doc("appConfig/global");
   const snapshot = await ref.get();
   const source = snapshot.data() ?? {};
+  const storedAppVersion = stringValue(source.currentAppVersion);
+  const storedTermsVersion = stringValue(source.currentTermsVersion);
   const config: GlobalAppConfig = {
-    currentAppVersion: stringValue(source.currentAppVersion) || "5.0.2",
-    currentTermsVersion: stringValue(source.currentTermsVersion) || "5.0",
+    currentAppVersion: !storedAppVersion || storedAppVersion === "5.0.2" ? "5.0.3" : storedAppVersion,
+    currentTermsVersion: !storedTermsVersion || storedTermsVersion === "5.0" ? "5.1" : storedTermsVersion,
     currentPrivacyVersion: stringValue(source.currentPrivacyVersion) || "5.0",
     allowedOfflineDays: boundedInt(source.allowedOfflineDays, 7, 0, 30),
     supportEmail: stringValue(source.supportEmail),
@@ -1072,6 +1128,15 @@ async function ensureGlobalAppConfig(): Promise<GlobalAppConfig> {
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now()
     });
+  } else if (
+    storedAppVersion !== config.currentAppVersion ||
+    storedTermsVersion !== config.currentTermsVersion
+  ) {
+    await ref.set({
+      currentAppVersion: config.currentAppVersion,
+      currentTermsVersion: config.currentTermsVersion,
+      updatedAt: Timestamp.now()
+    }, { merge: true });
   }
   return config;
 }
@@ -1128,14 +1193,20 @@ async function ensureCommercialLicense(
   const admin = user.admin === true || user.isAdmin === true;
   const premium = billing.premiumActive;
   const subscription = billing.subscriptionActive;
-  const trialActive = Date.parse(billing.trialEndsAt) > now;
+  const purchased = billing.baseProductPurchased;
+  const trialActive = purchased && !!billing.trialEndsAt && Date.parse(billing.trialEndsAt) > now;
   const licenseType = admin ? "Admin" :
     premium ? "Lifetime" :
-      subscription ? "Subscription" : "Trial";
+      subscription ? "Subscription" :
+        trialActive ? "Trial" :
+          purchased ? "Base" : "Free";
   const licenseStatus = admin || premium || subscription ? "active" :
-    trialActive ? "trial" : "expired";
+    trialActive ? "trial" :
+      purchased ? "restricted" : "inactive";
   const licenseEndDate = admin || premium ? null :
-    subscription ? billing.subscriptionRenewsAt : billing.trialEndsAt;
+    subscription ? billing.subscriptionRenewsAt :
+      trialActive ? billing.trialEndsAt : null;
+  const licenseStartDate = billing.baseProductPurchasedAt ?? billing.trialStartedAt;
   const maxDevices = boundedInt(existing.maxDevices, config.defaultMaxDevices, 1, 20);
   const currentDeviceCount = boundedInt(existing.currentDeviceCount, 0, 0, maxDevices);
   const data = {
@@ -1143,7 +1214,7 @@ async function ensureCommercialLicense(
     userEmail: stringValue(user.email),
     licenseType,
     licenseStatus,
-    licenseStartDate: Timestamp.fromDate(new Date(billing.trialStartedAt)),
+    licenseStartDate: licenseStartDate ? Timestamp.fromDate(new Date(licenseStartDate)) : null,
     licenseEndDate: licenseEndDate ? Timestamp.fromDate(new Date(licenseEndDate)) : null,
     maxDevices,
     currentDeviceCount,
@@ -1171,7 +1242,8 @@ async function activateDevice(
     ]);
     const license = licenseSnapshot.data() ?? {};
     const status = stringValue(license.licenseStatus).toLowerCase();
-    if (status !== "active" && status !== "trial") throw new Error("license_not_active");
+    if (status !== "active" && status !== "trial" && status !== "restricted")
+      throw new Error("license_not_active");
 
     const maxDevices = boundedInt(license.maxDevices, 1, 1, 20);
     const currentDeviceCount = boundedInt(license.currentDeviceCount, 0, 0, maxDevices);
@@ -1272,7 +1344,9 @@ function evaluateCommercialAccess(
   let isValid = true;
   let message = status === "trial" && license.licenseEndDate
     ? `Testversion aktiv bis ${new Date(license.licenseEndDate).toLocaleDateString("de-AT")}.`
-    : "Lizenz aktiv.";
+    : status === "restricted"
+      ? "Die Testphase ist beendet. Vorhandene Tests bleiben nutzbar; neue Inhalte und KI-Funktionen benötigen ein Abo."
+      : "Lizenz aktiv.";
 
   if (user.isBlocked || status === "blocked") {
     isValid = false;
@@ -1280,7 +1354,7 @@ function evaluateCommercialAccess(
   } else if (status === "expired" || expired) {
     isValid = false;
     message = "Lizenz abgelaufen.";
-  } else if (status !== "active" && status !== "trial") {
+  } else if (status !== "active" && status !== "trial" && status !== "restricted") {
     isValid = false;
     message = "Keine gültige Lizenz gefunden.";
   } else if (!deviceActivated) {
@@ -1318,8 +1392,10 @@ async function cloudEntitlement(user: any): Promise<{ allowed: boolean; message:
     config
   );
   return {
-    allowed: result.isValid === true,
-    message: stringValue(result.message) || "Keine gültige Lizenz gefunden."
+    allowed: result.isValid === true && result.status !== "restricted",
+    message: result.status === "restricted"
+      ? "Die KI-Funktionen sind nach der 7-tägigen Testphase im Monatsabo verfügbar."
+      : stringValue(result.message) || "Keine gültige Lizenz gefunden."
   };
 }
 
@@ -1433,12 +1509,26 @@ async function expireOpenCheckoutSessions(
 }
 
 async function processStripeEvent(event: any): Promise<void> {
-  if (event.type === "checkout.session.completed") {
+  if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
     const session = event.data.object as any;
     if (session.mode === "payment" && session.payment_status === "paid") {
       const uid = stringValue(session.metadata?.firebaseUid);
       const catalogId = stringValue(session.metadata?.catalogId).slice(0, 200);
-      if (uid && catalogId && session.metadata?.meditestPurchaseType === "catalog") {
+      const purchaseType = stringValue(session.metadata?.meditestPurchaseType);
+      if (uid && purchaseType === "base-product") {
+        await updateLicenseState(uid, (state) => {
+          if (state.baseProductPurchased) return state;
+          const purchasedAt = new Date().toISOString();
+          const trialDays = Math.min(60, Math.max(1, Number(billingTrialDays.value()) || 7));
+          state.baseProductPurchased = true;
+          state.baseProductPurchasedAt = purchasedAt;
+          state.baseProductProvider = "stripe";
+          state.baseProductCheckoutSessionId = stringValue(session.id);
+          state.trialStartedAt = purchasedAt;
+          state.trialEndsAt = new Date(Date.parse(purchasedAt) + trialDays * 86_400_000).toISOString();
+          return state;
+        });
+      } else if (uid && catalogId && purchaseType === "catalog") {
         await updateLicenseState(uid, (state) => {
           state.purchasedCatalogTestIds.push(catalogId);
           return state;
@@ -1466,6 +1556,15 @@ async function processStripeEvent(event: any): Promise<void> {
           : null;
         state.subscriptionProvider = active ? "stripe" : "";
         state.subscriptionCustomerId = active ? customerId : "";
+        if (active && !state.baseProductPurchased) {
+          const purchasedAt = new Date().toISOString();
+          const trialDays = Math.min(60, Math.max(1, Number(billingTrialDays.value()) || 7));
+          state.baseProductPurchased = true;
+          state.baseProductPurchasedAt = purchasedAt;
+          state.baseProductProvider = "legacy-subscription";
+          state.trialStartedAt = purchasedAt;
+          state.trialEndsAt = new Date(Date.parse(purchasedAt) + trialDays * 86_400_000).toISOString();
+        }
         return state;
       });
     }
@@ -1489,14 +1588,26 @@ async function firebaseUidForStripeCustomer(customerId: string): Promise<string>
 
 function normalizeLicenseState(source: Record<string, any>, createdAt: string): LicenseState {
   const trialDays = Math.min(60, Math.max(1, Number(billingTrialDays.value()) || 7));
-  const trialStartedAt = validIsoString(source.trialStartedAt) ?? createdAt;
-  const trialEndsAt = validIsoString(source.trialEndsAt) ??
-    new Date(Date.parse(trialStartedAt) + trialDays * 86_400_000).toISOString();
+  const legacyPaidAccess = source.subscriptionActive === true || source.premiumActive === true;
+  const baseProductPurchased = source.baseProductPurchased === true || legacyPaidAccess;
+  const baseProductPurchasedAt = validIsoString(source.baseProductPurchasedAt) ??
+    (legacyPaidAccess ? validIsoString(source.trialStartedAt) ?? createdAt : null);
+  const trialStartedAt = baseProductPurchased
+    ? validIsoString(source.trialStartedAt) ?? baseProductPurchasedAt
+    : null;
+  const trialEndsAt = trialStartedAt
+    ? validIsoString(source.trialEndsAt) ??
+      new Date(Date.parse(trialStartedAt) + trialDays * 86_400_000).toISOString()
+    : null;
   const purchased = Array.isArray(source.purchasedCatalogTestIds)
     ? source.purchasedCatalogTestIds.map(stringValue).filter(Boolean)
     : [];
 
   return {
+    baseProductPurchased,
+    baseProductPurchasedAt,
+    baseProductProvider: stringValue(source.baseProductProvider) || (legacyPaidAccess ? "legacy-access" : ""),
+    baseProductCheckoutSessionId: stringValue(source.baseProductCheckoutSessionId),
     trialStartedAt,
     trialEndsAt,
     subscriptionActive: source.subscriptionActive === true,

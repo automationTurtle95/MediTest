@@ -6,7 +6,7 @@ public static class LicensePolicy
 {
     private static readonly HashSet<string> ActiveTypes = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Free", "Trial", "Student", "Lifetime", "Subscription", "Admin"
+        "Free", "Base", "Trial", "Student", "Lifetime", "Subscription", "Admin"
     };
 
     public static LicenseCheckResult Evaluate(
@@ -32,7 +32,7 @@ public static class LicensePolicy
             return Invalid("blocked", "Konto wurde gesperrt. Bitte Support kontaktieren.");
         if (status == "expired" || license.LicenseEndDate is { } end && end <= utcNow)
             return Invalid("expired", "Lizenz abgelaufen.", license.LicenseEndDate);
-        if (status is not ("active" or "trial"))
+        if (status is not ("active" or "trial" or "restricted"))
             return Invalid(status.Length == 0 ? "inactive" : status, "Keine gültige Lizenz gefunden.");
 
         if (!deviceActivated)
@@ -53,7 +53,9 @@ public static class LicensePolicy
 
         var message = status == "trial"
             ? $"Testversion aktiv bis {license.LicenseEndDate?.ToLocalTime():dd.MM.yyyy}."
-            : "Lizenz aktiv.";
+            : status == "restricted"
+                ? "Testphase beendet. Vorhandene Tests bleiben nutzbar."
+                : "Lizenz aktiv.";
         return new LicenseCheckResult
         {
             IsValid = true,

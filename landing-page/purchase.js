@@ -26,6 +26,7 @@ const purchaseMessage = document.getElementById("purchaseMessage");
 const purchaseSuccess = document.getElementById("purchaseSuccess");
 const securedDownload = document.getElementById("securedDownload");
 let authMode = "login";
+let productPurchased = false;
 
 function showMessage(message, type = "") {
   purchaseMessage.textContent = message;
@@ -125,7 +126,7 @@ async function authorizedRequest(url, options = {}) {
 }
 
 function updateCheckoutButton() {
-  checkoutButton.disabled = !(termsConsent.checked && deliveryConsent.checked);
+  checkoutButton.disabled = productPurchased || !(termsConsent.checked && deliveryConsent.checked);
 }
 
 function setAuthenticated(session) {
@@ -136,10 +137,12 @@ function setAuthenticated(session) {
 }
 
 function setLoggedOut() {
+  productPurchased = false;
   authPanel.classList.remove("hidden");
   checkoutPanel.classList.add("hidden");
   purchaseSuccess.classList.add("hidden");
   securedDownload.removeAttribute("href");
+  checkoutButton.textContent = "Für 9,99 € kaufen";
 }
 
 function setMode(mode) {
@@ -187,7 +190,8 @@ async function login(email, password) {
   const session = saveSession(auth);
   clearMessage();
   setAuthenticated(session);
-  await handleCheckoutReturn();
+  if (new URLSearchParams(location.search).get("checkout")) await handleCheckoutReturn();
+  else await refreshPurchaseAccess();
 }
 
 async function requestSecuredDownload() {
@@ -201,13 +205,28 @@ async function requestSecuredDownload() {
   purchaseSuccess.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
+async function refreshPurchaseAccess() {
+  const status = await authorizedRequest(PURCHASE_CONFIG.statusEndpoint, { method: "GET" });
+  const state = status?.state || {};
+  if (!(state.baseProductPurchased || state.subscriptionActive || state.premiumActive)) return false;
+  productPurchased = true;
+  checkoutButton.textContent = "Bereits gekauft";
+  updateCheckoutButton();
+  await requestSecuredDownload();
+  showMessage("MediTest ist für dieses Konto bereits freigeschaltet.", "success");
+  return true;
+}
+
 async function waitForPurchaseActivation() {
   showMessage("Zahlung erfolgreich. Die Freischaltung wird geprüft...", "success");
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const status = await authorizedRequest(PURCHASE_CONFIG.statusEndpoint, { method: "GET" });
-    if (status?.state?.subscriptionActive || status?.state?.premiumActive) {
+    if (status?.state?.baseProductPurchased || status?.state?.subscriptionActive || status?.state?.premiumActive) {
+      productPurchased = true;
+      checkoutButton.textContent = "Bereits gekauft";
+      updateCheckoutButton();
       await requestSecuredDownload();
-      showMessage("Dein Zugang ist aktiv.", "success");
+      showMessage("Dein Kauf ist aktiv. Die 7-tägige Testphase läuft ab jetzt.", "success");
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -274,7 +293,7 @@ checkoutButton.addEventListener("click", async () => {
   try {
     const checkout = await authorizedRequest(PURCHASE_CONFIG.checkoutEndpoint, {
       method: "POST",
-      body: JSON.stringify({ kind: "subscription", source: "landing" })
+      body: JSON.stringify({ kind: "product", source: "landing" })
     });
     location.href = checkout.url;
   } catch (error) {
@@ -287,7 +306,8 @@ checkoutButton.addEventListener("click", async () => {
   const session = await currentSession();
   if (session) {
     setAuthenticated(session);
-    await handleCheckoutReturn();
+    if (new URLSearchParams(location.search).get("checkout")) await handleCheckoutReturn();
+    else await refreshPurchaseAccess();
   } else {
     setLoggedOut();
     if (new URLSearchParams(location.search).get("checkout") === "success") {

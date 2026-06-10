@@ -180,6 +180,19 @@ app.Use(async (context, next) =>
         });
         return;
     }
+    if (access.Result.Status.Equals("restricted", StringComparison.OrdinalIgnoreCase) &&
+        !RestrictedAccessPolicy.Allows(context.Request.Method, context.Request.Path))
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            error = "Diese Funktion ist nach der 7-tägigen Testphase im Monatsabo verfügbar. Vorhandene Tests bleiben weiterhin nutzbar.",
+            subscriptionRequired = true,
+            restrictedMode = true,
+            licenseStatus = access.Result.Status
+        });
+        return;
+    }
 
     await next();
 });
@@ -209,7 +222,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     var url = app.Urls.FirstOrDefault(u => u.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase))
         ?? app.Urls.FirstOrDefault()
         ?? "http://127.0.0.1:55000";
-    managedBrowserProcess = OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=5002");
+    managedBrowserProcess = OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=5003");
 });
 
 app.Lifetime.ApplicationStopping.Register(() =>
@@ -736,6 +749,12 @@ app.MapGet("/api/auth/me", async (HttpContext context, IConfiguration cfg, Fires
         user = user with { Plan = "Premium", LicenseStatus = "Aktiv" };
     else if (state.SubscriptionActive)
         user = user with { Plan = "Pro", LicenseStatus = "Aktiv" };
+    else if (state.BaseProductPurchased && state.TrialEndsAt is { } trialEnd && trialEnd > DateTime.UtcNow)
+        user = user with { Plan = "Testphase", LicenseStatus = "Aktiv" };
+    else if (state.BaseProductPurchased)
+        user = user with { Plan = "Basis", LicenseStatus = "Eingeschränkt" };
+    else
+        user = user with { Plan = "Nicht gekauft", LicenseStatus = "Inaktiv" };
     return Results.Ok(new AuthResponse(user));
 });
 
@@ -975,7 +994,7 @@ app.MapGet("/api/catalog/tests", async (HttpContext context, IConfiguration cfg,
             var priceCents = storedPriceCents > 0
                 ? storedPriceCents
                 : BillingCatalogTestPriceCents(cfg, category, questionCount);
-            var purchased = licenseState.PremiumActive || licenseState.PurchasedCatalogTestIds.Contains(id, StringComparer.OrdinalIgnoreCase);
+            var purchased = licenseState.PurchasedCatalogTestIds.Contains(id, StringComparer.OrdinalIgnoreCase);
 
             tests.Add(new CatalogTestDto(
                 id,
@@ -1047,7 +1066,7 @@ app.MapPost("/api/catalog/tests/{catalogId}/download", async (string catalogId, 
 
     var canPublish = UserCanPublishCatalog(context, cfg);
     var licenseState = await store.GetLicenseStateAsync(BillingTrialDays(cfg), ct);
-    var purchased = licenseState.PremiumActive || licenseState.PurchasedCatalogTestIds.Contains(catalogId, StringComparer.OrdinalIgnoreCase);
+    var purchased = licenseState.PurchasedCatalogTestIds.Contains(catalogId, StringComparer.OrdinalIgnoreCase);
     var consumeFreeCatalogCredit = false;
     if (BillingEnforcesCatalogPurchases(cfg) && !canPublish && !purchased)
     {
@@ -1700,28 +1719,43 @@ static LicenseStatusDto ToLicenseStatusDto(UserLicenseState state, HttpContext c
     var premiumActive = claimPremium || state.PremiumActive;
     var subscriptionActive = admin || premiumActive || claimSubscription || state.SubscriptionActive;
     var now = DateTime.UtcNow;
-    var trialActive = now < state.TrialEndsAt;
-    var daysRemaining = Math.Max(0, (int)Math.Ceiling((state.TrialEndsAt - now).TotalDays));
+    var trialActive = state.BaseProductPurchased && state.TrialEndsAt is { } trialEnd && now < trialEnd;
+    var daysRemaining = trialActive && state.TrialEndsAt is { } activeTrialEnd
+        ? Math.Max(0, (int)Math.Ceiling((activeTrialEnd - now).TotalDays))
+        : 0;
     var accessActive = subscriptionActive || trialActive;
-    var status = premiumActive ? "premium" : subscriptionActive ? "active" : trialActive ? "trial" : "expired";
-    var plan = premiumActive ? "Premium" : subscriptionActive ? "Pro" : "Testphase";
+    var restrictedMode = state.BaseProductPurchased && !accessActive;
+    var status = premiumActive ? "premium" :
+        subscriptionActive ? "active" :
+        trialActive ? "trial" :
+        restrictedMode ? "restricted" : "inactive";
+    var plan = premiumActive ? "Premium" :
+        subscriptionActive ? "Pro" :
+        trialActive ? "Testphase" :
+        restrictedMode ? "Basis" : "Nicht gekauft";
     var checkoutConfigured = cfg.GetValue<bool?>("Billing:StripeEnabled") ?? false;
     var message = status switch
     {
-        "premium" => "Premium aktiv: MediTest und alle Katalogtests sind freigeschaltet.",
-        "active" => "Abo aktiv.",
-        "trial" => $"Testphase aktiv: noch {daysRemaining} Tag(e).",
-        _ => "Testphase abgelaufen. Für weitere Nutzung ist ein Abo erforderlich."
+        "premium" => "Premium aktiv. Katalogtests bleiben separate Kaufartikel.",
+        "active" => "Monatsabo aktiv. Alle MediTest-Funktionen sind verfügbar.",
+        "trial" => $"7-tägige Testphase aktiv: noch {daysRemaining} Tag(e).",
+        "restricted" => "Testphase beendet. Vorhandene Tests bleiben nutzbar; neue Inhalte und KI-Funktionen benötigen ein Abo.",
+        _ => "MediTest wurde für dieses Konto noch nicht gekauft."
     };
 
     return new LicenseStatusDto(
         plan,
         status,
         accessActive,
+        restrictedMode,
+        state.BaseProductPurchased,
+        state.BaseProductPurchasedAt,
+        subscriptionActive,
         premiumActive,
         state.TrialStartedAt,
         state.TrialEndsAt,
         daysRemaining,
+        BillingProductPriceCents(cfg),
         BillingMonthlyPriceCents(cfg),
         BillingCatalogExamplePriceCents(cfg),
         BillingCatalogQuestionPriceCents(cfg),
@@ -1826,7 +1860,8 @@ static string? ValidateQuestionImage(string? imageDataUrl)
 static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
 static int BillingTrialDays(IConfiguration cfg) => Math.Clamp(cfg.GetValue<int?>("Billing:TrialDays") ?? 7, 1, 60);
-static int BillingMonthlyPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:MonthlyPriceCents") ?? 999);
+static int BillingProductPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:ProductPriceCents") ?? 999);
+static int BillingMonthlyPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:MonthlyPriceCents") ?? 599);
 static int BillingCatalogQuestionPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:CatalogQuestionPriceCents") ?? 10);
 static int BillingCatalogPriceEndingCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:CatalogPriceEndingCents") ?? 9);
 static int BillingCatalogExampleQuestionCount(IConfiguration cfg) => Math.Clamp(cfg.GetValue<int?>("Billing:CatalogPriceExampleQuestionCount") ?? 25, 1, 1000);
