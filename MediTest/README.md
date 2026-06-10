@@ -1,6 +1,6 @@
 # MediTest
 
-MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choice-Fragen aus medizinischen Unterlagen. Version 5.0.1 nutzt Firebase Authentication, Firestore und Stripe Checkout.
+MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choice-Fragen aus medizinischen Unterlagen. Version 5.0.2 nutzt Firebase Authentication, Firestore und Stripe Checkout.
 
 ## Funktionen
 
@@ -20,7 +20,7 @@ MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choic
 - Themensprung: Fragen eines Themas direkt öffnen und gezielt wiederholen
 - Anmeldeseite mit E-Mail/Passwort, Google, Apple, E-Mail-Bestätigung, Passwort-Reset und browserbasierter Sitzung
 - Vollständige Kontolöschung inklusive privater Firestore- und KI-Nutzungsdaten
-- Firestore-Katalog mit sichtbaren Preisen, Kaufübersicht und Admin-Veröffentlichung
+- Firestore-Katalog als aufklappbares Fach- und Themenverzeichnis mit sichtbaren Preisen, Kaufübersicht und Admin-Veröffentlichung
 - Katalogordner `MedAT` mit festem Einzelpreis von 49,99 EUR pro Test
 - Stripe Checkout für Monatsabo und Katalogtests, Stripe-Kundenportal sowie serverseitige Lizenz-Synchronisierung
 - Lizenzmodell mit 9,99 EUR/Monat, einmaligem Gratis-Katalog-Code pro Benutzer und Premium-Freischaltung per Code
@@ -60,7 +60,7 @@ Alternativ unter Windows: `Start_MediTest.bat` doppelklicken. Die App läuft sta
 
 ## Anmeldung mit Firebase
 
-V5.0.1 speichert keine Nutzerdaten mehr in einer lokalen `meditest.db`. Registrierung und Anmeldung laufen über Firebase Authentication wahlweise mit E-Mail/Passwort, Google oder Apple. Bei E-Mail/Passwort muss die Adresse nach der Registrierung bestätigt werden; Google- und Apple-Konten übernehmen den bestätigten Anmeldestatus des jeweiligen Anbieters. Passwort-Reset und Passwortänderung gelten nur für E-Mail/Passwort-Konten. Im Browser werden ID-Token und Refresh-Token nur in `sessionStorage` gehalten und verschwinden beim Schließen der Browser-Sitzung.
+V5.0.2 speichert keine Nutzerdaten mehr in einer lokalen `meditest.db`. Registrierung und Anmeldung laufen über Firebase Authentication wahlweise mit E-Mail/Passwort, Google oder Apple. Bei E-Mail/Passwort muss die Adresse nach der Registrierung bestätigt werden; Google- und Apple-Konten übernehmen den bestätigten Anmeldestatus des jeweiligen Anbieters. Passwort-Reset und Passwortänderung gelten nur für E-Mail/Passwort-Konten. Im Browser werden ID-Token und Refresh-Token nur in `sessionStorage` gehalten und verschwinden beim Schließen der Browser-Sitzung.
 
 In Firebase müssen unter `Authentication -> Sign-in method` die verwendeten Anbieter aktiviert sein. Die Firebase-Web-Konfiguration steht in `appsettings.json`:
 
@@ -98,7 +98,9 @@ Die Seite `Einstellungen` speichert Profil und Programmeinstellungen unter `user
 
 ## Firestore-Katalog und Admin-Konto
 
-Die Seite `Katalog` liest themenspezifische Tests aus der Firestore-Collection `catalogTests` und zeigt vorhandene Legacy-Einträge aus `thematicTests` weiterhin an. Der Ordner `MedAT` ist dauerhaft sichtbar; dort veröffentlichte Tests kosten jeweils 49,99 EUR. Jede Karte zeigt den serverseitig bestimmten Preis. Vor einem Checkout öffnet sich eine Kaufübersicht mit Preis, Umfang, Thema und Schwierigkeit. Premium- und Admin-Konten haben Zugriff auf alle Katalogtests. Heruntergeladene Tests werden als private Nutzerdaten unter `users/{uid}/documents` gespeichert.
+Die Seite `Katalog` liest themenspezifische Tests aus der Firestore-Collection `catalogTests` und zeigt vorhandene Legacy-Einträge aus `thematicTests` weiterhin an. Tests werden in einem aufklappbaren Verzeichnis nach Bereich und frei wählbarem Ordnerpfad dargestellt. Admins können beim Veröffentlichen Pfade wie `Innere Medizin/Kardiologie` vergeben. Ältere Einträge ohne `folderPath` werden automatisch aus Kategorie und Thema einsortiert. Der Ordner `MedAT` ist dauerhaft sichtbar; dort veröffentlichte Tests kosten jeweils 49,99 EUR. Vor einem Checkout öffnet sich eine Kaufübersicht mit Preis, Umfang, Thema und Schwierigkeit. Premium- und Admin-Konten haben Zugriff auf alle Katalogtests.
+
+MediTest läuft installationsbezogen als Einzelinstanz. Unter Windows wird die Oberfläche in einem eigenen App-Fenster mit separatem Browserprofil geöffnet. `Programm schließen` beendet dieses Fenster, den lokalen Server und weitere Prozesse derselben MediTest-Installation.
 
 ## Lizenzmodell
 
@@ -126,7 +128,7 @@ cd MediTest
 powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 ```
 
-Die fertigen Artefakte liegen danach unter `dist/MediTest-5.0.1/`. Frühere Release-Ordner bleiben erhalten.
+Die fertigen Artefakte liegen danach unter `dist/MediTest-5.0.2/`. Frühere Release-Ordner bleiben erhalten.
 
 Ohne `-WindowsOnly` entstehen zusätzlich vorläufige, unsignierte macOS-Setup-ZIPs für Intel und Apple Silicon. Sind die Apple-Secrets in GitHub eingerichtet, ersetzt der Release-Workflow diese automatisch durch signierte und notarisierte PKG-Installer.
 

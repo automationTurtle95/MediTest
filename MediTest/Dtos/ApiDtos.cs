@@ -15,6 +15,7 @@ public sealed record CatalogTestDto(
     string Title,
     string Description,
     string Category,
+    string FolderPath,
     string Topic,
     string Difficulty,
     int QuestionCount,
@@ -34,6 +35,7 @@ public sealed record CatalogPublishRequest(
     string? Title,
     string? Description,
     string? Category,
+    string? FolderPath,
     string? Topic,
     string? Difficulty);
 

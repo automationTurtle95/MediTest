@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -14,6 +15,14 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.IdentityModel.Tokens;
+
+using var singleInstanceMutex = new Mutex(true, SingleInstanceName(), out var ownsSingleInstance);
+if (!ownsSingleInstance)
+{
+    return;
+}
+
+Process? managedBrowserProcess = null;
 
 var installedContentRoot = Directory.Exists(Path.Combine(AppContext.BaseDirectory, "wwwroot"))
     ? AppContext.BaseDirectory
@@ -200,16 +209,115 @@ app.Lifetime.ApplicationStarted.Register(() =>
     var url = app.Urls.FirstOrDefault(u => u.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase))
         ?? app.Urls.FirstOrDefault()
         ?? "http://127.0.0.1:55000";
-    OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=5000");
+    managedBrowserProcess = OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=5002");
 });
 
-static void OpenBrowser(string url)
+app.Lifetime.ApplicationStopping.Register(() =>
 {
+    CloseManagedBrowser(managedBrowserProcess);
+    CloseOtherMediTestInstances();
+});
+
+static Process? OpenBrowser(string url)
+{
+    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+    {
+        var edgePaths = new[]
+        {
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Microsoft", "Edge", "Application", "msedge.exe"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Microsoft", "Edge", "Application", "msedge.exe"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "Edge", "Application", "msedge.exe")
+        };
+        var edgePath = edgePaths.FirstOrDefault(File.Exists);
+        if (!string.IsNullOrWhiteSpace(edgePath))
+        {
+            try
+            {
+                var profilePath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "MediTest",
+                    "BrowserProfile");
+                Directory.CreateDirectory(profilePath);
+
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = edgePath,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                startInfo.ArgumentList.Add($"--app={url}");
+                startInfo.ArgumentList.Add($"--user-data-dir={profilePath}");
+                startInfo.ArgumentList.Add("--no-first-run");
+                startInfo.ArgumentList.Add("--disable-session-crashed-bubble");
+                return Process.Start(startInfo);
+            }
+            catch
+            {
+                // Fall through to the system browser.
+            }
+        }
+    }
+
     try
     {
         Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
     }
     catch { }
+    return null;
+}
+
+static void CloseManagedBrowser(Process? browserProcess)
+{
+    if (browserProcess == null) return;
+    try
+    {
+        if (browserProcess.HasExited) return;
+        browserProcess.Kill(entireProcessTree: true);
+        browserProcess.WaitForExit(3000);
+    }
+    catch { }
+    finally
+    {
+        browserProcess.Dispose();
+    }
+}
+
+static void CloseOtherMediTestInstances()
+{
+    using var current = Process.GetCurrentProcess();
+    string? currentPath;
+    try
+    {
+        currentPath = current.MainModule?.FileName;
+    }
+    catch
+    {
+        return;
+    }
+
+    if (string.IsNullOrWhiteSpace(currentPath)) return;
+    foreach (var process in Process.GetProcessesByName(current.ProcessName))
+    {
+        using (process)
+        {
+            if (process.Id == current.Id) continue;
+            try
+            {
+                var processPath = process.MainModule?.FileName;
+                if (!string.Equals(processPath, currentPath, StringComparison.OrdinalIgnoreCase)) continue;
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(3000);
+            }
+            catch { }
+        }
+    }
+}
+
+static string SingleInstanceName()
+{
+    var path = Path.GetFullPath(AppContext.BaseDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+    var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(path)))[..16];
+    return $"MediTest.SingleInstance.{hash}";
 }
 
 static bool AllowedFile(IFormFile file)
@@ -591,7 +699,7 @@ app.MapPost("/api/system/shutdown", (HttpContext context, IHostApplicationLifeti
 
     _ = Task.Run(async () =>
     {
-        await Task.Delay(300);
+        await Task.Delay(250);
         lifetime.StopApplication();
     });
 
@@ -861,6 +969,8 @@ app.MapGet("/api/catalog/tests", async (HttpContext context, IConfiguration cfg,
             var questionCount = FirestoreInt(fields, "questionCount");
             if (questionCount <= 0) questionCount = DeserializeCatalogQuestions(FirestoreString(fields, "questionsJson")).Count;
             var category = CatalogCategory(FirestoreString(fields, "category"));
+            var topic = TopicLabel(FirestoreString(fields, "topic"));
+            var folderPath = CatalogFolderPath(category, FirestoreString(fields, "folderPath"), topic);
             var storedPriceCents = FirestoreInt(fields, "priceCents");
             var priceCents = storedPriceCents > 0
                 ? storedPriceCents
@@ -872,7 +982,8 @@ app.MapGet("/api/catalog/tests", async (HttpContext context, IConfiguration cfg,
                 title,
                 FirestoreString(fields, "description"),
                 category,
-                FirestoreString(fields, "topic"),
+                folderPath,
+                topic,
                 FirestoreString(fields, "difficulty"),
                 questionCount,
                 FirestoreString(fields, "appVersion"),
@@ -1042,6 +1153,7 @@ app.MapPost("/api/catalog/tests/publish", async (CatalogPublishRequest req, Http
     var description = TrimTo(req.Description, 600);
     var category = CatalogCategory(req.Category);
     var topic = TopicLabel(req.Topic);
+    var folderPath = CatalogFolderPath(category, req.FolderPath, topic);
     var difficulty = DifficultyLabel(req.Difficulty);
     var now = DateTime.UtcNow;
     var documentId = $"{Slugify(title)}-{now:yyyyMMddHHmmss}";
@@ -1059,6 +1171,7 @@ app.MapPost("/api/catalog/tests/publish", async (CatalogPublishRequest req, Http
             ["title"] = FirestoreValue(title),
             ["description"] = FirestoreValue(description),
             ["category"] = FirestoreValue(category),
+            ["folderPath"] = FirestoreValue(folderPath),
             ["topic"] = FirestoreValue(topic),
             ["difficulty"] = FirestoreValue(difficulty),
             ["questionCount"] = FirestoreIntValue(questions.Count),
@@ -1646,6 +1759,36 @@ static string CatalogCategory(string? category)
 {
     category = (category ?? string.Empty).Trim();
     return category.Equals("MedAT", StringComparison.OrdinalIgnoreCase) ? "MedAT" : "Allgemein";
+}
+
+static string CatalogFolderPath(string category, string? folderPath, string? topic)
+{
+    var root = CatalogCategory(category);
+    var rawSegments = (folderPath ?? string.Empty)
+        .Replace('\\', '/')
+        .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    var segments = rawSegments
+        .Select(segment => Regex.Replace(segment, @"\s+", " ").Trim())
+        .Where(segment => !string.IsNullOrWhiteSpace(segment) && segment is not "." and not "..")
+        .Select(segment => TrimTo(segment, 80))
+        .Take(5)
+        .ToList();
+
+    if (segments.Count > 0 &&
+        (segments[0].Equals(root, StringComparison.OrdinalIgnoreCase) ||
+         (root == "Allgemein" && segments[0].Equals("Weitere Tests", StringComparison.OrdinalIgnoreCase))))
+    {
+        segments.RemoveAt(0);
+    }
+
+    if (segments.Count == 0)
+    {
+        var topicSegment = TopicLabel(topic);
+        if (!topicSegment.Equals("Allgemein", StringComparison.OrdinalIgnoreCase))
+            segments.Add(TrimTo(topicSegment, 80));
+    }
+
+    return string.Join('/', new[] { root }.Concat(segments));
 }
 
 static string DifficultyLabel(string? difficulty)

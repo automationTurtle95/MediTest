@@ -148,7 +148,7 @@ Danach läuft die Fragegenerierung über Firebase. Der echte Gemini-Key liegt ni
 
 ## Lizenz und Zahlungen
 
-MediTest V5.0.1 integriert das Lizenzmodell:
+MediTest V5.0.2 integriert das Lizenzmodell:
 
 - 7 Tage Testphase pro Firebase-Nutzer
 - 9,99 EUR pro Monat für das Abo

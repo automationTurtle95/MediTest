@@ -45,7 +45,7 @@ const stripeCatalogUnitPriceId = defineString("STRIPE_CATALOG_UNIT_PRICE_ID", { 
 const stripeCatalogEndingPriceId = defineString("STRIPE_CATALOG_ENDING_PRICE_ID", { default: "not-configured" });
 const stripePortalConfigurationId = defineString("STRIPE_PORTAL_CONFIGURATION_ID", { default: "not-configured" });
 const windowsDownloadUrl = defineString("WINDOWS_DOWNLOAD_URL", {
-  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.1/MediTest-Setup-5.0.1-win-x64.msi"
+  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.2/MediTest-Setup-5.0.2-win-x64.msi"
 });
 const db = getFirestore();
 
@@ -455,8 +455,8 @@ export const meditestDownloadAccess = onRequest(
 
     res.status(200).json({
       platform: "windows-x64",
-      version: "5.0.1",
-      fileName: "MediTest-Setup-5.0.1-win-x64.msi",
+      version: "5.0.2",
+      fileName: "MediTest-Setup-5.0.2-win-x64.msi",
       url: windowsDownloadUrl.value().trim()
     });
   }
@@ -1054,7 +1054,7 @@ async function ensureGlobalAppConfig(): Promise<GlobalAppConfig> {
   const snapshot = await ref.get();
   const source = snapshot.data() ?? {};
   const config: GlobalAppConfig = {
-    currentAppVersion: stringValue(source.currentAppVersion) || "5.0.1",
+    currentAppVersion: stringValue(source.currentAppVersion) || "5.0.2",
     currentTermsVersion: stringValue(source.currentTermsVersion) || "5.0",
     currentPrivacyVersion: stringValue(source.currentPrivacyVersion) || "5.0",
     allowedOfflineDays: boundedInt(source.allowedOfflineDays, 7, 0, 30),

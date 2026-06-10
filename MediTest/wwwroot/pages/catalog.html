@@ -15,9 +15,16 @@
   </section>
 
   <section class="card">
-    <h2>Verfügbare Tests</h2>
+    <div class="catalog-title-row">
+      <div>
+        <p class="eyebrow">Dateiverzeichnis</p>
+        <h2>Verfügbare Tests</h2>
+        <p class="muted">Öffne die Fach- und Themenordner, um den passenden Test zu finden.</p>
+      </div>
+      <div id="catalogSummary" class="catalog-summary"></div>
+    </div>
     <div id="msg" class="hidden"></div>
-    <div id="catalog" class="grid"></div>
+    <div id="catalog" class="catalog-explorer"></div>
   </section>
 
   <section id="adminPanel" class="card hidden">
@@ -31,6 +38,7 @@
       <textarea id="description" rows="3"></textarea>
       <div class="field-row">
         <div><label for="category">Bereich</label><select id="category"><option value="Allgemein">Allgemein</option><option value="MedAT">MedAT · 49,99 €</option></select></div>
+        <div><label for="folderPath">Ordner</label><input id="folderPath" placeholder="z. B. Innere Medizin/Kardiologie"></div>
         <div><label for="topic">Thema</label><input id="topic" placeholder="z. B. Kardiologie"></div>
         <div><label for="difficulty">Schwierigkeit</label><select id="difficulty"><option>leicht</option><option selected>mittel</option><option>schwer</option></select></div>
       </div>
@@ -62,6 +70,11 @@ let catalogPurchaseOpen=false;
 
 function dateLabel(value){return value?new Date(value).toLocaleDateString():'ohne Datum';}
 function safeJsId(id){return esc(id).replace(/'/g,'&#39;');}
+function folderSegments(t){
+  const fallback=[String(t.category||'Allgemein'),String(t.topic||'Allgemein')];
+  const source=String(t.folderPath||'').trim()||fallback.join('/');
+  return source.split(/[\\/]+/).map(value=>value.trim()).filter(Boolean);
+}
 function catalogCard(t){
   const id=safeJsId(t.id);
   const canUseFree=t.requiresPurchase&&!catalogState.canPublish&&!t.purchased&&catalogState.freeCatalogCreditAvailable;
@@ -69,20 +82,68 @@ function catalogCard(t){
   const buyButton=t.requiresPurchase&&!catalogState.canPublish&&!t.purchased?`<button type="button" onclick="openCatalogPurchaseModal('${id}')">Kaufen</button>`:'';
   const downloadButton=t.requiresPurchase&&!t.purchased?'':`<button class="primary" type="button" onclick="downloadTest('${id}')">Herunterladen</button>`;
   const accessLabel=t.purchased?'Freigeschaltet':catalogState.canPublish?'Admin-Zugriff':canUseFree?'Gratis-Code verfügbar':t.requiresPurchase?'Einzelzugang':'Verfügbar';
-  return `<article class="card doc-card">
-    <div><span class="badge">${Number(t.questionCount)||0} Fragen</span> <span class="badge new-badge">${accessLabel}</span></div>
-    <h2>${esc(t.title)}</h2>
-    <p class="muted">${esc(t.topic||'Allgemein')} · ${esc(t.difficulty||'mittel')} · ${esc(t.version||'')} · ${dateLabel(t.publishedAt)}</p>
-    ${t.description?`<p>${esc(t.description)}</p>`:''}
-    <p class="catalog-price"><span>${t.purchased?'Kaufpreis':'Preis'}</span><strong>${esc(priceLabel(t.priceCents,t.currency))}</strong></p>
-    <div class="actions">${freeButton}${buyButton}${downloadButton}</div>
+  return `<article class="catalog-file">
+    <span class="catalog-file-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5M10 12h6M10 16h6"></path></svg>
+    </span>
+    <div class="catalog-file-main">
+      <div class="catalog-file-title"><h3>${esc(t.title)}</h3><span class="badge new-badge">${accessLabel}</span></div>
+      <p class="muted">${Number(t.questionCount)||0} Fragen · ${esc(t.topic||'Allgemein')} · ${esc(t.difficulty||'mittel')} · ${dateLabel(t.publishedAt)}</p>
+      ${t.description?`<p>${esc(t.description)}</p>`:''}
+    </div>
+    <div class="catalog-file-price"><span>${t.purchased?'Kaufpreis':'Preis'}</span><strong>${esc(priceLabel(t.priceCents,t.currency))}</strong></div>
+    <div class="actions catalog-file-actions">${freeButton}${buyButton}${downloadButton}</div>
   </article>`;
 }
-function catalogFolder(title,tests,description){
-  return `<section class="catalog-folder">
-    <div class="catalog-folder-head"><div><p class="eyebrow">Ordner</p><h2>${esc(title)}</h2><p class="muted">${esc(description)}</p></div><span class="badge">${tests.length} Test(s)</span></div>
-    <div class="grid">${tests.length?tests.map(catalogCard).join(''):'<p class="muted">In diesem Ordner sind noch keine Tests veröffentlicht.</p>'}</div>
-  </section>`;
+function createFolderNode(name,path){
+  return {name,path,folders:new Map(),tests:[],testCount:0};
+}
+function buildCatalogTree(tests){
+  const root=createFolderNode('Katalog','');
+  ['MedAT','Allgemein'].forEach(name=>root.folders.set(name,createFolderNode(name,name)));
+  tests.forEach(test=>{
+    const segments=folderSegments(test);
+    let node=root;
+    segments.forEach(segment=>{
+      const key=segment.toLocaleLowerCase('de');
+      let entry=[...node.folders.entries()].find(([name])=>name.toLocaleLowerCase('de')===key)?.[1];
+      if(!entry){
+        const path=node.path?`${node.path}/${segment}`:segment;
+        entry=createFolderNode(segment,path);
+        node.folders.set(segment,entry);
+      }
+      node=entry;
+    });
+    node.tests.push(test);
+  });
+  function count(node){
+    node.testCount=node.tests.length;
+    node.folders.forEach(child=>{node.testCount+=count(child);});
+    return node.testCount;
+  }
+  count(root);
+  return root;
+}
+function folderSort([left],[right]){
+  const rank=value=>value==='MedAT'?0:value==='Allgemein'?1:2;
+  return rank(left)-rank(right)||left.localeCompare(right,'de');
+}
+function folderLabel(name){
+  return name==='Allgemein'?'Medizin & Module':name;
+}
+function catalogFolder(node,depth=0){
+  const folders=[...node.folders.entries()].sort(folderSort).map(([,child])=>catalogFolder(child,depth+1)).join('');
+  const tests=node.tests.slice().sort((a,b)=>String(a.title).localeCompare(String(b.title),'de')).map(catalogCard).join('');
+  const empty=!folders&&!tests?'<p class="catalog-empty">In diesem Ordner sind noch keine Tests veröffentlicht.</p>':'';
+  return `<details class="catalog-tree-folder depth-${Math.min(depth,4)}" ${depth<2?'open':''}>
+    <summary>
+      <span class="catalog-folder-chevron" aria-hidden="true">›</span>
+      <span class="catalog-folder-icon" aria-hidden="true"></span>
+      <span class="catalog-folder-name">${esc(folderLabel(node.name))}</span>
+      <span class="catalog-folder-count">${node.testCount} ${node.testCount===1?'Test':'Tests'}</span>
+    </summary>
+    <div class="catalog-tree-contents">${folders}${tests}${empty}</div>
+  </details>`;
 }
 
 async function loadCatalog(){
@@ -93,12 +154,9 @@ async function loadCatalog(){
   document.getElementById('adminIntro').classList.add('hidden');
   document.getElementById('adminPanel').classList.add('hidden');
   document.getElementById('aiUsagePanel').classList.add('hidden');
-  const medat=tests.filter(t=>String(t.category||'').toLowerCase()==='medat');
-  const general=tests.filter(t=>String(t.category||'').toLowerCase()!=='medat');
-  box.innerHTML=[
-    catalogFolder('MedAT',medat,'MedAT-Tests kosten 49,99 € pro Test. Neue Tests werden hier gesammelt.'),
-    catalogFolder('Weitere Tests',general,'Weitere themenspezifische Tests aus dem MediTest-Katalog.')
-  ].join('');
+  const tree=buildCatalogTree(tests);
+  box.innerHTML=[...tree.folders.entries()].sort(folderSort).map(([,folder])=>catalogFolder(folder)).join('');
+  document.getElementById('catalogSummary').innerHTML=`<span><strong>${tests.length}</strong> Tests</span><span><strong>${tree.folders.size}</strong> Hauptordner</span>`;
   if(catalogState.canPublish){
     document.getElementById('adminIntro').classList.remove('hidden');
     document.getElementById('adminPanel').classList.remove('hidden');
@@ -247,6 +305,7 @@ document.getElementById('publishForm').addEventListener('submit',async e=>{
     title:document.getElementById('title').value.trim(),
     description:document.getElementById('description').value.trim(),
     category:document.getElementById('category').value,
+    folderPath:document.getElementById('folderPath').value.trim(),
     topic:document.getElementById('topic').value.trim(),
     difficulty:document.getElementById('difficulty').value
   };

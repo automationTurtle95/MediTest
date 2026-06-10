@@ -108,7 +108,7 @@ Liefert die konfigurierten KI-Kontingente, kumulierte Nutzerstände und die letz
 
 `GET /api/catalog/tests`
 
-Listet themenspezifische Tests aus der Firestore-Collection `catalogTests`. Für vorhandene V3-Katalogdaten wird zusätzlich der Legacy-Pfad `thematicTests` gelesen. Die Antwort enthält `canPublish` und `freeCatalogCreditAvailable`, damit die Oberfläche Admin-Bereich und Gratis-Test-Aktion nur für berechtigte Konten zeigt. Premium- und Admin-Konten erhalten Zugriff auf alle Katalogtests.
+Listet themenspezifische Tests aus der Firestore-Collection `catalogTests`. Für vorhandene V3-Katalogdaten wird zusätzlich der Legacy-Pfad `thematicTests` gelesen. Jeder Eintrag enthält `folderPath` für ein hierarchisches Verzeichnis, zum Beispiel `Allgemein/Innere Medizin/Kardiologie`. Fehlt das Feld bei älteren Einträgen, wird der Pfad aus Kategorie und Thema gebildet. Die Antwort enthält außerdem `canPublish` und `freeCatalogCreditAvailable`.
 
 `POST /api/catalog/tests/{catalogId}/download`
 
@@ -128,7 +128,7 @@ Erstellt über `meditestCreateCheckout` eine Stripe-Checkout-Sitzung mit servers
 
 `POST /api/catalog/tests/publish`
 
-Veröffentlicht einen privaten Fragenpool im Firestore-Katalog. Erlaubt ist das nur für Admin-Konten mit Firebase Custom Claim `admin=true`; Firestore-Regeln müssen Schreibzugriffe entsprechend begrenzen.
+Veröffentlicht einen privaten Fragenpool im Firestore-Katalog. `folderPath` kann Unterordner mit `/` trennen; der Bereich `Allgemein` oder `MedAT` wird serverseitig als Wurzel ergänzt. Erlaubt ist das nur für Admin-Konten mit Firebase Custom Claim `admin=true`; Firestore-Regeln müssen Schreibzugriffe entsprechend begrenzen.
 
 Beispiel:
 
@@ -306,15 +306,15 @@ Prüft die konfigurierte GitHub-Release-Quelle oder `latest.json` und liefert di
 ```json
 {
   "configured": true,
-  "currentVersion": "5.0.1",
+  "currentVersion": "5.0.2",
   "currentPlatform": "windows-x64",
-  "latestVersion": "5.0.1",
+  "latestVersion": "5.0.2",
   "updateAvailable": false,
-  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v5.0.1",
+  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v5.0.2",
   "recommendedDownload": {
     "platform": "windows-x64",
-    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.1/MediTest-Setup-5.0.1-win-x64.msi",
-    "fileName": "MediTest-Setup-5.0.1-win-x64.msi",
+    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.2/MediTest-Setup-5.0.2-win-x64.msi",
+    "fileName": "MediTest-Setup-5.0.2-win-x64.msi",
     "sha256": "...",
     "sizeBytes": 42400000
   }
@@ -323,4 +323,4 @@ Prüft die konfigurierte GitHub-Release-Quelle oder `latest.json` und liefert di
 
 `POST /api/system/shutdown`
 
-Beendet die lokale App. Der Endpunkt ist auf Loopback-Zugriffe beschränkt.
+Beendet die lokale App, das zugehörige App-Fenster und weitere MediTest-Prozesse derselben Installation. Der Endpunkt ist auf Loopback-Zugriffe beschränkt.

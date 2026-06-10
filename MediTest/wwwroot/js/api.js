@@ -781,8 +781,17 @@ async function checkForAppUpdatePopup() {
 
 async function shutdownApp() {
   if (!confirm('MediTest wirklich schließen?')) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-backdrop';
+  overlay.innerHTML = `
+    <section class="modal-panel" role="status" aria-live="polite">
+      <p class="eyebrow">MediTest wird beendet</p>
+      <h2>Alle Programmfenster werden geschlossen.</h2>
+      <p class="muted">Laufende MediTest-Prozesse und das zugehörige App-Fenster werden jetzt beendet.</p>
+    </section>`;
+  document.body.appendChild(overlay);
   try { await fetch('/api/system/shutdown', { method: 'POST' }); } catch {}
-  alert('MediTest wird beendet. Das Browserfenster kann geschlossen werden.');
+  setTimeout(() => window.close(), 150);
 }
 
 async function logoutApp() {
