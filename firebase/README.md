@@ -70,7 +70,6 @@ AI_USAGE_RETENTION_DAYS=90
 AI_MAX_PROMPT_CHARS=50000
 FREE_CATALOG_CODE_HASHES=<SHA-256-HASH>
 PREMIUM_CODE_HASHES=<SHA-256-HASH>
-STRIPE_SUBSCRIPTION_PRICE_ID=price_...
 STRIPE_CATALOG_UNIT_PRICE_ID=price_...
 STRIPE_CATALOG_ENDING_PRICE_ID=price_...
 STRIPE_PORTAL_CONFIGURATION_ID=bpc_...
@@ -149,10 +148,10 @@ Danach läuft die Fragegenerierung über Firebase. Der echte Gemini-Key liegt ni
 
 ## Lizenz und Zahlungen
 
-MediTest V5.0.0 integriert das Lizenzmodell:
+MediTest V5.0.1 integriert das Lizenzmodell:
 
 - 7 Tage Testphase pro Firebase-Nutzer
-- 5,99 EUR pro Monat für das Abo
+- 9,99 EUR pro Monat für das Abo
 - Katalogzugang und Premium-Freischaltung per Code
 - MedAT-Katalogtests für 49,99 EUR pro Test
 - serverseitige Geräteaktivierung, Gerätebegrenzung und Sperrstatusprüfung
@@ -160,7 +159,7 @@ MediTest V5.0.0 integriert das Lizenzmodell:
 
 Die geschützte Function `meditestLicenseAccess` legt Nutzer-, Lizenz-, Geräte- und Zustimmungsdaten ausschließlich mit dem verifizierten Firebase-Token an. Der Client kann diese sicherheitsrelevanten Dokumente nicht direkt schreiben.
 
-Die geschützte Function `meditestCreateCheckout` erstellt Stripe Checkout direkt mit dem Secret `MEDITEST_STRIPE_API_KEY`. Bestehende Katalogpreise verwenden `STRIPE_CATALOG_UNIT_PRICE_ID` und `STRIPE_CATALOG_ENDING_PRICE_ID`; MedAT verwendet einen serverseitigen Festpreis von 49,99 EUR. `meditestStripeWebhook` prüft jedes Ereignis mit `MEDITEST_STRIPE_WEBHOOK_SECRET` und aktualisiert anschließend `users/{uid}/billing/license`. `meditestStripePortal` verwendet `STRIPE_PORTAL_CONFIGURATION_ID`.
+Die geschützte Function `meditestCreateCheckout` erstellt Stripe Checkout direkt mit dem Secret `MEDITEST_STRIPE_API_KEY` und dem serverseitigen Monatspreis `BILLING_MONTHLY_PRICE_CENTS`. Bestehende Katalogpreise verwenden `STRIPE_CATALOG_UNIT_PRICE_ID` und `STRIPE_CATALOG_ENDING_PRICE_ID`; MedAT verwendet einen serverseitigen Festpreis von 49,99 EUR. `meditestStripeWebhook` prüft jedes Ereignis mit `MEDITEST_STRIPE_WEBHOOK_SECRET` und aktualisiert anschließend `users/{uid}/billing/license`. `meditestDownloadAccess` gibt den Windows-Download nur für Konten mit aktiver Lizenz aus. `meditestStripePortal` verwendet `STRIPE_PORTAL_CONFIGURATION_ID`.
 
 Die Payments-Extension kann für diese Datenbank nicht verwendet werden, weil ihre Gen-1-Firestore-Trigger mit dem Firestore-Multiregionsstandort `eur3` nicht bereitgestellt werden können. Die direkten Functions liefern denselben Checkout-, Webhook- und Portalablauf ohne diese Standortbeschränkung.
 

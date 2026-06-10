@@ -93,7 +93,7 @@ function renderCharts(s){
     : '<p class="muted">Noch keine Schwierigkeitsdaten.</p>';
   document.getElementById('charts').innerHTML=`
     ${pieHtml('Bestehensquote',s.passRate,`${s.passedTests} von ${s.completedTests} Tests bestanden`,'#16a34a')}
-    ${pieHtml('Antwortgenauigkeit',s.answerAccuracy,`${s.totalCorrectAnswers} von ${s.totalAnsweredQuestions} Antworten richtig`,'#0ea5e9')}
+    ${pieHtml('Antwortgenauigkeit',s.answerAccuracy,`${s.totalCorrectAnswers} von ${s.totalAnsweredQuestions} Antworten richtig`,'#176467')}
     ${pieHtml('Prüfungsstand',s.readinessPercent,s.readinessLabel,'#8b5cf6')}
     ${difficultyCharts}`;
 }

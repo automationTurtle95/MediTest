@@ -1,6 +1,6 @@
 # MediTest
 
-MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choice-Fragen aus medizinischen Unterlagen. Version 5.0.0 nutzt Firebase Authentication, Firestore und Stripe Checkout.
+MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choice-Fragen aus medizinischen Unterlagen. Version 5.0.1 nutzt Firebase Authentication, Firestore und Stripe Checkout.
 
 ## Funktionen
 
@@ -23,7 +23,7 @@ MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choic
 - Firestore-Katalog mit sichtbaren Preisen, Kaufübersicht und Admin-Veröffentlichung
 - Katalogordner `MedAT` mit festem Einzelpreis von 49,99 EUR pro Test
 - Stripe Checkout für Monatsabo und Katalogtests, Stripe-Kundenportal sowie serverseitige Lizenz-Synchronisierung
-- Lizenzmodell mit 7 Tagen Testphase, 5,99 EUR/Monat, einmaligem Gratis-Katalog-Code pro Benutzer und Premium-Freischaltung per Code
+- Lizenzmodell mit 9,99 EUR/Monat, einmaligem Gratis-Katalog-Code pro Benutzer und Premium-Freischaltung per Code
 - Bereich `Rechtliches & Lizenz` mit zentralen Produktdaten, rechtlichen Links, Gerätebindung und Lizenzprüfung
 - Versionierte AGB-/Datenschutz-Zustimmung in Firestore und begrenzter Offline-Modus mit verschlüsseltem Cache
 
@@ -60,7 +60,7 @@ Alternativ unter Windows: `Start_MediTest.bat` doppelklicken. Die App läuft sta
 
 ## Anmeldung mit Firebase
 
-V5.0.0 speichert keine Nutzerdaten mehr in einer lokalen `meditest.db`. Registrierung und Anmeldung laufen über Firebase Authentication wahlweise mit E-Mail/Passwort, Google oder Apple. Bei E-Mail/Passwort muss die Adresse nach der Registrierung bestätigt werden; Google- und Apple-Konten übernehmen den bestätigten Anmeldestatus des jeweiligen Anbieters. Passwort-Reset und Passwortänderung gelten nur für E-Mail/Passwort-Konten. Im Browser werden ID-Token und Refresh-Token nur in `sessionStorage` gehalten und verschwinden beim Schließen der Browser-Sitzung.
+V5.0.1 speichert keine Nutzerdaten mehr in einer lokalen `meditest.db`. Registrierung und Anmeldung laufen über Firebase Authentication wahlweise mit E-Mail/Passwort, Google oder Apple. Bei E-Mail/Passwort muss die Adresse nach der Registrierung bestätigt werden; Google- und Apple-Konten übernehmen den bestätigten Anmeldestatus des jeweiligen Anbieters. Passwort-Reset und Passwortänderung gelten nur für E-Mail/Passwort-Konten. Im Browser werden ID-Token und Refresh-Token nur in `sessionStorage` gehalten und verschwinden beim Schließen der Browser-Sitzung.
 
 In Firebase müssen unter `Authentication -> Sign-in method` die verwendeten Anbieter aktiviert sein. Die Firebase-Web-Konfiguration steht in `appsettings.json`:
 
@@ -105,7 +105,7 @@ Die Seite `Katalog` liest themenspezifische Tests aus der Firestore-Collection `
 Die Seite `Rechtliches & Lizenz` zeigt Produkt- und Entwicklerdaten, den Firebase-Nutzer, Lizenztyp, Lizenzstatus, Gerätebelegung, rechtliche Links, Testphase, Abo-Status und Premium-Code-Eingabe. Standardwerte:
 
 - 7 Tage Testphase pro Firebase-Nutzer ab erster erfolgreicher Anmeldung
-- 5,99 EUR pro Monat für das MediTest-Abo
+- 9,99 EUR pro Monat für das MediTest-Abo
 - Premium- und Gratis-Code-Hashes liegen ausschließlich in den Firebase-Functions-Parametern
 - Gratis-Katalog-Codes können von jedem Benutzerkonto genau einmal verwendet werden
 - 2 Geräte pro Lizenz und 7 Tage Offline-Nutzung nach einer erfolgreichen Online-Prüfung
@@ -126,7 +126,7 @@ cd MediTest
 powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 ```
 
-Die fertigen Artefakte liegen danach unter `dist/MediTest-5.0.0/`. Frühere Release-Ordner bleiben erhalten.
+Die fertigen Artefakte liegen danach unter `dist/MediTest-5.0.1/`. Frühere Release-Ordner bleiben erhalten.
 
 Ohne `-WindowsOnly` entstehen zusätzlich vorläufige, unsignierte macOS-Setup-ZIPs für Intel und Apple Silicon. Sind die Apple-Secrets in GitHub eingerichtet, ersetzt der Release-Workflow diese automatisch durch signierte und notarisierte PKG-Installer.
 

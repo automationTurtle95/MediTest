@@ -32,16 +32,21 @@ const premiumCodeHashList = defineString("PREMIUM_CODE_HASHES", {
   default: ""
 });
 const billingTrialDays = defineInt("BILLING_TRIAL_DAYS", { default: 7 });
-const billingMonthlyPriceCents = defineInt("BILLING_MONTHLY_PRICE_CENTS", { default: 599 });
+const billingMonthlyPriceCents = defineInt("BILLING_MONTHLY_PRICE_CENTS", { default: 999 });
 const billingCatalogQuestionPriceCents = defineInt("BILLING_CATALOG_QUESTION_PRICE_CENTS", { default: 10 });
 const billingCatalogPriceEndingCents = defineInt("BILLING_CATALOG_PRICE_ENDING_CENTS", { default: 9 });
 const billingCurrency = defineString("BILLING_CURRENCY", { default: "EUR" });
 const billingReturnBaseUrl = defineString("BILLING_RETURN_BASE_URL", { default: "http://127.0.0.1:55000" });
+const billingWebsiteBaseUrl = defineString("BILLING_WEBSITE_BASE_URL", {
+  default: "https://meditest-12354.web.app"
+});
 const stripeCustomersCollection = defineString("STRIPE_CUSTOMERS_COLLECTION", { default: "customers" });
-const stripeSubscriptionPriceId = defineString("STRIPE_SUBSCRIPTION_PRICE_ID", { default: "not-configured" });
 const stripeCatalogUnitPriceId = defineString("STRIPE_CATALOG_UNIT_PRICE_ID", { default: "not-configured" });
 const stripeCatalogEndingPriceId = defineString("STRIPE_CATALOG_ENDING_PRICE_ID", { default: "not-configured" });
 const stripePortalConfigurationId = defineString("STRIPE_PORTAL_CONFIGURATION_ID", { default: "not-configured" });
+const windowsDownloadUrl = defineString("WINDOWS_DOWNLOAD_URL", {
+  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.1/MediTest-Setup-5.0.1-win-x64.msi"
+});
 const db = getFirestore();
 
 type GenerateQuestionsRequest = {
@@ -419,6 +424,44 @@ export const meditestLicenseStatus = onRequest(
   }
 );
 
+export const meditestDownloadAccess = onRequest(
+  {
+    invoker: "public",
+    memory: "256MiB",
+    timeoutSeconds: 30
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.set("Allow", "POST").status(405).json({ error: { message: "Nur POST-Anfragen sind erlaubt." } });
+      return;
+    }
+
+    const user = await verifiedUser(req.header("authorization") ?? "", res);
+    if (!user) return;
+
+    const state = await ensureLicenseState(user.uid);
+    const downloadAllowed = user.admin === true ||
+      user.isAdmin === true ||
+      state.premiumActive ||
+      state.subscriptionActive;
+    if (!downloadAllowed) {
+      res.status(403).json({
+        error: {
+          message: "Der Windows-Download wird nach erfolgreichem Kauf freigeschaltet."
+        }
+      });
+      return;
+    }
+
+    res.status(200).json({
+      platform: "windows-x64",
+      version: "5.0.1",
+      fileName: "MediTest-Setup-5.0.1-win-x64.msi",
+      url: windowsDownloadUrl.value().trim()
+    });
+  }
+);
+
 export const meditestLicenseAccess = onRequest(
   {
     invoker: "public",
@@ -617,19 +660,16 @@ export const meditestCreateCheckout = onRequest(
     const user = await verifiedUser(req.header("authorization") ?? "", res);
     if (!user) return;
     const kind = stringValue(req.body?.kind).toLowerCase();
+    const source = stringValue(req.body?.source).toLowerCase();
     const catalogId = stringValue(req.body?.catalogId).slice(0, 200);
     const returnBaseUrl = billingReturnBaseUrl.value().replace(/\/+$/, "");
+    const websiteBaseUrl = billingWebsiteBaseUrl.value().replace(/\/+$/, "");
     const state = await ensureLicenseState(user.uid);
     const stripe = stripeClient();
     const customerId = await ensureStripeCustomer(stripe, user.uid, stringValue(user.email));
     let checkoutData: any;
 
     if (kind === "subscription") {
-      const priceId = stripeSubscriptionPriceId.value().trim();
-      if (!isStripePriceId(priceId)) {
-        res.status(503).json({ error: { message: "Der Stripe-Abo-Preis ist noch nicht konfiguriert." } });
-        return;
-      }
       if (state.premiumActive || state.subscriptionActive) {
         res.status(409).json({ error: { message: "Für dieses Konto ist bereits ein Zugang aktiv." } });
         return;
@@ -665,23 +705,44 @@ export const meditestCreateCheckout = onRequest(
         0,
         Math.ceil((Date.parse(state.trialEndsAt) - Date.now()) / 86_400_000)
       );
+      const isLandingCheckout = source === "landing";
+      const monthlyPriceCents = Math.max(1, billingMonthlyPriceCents.value());
+      const currency = billingCurrency.value().trim().toLowerCase();
       const metadata = {
         meditestPurchaseType: "subscription",
         firebaseUid: user.uid,
-        monthlyPriceCents: String(Math.max(0, billingMonthlyPriceCents.value())),
-        currency: billingCurrency.value().trim().toUpperCase()
+        purchaseSource: isLandingCheckout ? "landing" : "app",
+        monthlyPriceCents: String(monthlyPriceCents),
+        currency: currency.toUpperCase()
       };
       checkoutData = {
         mode: "subscription",
         customer: customerId,
-        line_items: [{ price: priceId, quantity: 1 }],
+        line_items: [{
+          price_data: {
+            currency,
+            unit_amount: monthlyPriceCents,
+            recurring: { interval: "month" },
+            product_data: {
+              name: "MediTest",
+              description: "Monatlicher Zugang zur MediTest Lernsoftware"
+            }
+          },
+          quantity: 1
+        }],
         client_reference_id: user.uid,
-        success_url: `${returnBaseUrl}/pages/license.html?checkout=success`,
-        cancel_url: `${returnBaseUrl}/pages/license.html?checkout=cancelled`,
+        success_url: isLandingCheckout
+          ? `${websiteBaseUrl}/purchase.html?checkout=success`
+          : `${returnBaseUrl}/pages/license.html?checkout=success`,
+        cancel_url: isLandingCheckout
+          ? `${websiteBaseUrl}/purchase.html?checkout=cancelled`
+          : `${returnBaseUrl}/pages/license.html?checkout=cancelled`,
         metadata,
         subscription_data: {
           metadata,
-          ...(remainingTrialDays > 0 ? { trial_period_days: Math.min(60, remainingTrialDays) } : {})
+          ...(!isLandingCheckout && remainingTrialDays > 0
+            ? { trial_period_days: Math.min(60, remainingTrialDays) }
+            : {})
         },
         allow_promotion_codes: false
       };
@@ -993,7 +1054,7 @@ async function ensureGlobalAppConfig(): Promise<GlobalAppConfig> {
   const snapshot = await ref.get();
   const source = snapshot.data() ?? {};
   const config: GlobalAppConfig = {
-    currentAppVersion: stringValue(source.currentAppVersion) || "5.0.0",
+    currentAppVersion: stringValue(source.currentAppVersion) || "5.0.1",
     currentTermsVersion: stringValue(source.currentTermsVersion) || "5.0",
     currentPrivacyVersion: stringValue(source.currentPrivacyVersion) || "5.0",
     allowedOfflineDays: boundedInt(source.allowedOfflineDays, 7, 0, 30),

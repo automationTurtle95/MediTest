@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="MediTest für Windows sicher kaufen und nach erfolgreicher Zahlung herunterladen.">
+  <meta name="theme-color" content="#0b3b3c">
+  <title>MediTest kaufen | Windows</title>
+  <link rel="icon" href="./logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./script.js" defer></script>
+  <script src="./purchase.js" defer></script>
+</head>
+<body class="purchase-page">
+  <a class="skip-link" href="#main-content">Zum Inhalt springen</a>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="./index.html" aria-label="Zur MediTest Startseite">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 40 40"><path d="M20 5v30M5 20h30"></path><path d="M9 10.5A15 15 0 0 1 30.5 9M31 29.5A15 15 0 0 1 9.5 31"></path></svg>
+        </span>
+        <span data-brand-name>MediTest</span>
+      </a>
+      <a class="button button-secondary button-small" href="./index.html#download">Zurück zur Übersicht</a>
+    </div>
+  </header>
+
+  <main class="purchase-main" id="main-content">
+    <div class="container purchase-layout">
+      <section class="purchase-product">
+        <p class="eyebrow"><span></span> Windows-Version</p>
+        <h1>MediTest sicher kaufen.</h1>
+        <p class="purchase-lead">Melde dich an oder erstelle ein Konto. Nach erfolgreicher Zahlung wird der Windows-MSI-Installer für dein Konto freigeschaltet.</p>
+
+        <div class="purchase-summary">
+          <div class="purchase-platform">
+            <span class="platform-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M3 5.2 10.8 4v7.4H3V5.2Zm8.8-1.4L21 2.5v8.9h-9.2V3.8ZM3 12.5h7.8V20L3 18.9v-6.4Zm8.8 0H21v9l-9.2-1.3v-7.7Z"></path></svg>
+            </span>
+            <div>
+              <strong>MediTest für Windows 10 & 11</strong>
+              <span>64-Bit · MSI-Installer · Version 5.0.1</span>
+            </div>
+          </div>
+          <div class="purchase-price">
+            <strong data-price>9,99 €</strong>
+            <span>pro Monat</span>
+          </div>
+        </div>
+
+        <ul class="purchase-benefits">
+          <li>Alle Lern-, Test- und Fortschrittsfunktionen</li>
+          <li>KI-gestützte Fragengenerierung</li>
+          <li>Nutzung auf bis zu zwei Geräten</li>
+          <li>Monatlich kündbar</li>
+        </ul>
+
+        <div class="purchase-status hidden" id="purchaseSuccess" aria-live="polite">
+          <h2>Zahlung bestätigt.</h2>
+          <p>Dein Zugang ist aktiv. Der MSI-Installer kann jetzt heruntergeladen werden.</p>
+          <a class="button button-primary button-large" id="securedDownload" href="#">Windows MSI herunterladen</a>
+        </div>
+      </section>
+
+      <section class="purchase-account" aria-labelledby="accountTitle">
+        <div id="authPanel">
+          <div class="purchase-tabs" role="tablist" aria-label="Konto">
+            <button class="active" id="loginTab" type="button" role="tab" aria-selected="true">Anmelden</button>
+            <button id="registerTab" type="button" role="tab" aria-selected="false">Konto erstellen</button>
+          </div>
+          <h2 id="accountTitle">Mit deinem Konto fortfahren</h2>
+          <form id="purchaseAuthForm">
+            <label for="purchaseEmail">E-Mail-Adresse</label>
+            <input id="purchaseEmail" name="email" type="email" autocomplete="email" required>
+            <label for="purchasePassword">Passwort</label>
+            <input id="purchasePassword" name="password" type="password" autocomplete="current-password" minlength="6" required>
+            <button class="button button-primary button-large" id="authSubmit" type="submit">Anmelden</button>
+          </form>
+          <button class="text-button hidden" id="resendVerification" type="button">Bestätigungs-E-Mail erneut senden</button>
+        </div>
+
+        <div class="hidden" id="checkoutPanel">
+          <div class="signed-in-row">
+            <div>
+              <span>Angemeldet als</span>
+              <strong id="signedInEmail"></strong>
+            </div>
+            <button class="text-button" id="logoutButton" type="button">Abmelden</button>
+          </div>
+
+          <label class="consent-row">
+            <input id="termsConsent" type="checkbox">
+            <span>Ich akzeptiere die <a href="./legal.html#agb" target="_blank" rel="noopener">AGB</a> und habe die <a href="./legal.html#datenschutz" target="_blank" rel="noopener">Datenschutzerklärung</a> gelesen.</span>
+          </label>
+          <label class="consent-row">
+            <input id="deliveryConsent" type="checkbox">
+            <span>Ich verlange die sofortige Bereitstellung und bestätige, dass mein Widerrufsrecht bei vollständiger Vertragserfüllung nach Maßgabe der gesetzlichen Voraussetzungen erlöschen kann.</span>
+          </label>
+
+          <button class="button button-primary button-large" id="checkoutButton" type="button" disabled>Für 9,99 € kaufen</button>
+          <p class="secure-note">Die Zahlung wird auf einer gesicherten Zahlungsseite abgeschlossen.</p>
+        </div>
+
+        <p class="purchase-message hidden" id="purchaseMessage" aria-live="polite"></p>
+      </section>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-bottom">
+      <p>© <span data-current-year>2026</span> <span data-brand-name>MediTest</span>. Alle Rechte vorbehalten.</p>
+      <div class="purchase-footer-links">
+        <a href="./legal.html#impressum">Impressum</a>
+        <a href="./legal.html#datenschutz">Datenschutz</a>
+        <a href="./legal.html#agb">AGB</a>
+        <a href="./legal.html#widerruf">Widerruf</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

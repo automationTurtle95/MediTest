@@ -17,5 +17,71 @@
   ],
   "extensions": {
     "firestore-stripe-invoices": "stripe/firestore-stripe-invoices@0.2.2"
+  },
+  "hosting": {
+    "public": "../landing-page",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "README.md"
+    ],
+    "cleanUrls": true,
+    "trailingSlash": false,
+    "rewrites": [
+      {
+        "source": "/api/purchase/checkout",
+        "function": {
+          "functionId": "meditestCreateCheckout",
+          "region": "europe-west3"
+        }
+      },
+      {
+        "source": "/api/purchase/status",
+        "function": {
+          "functionId": "meditestLicenseStatus",
+          "region": "europe-west3"
+        }
+      },
+      {
+        "source": "/api/purchase/download",
+        "function": {
+          "functionId": "meditestDownloadAccess",
+          "region": "europe-west3"
+        }
+      }
+    ],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          },
+          {
+            "key": "Referrer-Policy",
+            "value": "strict-origin-when-cross-origin"
+          },
+          {
+            "key": "Permissions-Policy",
+            "value": "camera=(), microphone=(), geolocation=()"
+          },
+          {
+            "key": "Content-Security-Policy",
+            "value": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; object-src 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com; frame-ancestors 'none'"
+          }
+        ]
+      },
+      {
+        "source": "**/*.@(css|js)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=3600"
+          }
+        ]
+      }
+    ]
   }
 }

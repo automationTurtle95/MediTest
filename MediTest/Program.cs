@@ -1683,7 +1683,7 @@ static string? ValidateQuestionImage(string? imageDataUrl)
 static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
 static int BillingTrialDays(IConfiguration cfg) => Math.Clamp(cfg.GetValue<int?>("Billing:TrialDays") ?? 7, 1, 60);
-static int BillingMonthlyPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:MonthlyPriceCents") ?? 599);
+static int BillingMonthlyPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:MonthlyPriceCents") ?? 999);
 static int BillingCatalogQuestionPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:CatalogQuestionPriceCents") ?? 10);
 static int BillingCatalogPriceEndingCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:CatalogPriceEndingCents") ?? 9);
 static int BillingCatalogExampleQuestionCount(IConfiguration cfg) => Math.Clamp(cfg.GetValue<int?>("Billing:CatalogPriceExampleQuestionCount") ?? 25, 1, 1000);

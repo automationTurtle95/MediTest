@@ -5,39 +5,39 @@
 Nach dem Release-Build liegen die verkaufbaren Pakete hier:
 
 ```text
-MediTest-Setup-5.0.0-win-x64.msi
-MediTest-5.0.0-win-x64-portable.zip
-MediTest-5.0.0-macos-x64-setup.zip
-MediTest-5.0.0-macos-arm64-setup.zip
+MediTest-Setup-5.0.1-win-x64.msi
+MediTest-5.0.1-win-x64-portable.zip
+MediTest-5.0.1-macos-x64-setup.zip
+MediTest-5.0.1-macos-arm64-setup.zip
 SHA256SUMS.txt
 ```
 
 Für normale Kunden sollten auf der Webseite primär diese Downloads sichtbar sein:
 
-- Windows: `MediTest-Setup-5.0.0-win-x64.msi`
-- Mac Intel: `MediTest-5.0.0-macos-x64-setup.zip`
-- Mac Apple Silicon: `MediTest-5.0.0-macos-arm64-setup.zip`
+- Windows: `MediTest-Setup-5.0.1-win-x64.msi`
+- Mac Intel: `MediTest-5.0.1-macos-x64-setup.zip`
+- Mac Apple Silicon: `MediTest-5.0.1-macos-arm64-setup.zip`
 
 Das portable Windows-ZIP ist praktisch für Support oder Tests, sollte aber nicht der Hauptdownload sein.
 
 ## GitHub-Downloadlinks
 
-Wenn der GitHub Release `v5.0.0` veröffentlicht ist, können die Buttons auf der Webseite direkt auf die Release-Assets zeigen:
+Wenn der GitHub Release `v5.0.1` veröffentlicht ist, können die Buttons auf der Webseite direkt auf die Release-Assets zeigen:
 
 ```html
-<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-Setup-5.0.0-win-x64.msi">Windows herunterladen</a>
-<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-5.0.0-macos-arm64-setup.zip">Mac Apple Silicon herunterladen</a>
-<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-5.0.0-macos-x64-setup.zip">Mac Intel herunterladen</a>
+<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-Setup-5.0.1-win-x64.msi">Windows herunterladen</a>
+<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-5.0.1-macos-arm64-setup.zip">Mac Apple Silicon herunterladen</a>
+<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-5.0.1-macos-x64-setup.zip">Mac Intel herunterladen</a>
 ```
 
-Alternativ kannst du die Dateien des GitHub Release `v5.0.0` auf deinen eigenen Webserver hochladen. Dann müssen die Links auf deiner Webseite auf die dortigen Dateien zeigen.
+Alternativ kannst du die Dateien des GitHub Release `v5.0.1` auf deinen eigenen Webserver hochladen. Dann müssen die Links auf deiner Webseite auf die dortigen Dateien zeigen.
 
 ## Verkauf und Freischaltung
 
 MediTest ist technisch für Verkauf vorbereitet:
 
 - 7 Tage Testphase pro Firebase-Konto
-- Monatsabo über `STRIPE_SUBSCRIPTION_PRICE_ID`
+- Monatsabo zum serverseitig konfigurierten Preis `BILLING_MONTHLY_PRICE_CENTS`
 - Katalogpreise über `STRIPE_CATALOG_UNIT_PRICE_ID` und `STRIPE_CATALOG_ENDING_PRICE_ID`
 - Premium- und Gratis-Code-Hashes über Firebase-Functions-Parameter
 

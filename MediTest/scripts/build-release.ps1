@@ -146,13 +146,13 @@ function New-WixBitmap([string]$OutputFile, [int]$Width, [int]$Height, [bool]$Is
     $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $graphics.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::ClearTypeGridFit
 
-    $bg = [System.Drawing.ColorTranslator]::FromHtml("#f4f7fb")
-    $field = [System.Drawing.ColorTranslator]::FromHtml("#fafcff")
-    $text = [System.Drawing.ColorTranslator]::FromHtml("#172033")
-    $muted = [System.Drawing.ColorTranslator]::FromHtml("#5f7088")
-    $primary = [System.Drawing.ColorTranslator]::FromHtml("#0ea5e9")
-    $primaryDark = [System.Drawing.ColorTranslator]::FromHtml("#0284c7")
-    $border = [System.Drawing.ColorTranslator]::FromHtml("#d7e2ef")
+    $bg = [System.Drawing.ColorTranslator]::FromHtml("#f1f7f8")
+    $field = [System.Drawing.ColorTranslator]::FromHtml("#f7faf9")
+    $text = [System.Drawing.ColorTranslator]::FromHtml("#132f30")
+    $muted = [System.Drawing.ColorTranslator]::FromHtml("#617a7a")
+    $primary = [System.Drawing.ColorTranslator]::FromHtml("#0b3b3c")
+    $primaryDark = [System.Drawing.ColorTranslator]::FromHtml("#176467")
+    $border = [System.Drawing.ColorTranslator]::FromHtml("#dce9e6")
 
     try {
         $graphics.Clear($bg)

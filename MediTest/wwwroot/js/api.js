@@ -905,6 +905,40 @@ function renderAccountDock(user) {
   enhanceTooltips(dock);
 }
 
+const productLogoMarkup = `
+  <span class="brand-mark" aria-hidden="true">
+    <img src="/assets/meditest-logo.svg" alt="">
+  </span>`;
+
+function applyProductBranding() {
+  document.querySelectorAll('a.brand').forEach(link => {
+    if (link.querySelector('.brand-mark')) return;
+    link.innerHTML = `${productLogoMarkup}<span>MediTest</span>`;
+    link.setAttribute('aria-label', 'MediTest Startseite');
+  });
+
+  const authTitle = document.querySelector('.auth-brand h1');
+  if (authTitle && !authTitle.querySelector('.brand-mark')) {
+    authTitle.classList.add('auth-brand-logo');
+    authTitle.innerHTML = `${productLogoMarkup}<span>MediTest</span>`;
+  }
+
+  const successLogo = document.querySelector('.login-success-logo');
+  if (successLogo) {
+    successLogo.innerHTML = '<img src="/assets/meditest-logo.svg" alt="">';
+  }
+
+  if (!document.querySelector('link[rel="icon"]')) {
+    const favicon = document.createElement('link');
+    favicon.rel = 'icon';
+    favicon.type = 'image/svg+xml';
+    favicon.href = '/assets/meditest-logo.svg';
+    document.head.appendChild(favicon);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', applyProductBranding);
+
 document.addEventListener('DOMContentLoaded', () => {
   const nav = document.querySelector('header.topbar nav');
   if (!nav) return;
