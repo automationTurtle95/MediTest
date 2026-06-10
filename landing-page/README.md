@@ -44,22 +44,21 @@ python -m http.server 8080 --directory landing-page
 
 Danach `http://127.0.0.1:8080` öffnen.
 
-Test mit der exakten Firebase-Hosting-Konfiguration:
+Test mit der exakten Hosting-Konfiguration aus dem Repository-Stamm:
 
 ```powershell
-cd firebase
-npx firebase-tools emulators:start --only hosting --project meditest-12354
+npx firebase-tools emulators:start --config firebase.hosting.json --only hosting --project meditest-12354
 ```
 
 Danach die vom Emulator ausgegebene lokale Hosting-URL öffnen.
 
 ## Deployment
 
-Die bestehende Firebase-Default-Site ist ausschließlich für die Landingpage
-konfiguriert. Aus dem Ordner `firebase`:
+Die bestehende Default-Site ist ausschließlich für die Landingpage
+konfiguriert. Aus dem Repository-Stamm:
 
 ```powershell
-npx firebase-tools deploy --only hosting --project meditest-12354
+npx firebase-tools deploy --config firebase.hosting.json --only hosting --project meditest-12354
 ```
 
 Der Kaufablauf benötigt zusätzlich die gezielt deployten Functions
