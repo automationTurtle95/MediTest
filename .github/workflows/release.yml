@@ -60,7 +60,7 @@ jobs:
 
   macos:
     runs-on: macos-14
-    timeout-minutes: 150
+    timeout-minutes: 270
 
     steps:
       - name: Checkout

@@ -54,6 +54,8 @@ Der macOS-Job:
 7. reicht beide Pakete parallel ein und fragt Apples Notarisierungsstatus anhand der Submission-ID ab,
 8. heftet die Tickets an und führt Gatekeeper-Prüfungen aus.
 
+Ausstehende Apple-Submissions werden bis zu vier Stunden lang in kurzen Intervallen geprüft.
+
 Fehlt ein Secret oder schlägt eine Apple-Prüfung fehl, wird der gesamte Release abgebrochen. Es gibt keinen unsignierten macOS-Fallback.
 
 ## Veröffentlichung

@@ -207,14 +207,14 @@ notarize_package() {
 
   local notary_status=""
   local poll_attempt
-  for poll_attempt in $(seq 1 240); do
+  for poll_attempt in $(seq 1 480); do
     xcrun notarytool info "$submission_id" \
       --key "$NOTARY_KEY_FILE" \
       --key-id "$NOTARY_KEY_ID" \
       --issuer "$NOTARY_ISSUER_ID" \
       --output-format json > "$notary_result_file"
     notary_status="$(plutil -extract status raw -o - "$notary_result_file")"
-    printf 'Notarisierung %s (%s): Status %s (Pruefung %s/240)\n' \
+    printf 'Notarisierung %s (%s): Status %s (Pruefung %s/480)\n' \
       "$architecture" "$submission_id" "$notary_status" "$poll_attempt"
 
     if [[ "$notary_status" == "Accepted" ]]; then
@@ -232,7 +232,7 @@ notarize_package() {
   done
 
   if [[ "$notary_status" != "Accepted" ]]; then
-    echo "Apple-Notarisierung ist nach 120 Minuten noch nicht abgeschlossen. Submission-ID: $submission_id" >&2
+    echo "Apple-Notarisierung ist nach 240 Minuten noch nicht abgeschlossen. Submission-ID: $submission_id" >&2
     exit 1
   fi
 

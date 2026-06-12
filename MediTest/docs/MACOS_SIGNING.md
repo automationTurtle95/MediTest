@@ -98,6 +98,8 @@ Der Workflow:
 8. prüft Signatur und Gatekeeper-Freigabe,
 9. veröffentlicht erst danach den GitHub Release.
 
+Der Workflow prüft ausstehende Apple-Submissions bis zu vier Stunden lang in kurzen Intervallen.
+
 Fehlt ein Secret oder lehnt Apple ein Paket ab, schlägt der Release fehl. Der Workflow veröffentlicht dann keine unsignierte Ersatzdatei.
 
 ## Manuelle Kontrolle
