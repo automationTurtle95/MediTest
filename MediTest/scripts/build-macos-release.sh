@@ -216,6 +216,7 @@ build_package() {
   local payload_root="$work_dir/payload-root"
   local package_file="$MAC_ROOT/MediTest-Setup-$VERSION-macos-$architecture.pkg"
   local unsigned_package_file="$work_dir/MediTest-Setup-$VERSION-macos-$architecture-unsigned.pkg"
+  local diagnostic_package_file="$work_dir/MediTest-Setup-$VERSION-macos-$architecture-no-timestamp.pkg"
 
   rm -rf "$work_dir" "$package_file"
   mkdir -p "$app_bundle/Contents/MacOS" "$app_bundle/Contents/Resources"
@@ -271,6 +272,17 @@ build_package() {
     "$unsigned_package_file"
   ls -lh "$unsigned_package_file"
 
+  log_step "Diagnose: productsign ohne Timestamp startet für $architecture"
+  run_logged_phase "productsign-no-timestamp-$architecture" 60 productsign \
+    --sign "$INSTALLER_SIGNING_IDENTITY" \
+    --timestamp=none \
+    "$unsigned_package_file" \
+    "$diagnostic_package_file"
+  pkgutil --check-signature "$diagnostic_package_file"
+  rm -f "$diagnostic_package_file"
+  log_step "Diagnose: productsign ohne Timestamp erfolgreich für $architecture"
+
+  log_step "Release-Signatur mit vertrauenswürdigem Timestamp startet für $architecture"
   run_logged_phase "productsign-$architecture" 180 productsign \
     --sign "$INSTALLER_SIGNING_IDENTITY" \
     --timestamp \

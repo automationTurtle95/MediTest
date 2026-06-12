@@ -126,6 +126,15 @@ jobs:
             security find-identity -v "$KEYCHAIN_PATH"
             exit 1
           fi
+          echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] Temporärer Signing-Keychain ist entsperrt und als Default gesetzt"
+          security show-keychain-info "$KEYCHAIN_PATH"
+          security find-identity -v "$KEYCHAIN_PATH"
+          INSTALLER_CERT_SHA1="$(security find-certificate -c "$INSTALLER_IDENTITY" -Z "$KEYCHAIN_PATH" | awk '/SHA-1 hash:/{print $3; exit}')"
+          if [[ -z "$INSTALLER_CERT_SHA1" ]]; then
+            echo "Installer-Zertifikat wurde ohne abrufbaren SHA-1-Fingerprint importiert." >&2
+            exit 1
+          fi
+          echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] Developer-ID-Installer-Identität inklusive privatem Schlüssel gefunden: ${INSTALLER_CERT_SHA1:0:8}..."
 
           echo "APPLE_DEVELOPER_ID_APPLICATION=$APP_IDENTITY" >> "$GITHUB_ENV"
           echo "APPLE_DEVELOPER_ID_INSTALLER=$INSTALLER_IDENTITY" >> "$GITHUB_ENV"
@@ -155,6 +164,13 @@ jobs:
             --key-id "$APPLE_API_KEY_ID" \
             --issuer "$APPLE_API_ISSUER_ID" \
             --output-format json >/dev/null
+
+          echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] Prüfe Erreichbarkeit des Apple-Timestamp-Dienstes"
+          curl --silent --show-error \
+            --output /dev/null \
+            --max-time 15 \
+            --write-out 'Apple timestamp endpoint: HTTP %{http_code}, connect=%{time_connect}s, total=%{time_total}s\n' \
+            https://timestamp.apple.com/ts01 || true
 
       - name: Build, sign and notarize macOS installers
         shell: bash
