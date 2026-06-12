@@ -10,7 +10,7 @@ int main(void)
     char executablePath[PATH_MAX];
     uint32_t executablePathSize = sizeof(executablePath);
     if (_NSGetExecutablePath(executablePath, &executablePathSize) != 0) {
-        fputs("MediTest konnte seinen Installationspfad nicht bestimmen.\n", stderr);
+        fputs("Meduvalo konnte seinen Installationspfad nicht bestimmen.\n", stderr);
         return 1;
     }
 
@@ -22,7 +22,7 @@ int main(void)
 
     char *macosDirectory = strrchr(resolvedPath, '/');
     if (macosDirectory == NULL) {
-        fputs("MediTest-Appstruktur ist ungueltig.\n", stderr);
+        fputs("Meduvalo-Appstruktur ist ungueltig.\n", stderr);
         return 1;
     }
     *macosDirectory = '\0';
@@ -31,7 +31,7 @@ int main(void)
     char appExecutable[PATH_MAX];
     if (snprintf(appDirectory, sizeof(appDirectory), "%s/../Resources/app", resolvedPath) >= (int)sizeof(appDirectory) ||
         snprintf(appExecutable, sizeof(appExecutable), "%s/MediTest", appDirectory) >= (int)sizeof(appExecutable)) {
-        fputs("MediTest-Installationspfad ist zu lang.\n", stderr);
+        fputs("Meduvalo-Installationspfad ist zu lang.\n", stderr);
         return 1;
     }
 
@@ -44,6 +44,6 @@ int main(void)
     setenv("DOTNET_URLS", "http://127.0.0.1:55000", 0);
     execl(appExecutable, appExecutable, (char *)NULL);
 
-    perror("MediTest starten");
+    perror("Meduvalo starten");
     return 1;
 }

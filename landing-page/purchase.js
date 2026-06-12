@@ -5,9 +5,50 @@ const PURCHASE_CONFIG = Object.freeze({
   sessionKey: "meditest-purchase-session",
   checkoutEndpoint: "./api/purchase/checkout",
   statusEndpoint: "./api/purchase/status",
-  downloadEndpoint: "./api/purchase/download"
+  downloadEndpoint: "./api/purchase/download",
+  redeemCodeEndpoint: "./api/purchase/redeem-code"
 });
 
+const DOWNLOAD_PRODUCTS = Object.freeze({
+  "windows-x64": {
+    kicker: "Windows-Version",
+    lead: "Melde dich an oder erstelle ein Konto. Der einmalige Kauf schaltet den Windows-MSI-Installer und eine 7-tägige Testphase mit allen Funktionen frei.",
+    name: "Meduvalo für Windows 10 & 11",
+    details: "64-Bit · MSI-Installer · Version 5.0.4",
+    benefit: "Windows-MSI direkt nach erfolgreicher Zahlung",
+    success: "Dein Kauf ist aktiv und deine 7-tägige Testphase hat begonnen. Der MSI-Installer kann jetzt heruntergeladen werden.",
+    downloadLabel: "Windows MSI herunterladen",
+    apple: false
+  },
+  "macos-arm64": {
+    kicker: "macOS · Apple Silicon",
+    lead: "Melde dich an oder erstelle ein Konto. Der einmalige Kauf schaltet das signierte und von Apple notarisierte PKG für Apple Silicon sowie eine 7-tägige Testphase frei.",
+    name: "Meduvalo für Mac mit Apple Chip",
+    details: "Apple Silicon · signiertes PKG · macOS 11+ · Version 5.0.4",
+    benefit: "Notarisiertes macOS-PKG direkt nach erfolgreicher Zahlung",
+    success: "Dein Kauf ist aktiv und deine 7-tägige Testphase hat begonnen. Das PKG für Apple Silicon kann jetzt heruntergeladen werden.",
+    downloadLabel: "Mac-PKG für Apple Silicon herunterladen",
+    apple: true
+  },
+  "macos-x64": {
+    kicker: "macOS · Intel",
+    lead: "Melde dich an oder erstelle ein Konto. Der einmalige Kauf schaltet das signierte und von Apple notarisierte PKG für Intel-Macs sowie eine 7-tägige Testphase frei.",
+    name: "Meduvalo für Intel-Mac",
+    details: "Intel 64-Bit · signiertes PKG · macOS 11+ · Version 5.0.4",
+    benefit: "Notarisiertes macOS-PKG direkt nach erfolgreicher Zahlung",
+    success: "Dein Kauf ist aktiv und deine 7-tägige Testphase hat begonnen. Das PKG für Intel-Macs kann jetzt heruntergeladen werden.",
+    downloadLabel: "Mac-PKG für Intel herunterladen",
+    apple: true
+  }
+});
+
+function selectedDownloadPlatform() {
+  const requested = new URLSearchParams(location.search).get("platform") || "";
+  return Object.prototype.hasOwnProperty.call(DOWNLOAD_PRODUCTS, requested) ? requested : "windows-x64";
+}
+
+const downloadPlatform = selectedDownloadPlatform();
+const downloadProduct = DOWNLOAD_PRODUCTS[downloadPlatform];
 const authPanel = document.getElementById("authPanel");
 const checkoutPanel = document.getElementById("checkoutPanel");
 const loginTab = document.getElementById("loginTab");
@@ -22,11 +63,34 @@ const logoutButton = document.getElementById("logoutButton");
 const termsConsent = document.getElementById("termsConsent");
 const deliveryConsent = document.getElementById("deliveryConsent");
 const checkoutButton = document.getElementById("checkoutButton");
+const freeProductCode = document.getElementById("freeProductCode");
+const redeemProductCode = document.getElementById("redeemProductCode");
 const purchaseMessage = document.getElementById("purchaseMessage");
 const purchaseSuccess = document.getElementById("purchaseSuccess");
 const securedDownload = document.getElementById("securedDownload");
+const productKicker = document.getElementById("productKicker");
+const productLead = document.getElementById("productLead");
+const productName = document.getElementById("productName");
+const productDetails = document.getElementById("productDetails");
+const downloadBenefit = document.getElementById("downloadBenefit");
+const purchaseSuccessText = document.getElementById("purchaseSuccessText");
+const windowsPlatformIcon = document.getElementById("windowsPlatformIcon");
+const applePlatformIcon = document.getElementById("applePlatformIcon");
 let authMode = "login";
 let productPurchased = false;
+
+function applySelectedProduct() {
+  productKicker.textContent = downloadProduct.kicker;
+  productLead.textContent = downloadProduct.lead;
+  productName.textContent = downloadProduct.name;
+  productDetails.textContent = downloadProduct.details;
+  downloadBenefit.textContent = downloadProduct.benefit;
+  purchaseSuccessText.textContent = downloadProduct.success;
+  securedDownload.textContent = downloadProduct.downloadLabel;
+  windowsPlatformIcon.classList.toggle("hidden", downloadProduct.apple);
+  applePlatformIcon.classList.toggle("hidden", !downloadProduct.apple);
+  document.title = `${downloadProduct.name} kaufen | Meduvalo`;
+}
 
 function showMessage(message, type = "") {
   purchaseMessage.textContent = message;
@@ -126,7 +190,9 @@ async function authorizedRequest(url, options = {}) {
 }
 
 function updateCheckoutButton() {
-  checkoutButton.disabled = productPurchased || !(termsConsent.checked && deliveryConsent.checked);
+  const consentMissing = !(termsConsent.checked && deliveryConsent.checked);
+  checkoutButton.disabled = productPurchased || consentMissing;
+  redeemProductCode.disabled = productPurchased || consentMissing || !freeProductCode.value.trim();
 }
 
 function setAuthenticated(session) {
@@ -142,7 +208,9 @@ function setLoggedOut() {
   checkoutPanel.classList.add("hidden");
   purchaseSuccess.classList.add("hidden");
   securedDownload.removeAttribute("href");
-  checkoutButton.textContent = "Für 9,99 € kaufen";
+  checkoutButton.textContent = "Für 14,99 € kaufen";
+  freeProductCode.value = "";
+  redeemProductCode.textContent = "Gratis herunterladen";
 }
 
 function setMode(mode) {
@@ -197,7 +265,7 @@ async function login(email, password) {
 async function requestSecuredDownload() {
   const download = await authorizedRequest(PURCHASE_CONFIG.downloadEndpoint, {
     method: "POST",
-    body: "{}"
+    body: JSON.stringify({ platform: downloadPlatform })
   });
   securedDownload.href = download.url;
   securedDownload.setAttribute("download", download.fileName);
@@ -213,7 +281,7 @@ async function refreshPurchaseAccess() {
   checkoutButton.textContent = "Bereits gekauft";
   updateCheckoutButton();
   await requestSecuredDownload();
-  showMessage("MediTest ist für dieses Konto bereits freigeschaltet.", "success");
+  showMessage("Meduvalo ist für dieses Konto bereits freigeschaltet.", "success");
   return true;
 }
 
@@ -247,6 +315,7 @@ loginTab.addEventListener("click", () => setMode("login"));
 registerTab.addEventListener("click", () => setMode("register"));
 termsConsent.addEventListener("change", updateCheckoutButton);
 deliveryConsent.addEventListener("change", updateCheckoutButton);
+freeProductCode.addEventListener("input", updateCheckoutButton);
 
 authForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -293,7 +362,7 @@ checkoutButton.addEventListener("click", async () => {
   try {
     const checkout = await authorizedRequest(PURCHASE_CONFIG.checkoutEndpoint, {
       method: "POST",
-      body: JSON.stringify({ kind: "product", source: "landing" })
+      body: JSON.stringify({ kind: "product", source: "landing", platform: downloadPlatform })
     });
     location.href = checkout.url;
   } catch (error) {
@@ -301,6 +370,28 @@ checkoutButton.addEventListener("click", async () => {
     updateCheckoutButton();
   }
 });
+
+redeemProductCode.addEventListener("click", async () => {
+  redeemProductCode.disabled = true;
+  showMessage("Gratis-Code wird geprüft...");
+  try {
+    const result = await authorizedRequest(PURCHASE_CONFIG.redeemCodeEndpoint, {
+      method: "POST",
+      body: JSON.stringify({ code: freeProductCode.value.trim() })
+    });
+    productPurchased = true;
+    checkoutButton.textContent = "Bereits freigeschaltet";
+    redeemProductCode.textContent = "Code eingelöst";
+    updateCheckoutButton();
+    await requestSecuredDownload();
+    showMessage(result.message || "Meduvalo wurde kostenlos freigeschaltet.", "success");
+  } catch (error) {
+    showMessage(error.message, "error");
+    updateCheckoutButton();
+  }
+});
+
+applySelectedProduct();
 
 (async () => {
   const session = await currentSession();

@@ -186,7 +186,7 @@ function New-WixBitmap([string]$OutputFile, [int]$Width, [int]$Height, [bool]$Is
             $bodyFont = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Regular)
             $smallFont = New-Object System.Drawing.Font("Segoe UI", 7.5, [System.Drawing.FontStyle]::Regular)
             $whiteBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::White)
-            $graphics.DrawString("MediTest", $brandFont, $whiteBrush, 22, 44)
+            $graphics.DrawString("Meduvalo", $brandFont, $whiteBrush, 22, 44)
             $graphics.DrawString("MC-Training", $bodyFont, $whiteBrush, 24, 84)
             $graphics.DrawString("lokal und prüfungsnah", $smallFont, $whiteBrush, 24, 105)
             $brandFont.Dispose(); $bodyFont.Dispose(); $smallFont.Dispose(); $whiteBrush.Dispose()
@@ -270,8 +270,8 @@ function New-WixSource([string]$AppSource, [string]$OutputFile, [string]$License
 
     $wxs = @"
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
-  <Package Name="MediTest" Manufacturer="MediTest" Version="$Version" UpgradeCode="$upgradeCode" Scope="perUser">
-    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="Eine neuere Version von MediTest ist bereits installiert." />
+  <Package Name="Meduvalo" Manufacturer="Lukas Hofer" Version="$Version" UpgradeCode="$upgradeCode" Scope="perUser">
+    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="Eine neuere Version von Meduvalo ist bereits installiert." />
     <MediaTemplate EmbedCab="yes" />
     <Icon Id="MediTestIcon" SourceFile="`$(var.AppSource)\MediTest.ico" />
     <Property Id="ARPPRODUCTICON" Value="MediTestIcon" />
@@ -282,7 +282,7 @@ function New-WixSource([string]$AppSource, [string]$OutputFile, [string]$License
 
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="ProgramsDir" Name="Programs">
-        <Directory Id="INSTALLFOLDER" Name="MediTest">
+        <Directory Id="INSTALLFOLDER" Name="Meduvalo">
 $directoryTree
         </Directory>
       </Directory>
@@ -290,14 +290,14 @@ $directoryTree
 
     <StandardDirectory Id="DesktopFolder">
       <Component Id="DesktopShortcutComponent" Guid="{E379973D-12BB-4F70-B453-01AA4AB7903E}">
-        <Shortcut Id="DesktopShortcut" Name="MediTest" Target="[INSTALLFOLDER]MediTest.exe" WorkingDirectory="INSTALLFOLDER" Icon="MediTestIcon" />
+        <Shortcut Id="DesktopShortcut" Name="Meduvalo" Target="[INSTALLFOLDER]MediTest.exe" WorkingDirectory="INSTALLFOLDER" Icon="MediTestIcon" />
         <RegistryValue Root="HKCU" Key="Software\MediTest" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </StandardDirectory>
 
     <StandardDirectory Id="ProgramMenuFolder">
       <Component Id="StartMenuShortcutComponent" Guid="{B0AF72D2-EC03-47DE-9C62-F8E77692E5EE}">
-        <Shortcut Id="StartMenuShortcut" Name="MediTest" Target="[INSTALLFOLDER]MediTest.exe" WorkingDirectory="INSTALLFOLDER" Icon="MediTestIcon" />
+        <Shortcut Id="StartMenuShortcut" Name="Meduvalo" Target="[INSTALLFOLDER]MediTest.exe" WorkingDirectory="INSTALLFOLDER" Icon="MediTestIcon" />
         <RemoveFolder Id="RemoveStartMenuShortcutComponent" On="uninstall" />
         <RegistryValue Root="HKCU" Key="Software\MediTest" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
       </Component>
@@ -305,7 +305,7 @@ $directoryTree
 
     $componentXml
 
-    <Feature Id="MainFeature" Title="MediTest" Level="1">
+    <Feature Id="MainFeature" Title="Meduvalo" Level="1">
       $componentRefs
       <ComponentRef Id="DesktopShortcutComponent" />
       <ComponentRef Id="StartMenuShortcutComponent" />
@@ -322,12 +322,12 @@ function New-MacInstaller([string]$OutputFile, [string]$Runtime) {
 #!/bin/bash
 set -euo pipefail
 
-APPNAME="MediTest"
+APPNAME="Meduvalo"
 SCRIPT_DIR="`$(cd "`$(dirname "`$0")" && pwd)"
-SRC_APP="`$SCRIPT_DIR/MediTest.app"
+SRC_APP="`$SCRIPT_DIR/Meduvalo.app"
 TARGET_DIR="`$HOME/Applications"
-TARGET_APP="`$TARGET_DIR/MediTest.app"
-DESKTOP_APP="`$HOME/Desktop/MediTest.app"
+TARGET_APP="`$TARGET_DIR/Meduvalo.app"
+DESKTOP_APP="`$HOME/Desktop/Meduvalo.app"
 
 echo "Installiere `$APPNAME ($Runtime) ..."
 
@@ -353,7 +353,7 @@ if [ -d "`$HOME/Desktop" ]; then
   fi
 fi
 
-echo "Fertig. Starte MediTest ..."
+echo "Fertig. Starte Meduvalo ..."
 open "`$TARGET_APP"
 "@
 
@@ -390,7 +390,7 @@ function New-MacInfoPlist([string]$OutputFile, [string]$Runtime) {
   <key>CFBundleDevelopmentRegion</key>
   <string>de</string>
   <key>CFBundleDisplayName</key>
-  <string>MediTest</string>
+  <string>Meduvalo</string>
   <key>CFBundleExecutable</key>
   <string>MediTest</string>
   <key>CFBundleIdentifier</key>
@@ -398,7 +398,7 @@ function New-MacInfoPlist([string]$OutputFile, [string]$Runtime) {
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>MediTest</string>
+  <string>Meduvalo</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
@@ -505,7 +505,7 @@ function New-UpdateManifest([string]$OutputFile) {
         version = $Version
         releaseDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd")
         releaseUrl = $releaseUrl
-        notes = "MediTest $Version"
+        notes = "Meduvalo $Version"
         downloads = [ordered]@{
             "windows-x64" = New-DownloadEntry "windows-x64" "windows/MediTest-Setup-$Version-win-x64.msi"
             "macos-arm64" = New-DownloadEntry "macos-arm64" "macos/MediTest-$Version-macos-arm64-setup.zip"
@@ -559,9 +559,9 @@ if (!$WindowsOnly) {
         $bundle = Join-Path $MacDir "MediTest-$Version-macos-$arch"
         $publish = Join-Path $bundle "publish"
         Publish-App $rid $publish
-        New-MacAppBundle (Join-Path $bundle "MediTest.app") $publish $rid
+        New-MacAppBundle (Join-Path $bundle "Meduvalo.app") $publish $rid
         Remove-IfExists $publish
-        $installer = Join-Path $bundle "Install_MediTest_macOS.command"
+        $installer = Join-Path $bundle "Install_Meduvalo_macOS.command"
         New-MacInstaller $installer $rid
         $zip = Join-Path $MacDir "MediTest-$Version-macos-$arch-setup.zip"
         Compress-FolderWithRoot $bundle $zip

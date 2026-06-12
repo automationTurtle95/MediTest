@@ -1,3 +1,12 @@
+const APP_BRAND = Object.freeze({
+  productName: 'Meduvalo',
+  domain: 'meduvalo.at',
+  websiteUrl: 'https://meduvalo.at',
+  claim: 'Prüfungsnah lernen. Sicherer bestehen.',
+  shortClaim: 'Medizinfragen smart trainieren.',
+  logoPath: '/assets/meduvalo-logo.svg'
+});
+
 const AUTH_SESSION_KEY = 'meditest-firebase-session';
 const AUTH_CONFIG_KEY = 'meditest-auth-config';
 let authConfigPromise = null;
@@ -70,8 +79,8 @@ function firebaseErrorMessage(code) {
 function firebaseProviderErrorMessage(error, providerLabel) {
   const code = String(error?.code || error?.message || '');
   if (code.includes('popup-closed-by-user') || code.includes('cancelled-popup-request')) return `${providerLabel}-Anmeldung wurde abgebrochen.`;
-  if (code.includes('popup-blocked')) return `Das Anmeldefenster für ${providerLabel} wurde vom Browser blockiert. Erlaube Popups für MediTest.`;
-  if (code.includes('unauthorized-domain')) return 'Diese lokale MediTest-Adresse ist in Firebase noch nicht als autorisierte Domain eingetragen.';
+  if (code.includes('popup-blocked')) return `Das Anmeldefenster für ${providerLabel} wurde vom Browser blockiert. Erlaube Popups für ${APP_BRAND.productName}.`;
+  if (code.includes('unauthorized-domain')) return `Diese lokale ${APP_BRAND.productName}-Adresse ist in Firebase noch nicht als autorisierte Domain eingetragen.`;
   if (code.includes('operation-not-allowed')) return `${providerLabel}-Anmeldung ist in Firebase noch nicht vollständig aktiviert.`;
   if (code.includes('account-exists-with-different-credential')) return 'Für diese E-Mail-Adresse besteht bereits ein Konto mit einer anderen Anmeldemethode.';
   if (code.includes('network-request-failed')) return `Die Verbindung zur ${providerLabel}-Anmeldung ist fehlgeschlagen.`;
@@ -83,8 +92,8 @@ async function getFirebaseWebSdk() {
   if (firebaseWebSdkPromise) return firebaseWebSdkPromise;
   firebaseWebSdkPromise = (async () => {
     const [appSdk, authSdk, cfg] = await Promise.all([
-      import('https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js'),
-      import('https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js'),
+      import('https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js'),
+      import('https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js'),
       getAuthConfig()
     ]);
     const firebase = cfg?.firebase;
@@ -161,7 +170,7 @@ async function refreshFirebaseSession(session) {
 function saveFirebaseSession(auth, displayName = '') {
   const expiresAt = Date.now() + (Number(auth.expiresIn) || 3600) * 1000;
   const email = auth.email || '';
-  const name = (displayName || auth.displayName || email.split('@')[0] || 'MediTest Nutzer').trim();
+  const name = (displayName || auth.displayName || email.split('@')[0] || `${APP_BRAND.productName} Nutzer`).trim();
   const user = {
     userId: auth.localId || auth.user_id || '',
     email,
@@ -284,7 +293,7 @@ async function prepareFirebaseProviderAccountDeletion() {
   try {
     const result = await sdk.signInWithPopup(sdk.auth, provider);
     if (result.user.uid !== session.user.userId) {
-      throw new Error('Das bestätigte Apple-Konto stimmt nicht mit dem angemeldeten MediTest-Konto überein.');
+      throw new Error(`Das bestätigte Apple-Konto stimmt nicht mit dem angemeldeten ${APP_BRAND.productName}-Konto überein.`);
     }
     const credential = sdk.OAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
@@ -404,7 +413,7 @@ async function api(path, options = {}) {
   return data;
 }
 
-async function downloadApiFile(path, fallbackName = 'MediTest.pdf') {
+async function downloadApiFile(path, fallbackName = `${APP_BRAND.productName}.pdf`) {
   const headers = new Headers();
   const token = await ensureAuthToken(true);
   if (token) headers.set('Authorization', `Bearer ${token}`);
@@ -473,9 +482,9 @@ function status(el, msg, type='status'){ el.className = type; el.textContent = m
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 const HELP_BY_HEADING = new Map([
-  ['Multiple-Choice-Tests aus Skripten, PDFs und Folien.', 'MediTest erstellt aus deinen Unterlagen Fragenpools. Daraus kannst du Tests starten, Ergebnisse auswerten und schwierige Themen gezielt wiederholen.'],
+  ['Multiple-Choice-Tests aus Skripten, PDFs und Folien.', `${APP_BRAND.productName} erstellt aus deinen Unterlagen Fragenpools. Daraus kannst du Tests starten, Ergebnisse auswerten und schwierige Themen gezielt wiederholen.`],
   ['Dokumente & Fragenpools', 'Hier verwaltest du alle Lernunterlagen und Fragenpools. Du kannst Dateien hochladen, Fragen importieren oder generieren und anschließend einen Test starten.'],
-  ['Unterlage hochladen', 'Wähle eine PDF-, PPTX- oder TXT-Datei. MediTest extrahiert den Text und legt daraus einen neuen Fragenpool an.'],
+  ['Unterlage hochladen', `Wähle eine PDF-, PPTX- oder TXT-Datei. ${APP_BRAND.productName} extrahiert den Text und legt daraus einen neuen Fragenpool an.`],
   ['Fragen aus TXT importieren', 'Importiere bereits vorbereitete Multiple-Choice-Fragen aus einer TXT-Datei. Der optionale Name wird als Name des Fragenpools verwendet.'],
   ['Gespeicherte Dokumente', 'Jede Karte ist ein Fragenpool. Lege die Anzahl der Fragen fest, generiere neue Fragen, bearbeite den Pool oder starte direkt einen Test.'],
   ['Frage manuell erstellen', 'Erstelle eine eigene Frage mit fünf Antwortmöglichkeiten. Wähle die richtige Antwort und ergänze bei Bedarf Thema, Erklärung und Bild.'],
@@ -483,21 +492,21 @@ const HELP_BY_HEADING = new Map([
   ['Gesamtstatistik', 'Die Statistik fasst deine abgeschlossenen Tests zusammen. Über die Auswahl kannst du alle Ergebnisse oder nur einen bestimmten Test anzeigen.'],
   ['Testverlauf', 'Der Verlauf zeigt die Ergebnisse deiner letzten Tests. Ein Klick auf einen Balken öffnet die jeweilige Auswertung.'],
   ['Visuelle Auswertung', 'Die Diagramme zeigen Bestehensquote, Antwortgenauigkeit, Prüfungsstand und Leistung nach Schwierigkeitsgrad.'],
-  ['Lernempfehlung', 'MediTest erkennt Themen mit erhöhter Fehlerquote und schlägt passende Fragen für die Wiederholung vor.'],
+  ['Lernempfehlung', `${APP_BRAND.productName} erkennt Themen mit erhöhter Fehlerquote und schlägt passende Fragen für die Wiederholung vor.`],
   ['Themenanalyse', 'Hier werden Antworten nach Themen gruppiert. Eine hohe Fehlerquote weist auf Themen hin, die du gezielt wiederholen solltest.'],
   ['Schwache Fragen', 'Hier erscheinen Fragen, die wiederholt falsch beantwortet wurden. Öffne sie, um Inhalt und Erklärung noch einmal zu prüfen.'],
   ['Einstellungen', 'Passe Profildaten und Darstellung an, prüfe auf Updates oder ändere dein Passwort.'],
   ['Profil', 'Diese Angaben werden für dein Profil gespeichert und unter anderem im exportierten Testprotokoll verwendet.'],
   ['Programm', 'Wähle eine helle, dunkle oder automatisch an dein Betriebssystem angepasste Darstellung.'],
-  ['Updates', 'Prüfe, ob eine neuere MediTest-Version verfügbar ist, und öffne bei Bedarf den passenden Download.'],
+  ['Updates', `Prüfe, ob eine neuere ${APP_BRAND.productName}-Version verfügbar ist, und öffne bei Bedarf den passenden Download.`],
   ['Sicherheit', 'Ändere das Passwort deines angemeldeten Kontos. Dafür wird zuerst dein aktuelles Passwort geprüft.'],
-  ['Firestore-Katalog', 'Im Katalog findest du veröffentlichte, themenspezifische Tests, die du in dein MediTest-Konto herunterladen kannst.'],
+  ['Firestore-Katalog', `Im Katalog findest du veröffentlichte, themenspezifische Tests, die du in dein ${APP_BRAND.productName}-Konto herunterladen kannst.`],
   ['Verfügbare Tests', 'Wähle einen Katalogtest aus. Je nach Freischaltung kannst du ihn direkt herunterladen, gratis aktivieren oder kaufen.'],
   ['Admin', 'Administratoren können einen vorhandenen Fragenpool mit Titel, Beschreibung, Thema und Schwierigkeit im Katalog veröffentlichen.'],
   ['Lizenz und Premium', 'Hier siehst du Basiskauf, 7-tägige Testphase, Monatsabo und den eingeschränkten Modus. Katalogtests werden separat gekauft.'],
   ['Katalogtests', 'Katalogtests können einzeln freigeschaltet und anschließend in die eigenen Fragenpools heruntergeladen werden.'],
   ['Katalog-Code', 'Ein gültiger Gratis-Code schaltet genau einen noch gesperrten Katalogtest deiner Wahl frei.'],
-  ['Code einlösen', 'Ein administrativer Premium-Code schaltet MediTest-Vollfunktionen frei. Katalogtests bleiben separate Kaufartikel.'],
+  ['Code einlösen', `Ein administrativer Premium-Code schaltet ${APP_BRAND.productName}-Vollfunktionen frei. Katalogtests bleiben separate Kaufartikel.`],
   ['Auswertung', 'Die Auswertung zeigt Ergebnis, Bestehensstatus und alle Antworten. Falsche Antworten werden mit der richtigen Lösung und Erklärung ergänzt.'],
   ['Fehlerschwerpunkte', 'Diese Übersicht gruppiert deine Fehler nach Thema, damit du erkennst, welche Inhalte du zuerst wiederholen solltest.']
 ]);
@@ -588,20 +597,20 @@ const TOOLTIP_BY_TEXT = new Map([
   ['Statistik', 'Ergebnisse und Fehlerschwerpunkte auswerten.'],
   ['Rechtliches & Lizenz', 'Produktdaten, Rechtstexte, Geräte und Lizenzstatus ansehen.'],
   ['Einstellungen', 'Profil und Darstellung konfigurieren.'],
-  ['Einloggen', 'Mit deinem MediTest-Konto anmelden.'],
-  ['Konto erstellen', 'Neuen MediTest-Zugang anlegen.'],
+  ['Einloggen', `Mit deinem ${APP_BRAND.productName}-Konto anmelden.`],
+  ['Konto erstellen', `Neuen ${APP_BRAND.productName}-Zugang anlegen.`],
   ['Registrieren', 'Neues Konto erstellen und direkt anmelden.'],
   ['Passwort vergessen?', 'E-Mail zum Zurücksetzen des Passworts senden.'],
   ['Passwort ändern', 'Aktuelles Passwort prüfen und ein neues Passwort setzen.'],
   ['Abmelden', 'Aktuelle Sitzung beenden.'],
-  ['Schließen', 'MediTest lokal beenden.'],
+  ['Schließen', `${APP_BRAND.productName} lokal beenden.`],
   ['Dokumente verwalten', 'Zur kombinierten Dokumenten- und Hochladen-Seite wechseln.'],
   ['Tests anzeigen', 'Gespeicherte Tests öffnen.'],
   ['Dokumente anzeigen', 'Zur Dokumentenübersicht wechseln.'],
   ['Fragenpool mit neuen Fragen öffnen', 'Den gesamten Fragenpool öffnen; neue Fragen stehen oben.'],
   ['Herunterladen', 'Firestore-Test in deine Firestore-Dokumente importieren.'],
   ['Veröffentlichen', 'Lokalen Fragenpool als Admin im Firestore-Katalog bereitstellen.'],
-  ['Programm schließen', 'MediTest lokal beenden.'],
+  ['Programm schließen', `${APP_BRAND.productName} lokal beenden.`],
   ['Hochladen & Text extrahieren', 'Datei speichern und Text für spätere Fragenpools extrahieren.'],
   ['Zur Übersicht', 'Zur Dokumentenübersicht zurückkehren.'],
   ['Importieren', 'Fragen aus der ausgewählten TXT-Datei importieren.'],
@@ -756,7 +765,7 @@ function renderUpdateModal(info) {
   modal.innerHTML = `
     <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="updateTitle">
       <p class="eyebrow">Update verfügbar</p>
-      <h2 id="updateTitle">MediTest ${esc(info.latestVersion || '')}</h2>
+      <h2 id="updateTitle">${APP_BRAND.productName} ${esc(info.latestVersion || '')}</h2>
       <p>Du nutzt Version ${esc(info.currentVersion || '')}. Eine neuere Version ist verfügbar.</p>
       <p class="muted">${esc(info.notes || info.message || 'Lade den passenden Installer herunter und installiere ihn über die bestehende Version.')}</p>
       <div class="actions">
@@ -780,14 +789,14 @@ async function checkForAppUpdatePopup() {
 }
 
 async function shutdownApp() {
-  if (!confirm('MediTest wirklich schließen?')) return;
+  if (!confirm(`${APP_BRAND.productName} wirklich schließen?`)) return;
   const overlay = document.createElement('div');
   overlay.className = 'modal-backdrop';
   overlay.innerHTML = `
     <section class="modal-panel" role="status" aria-live="polite">
-      <p class="eyebrow">MediTest wird beendet</p>
+      <p class="eyebrow">${APP_BRAND.productName} wird beendet</p>
       <h2>Alle Programmfenster werden geschlossen.</h2>
-      <p class="muted">Laufende MediTest-Prozesse und das zugehörige App-Fenster werden jetzt beendet.</p>
+      <p class="muted">Laufende ${APP_BRAND.productName}-Prozesse und das zugehörige App-Fenster werden jetzt beendet.</p>
     </section>`;
   document.body.appendChild(overlay);
   try { await fetch('/api/system/shutdown', { method: 'POST' }); } catch {}
@@ -834,7 +843,7 @@ function showTermsAcceptanceModal(state) {
     <section class="modal-panel terms-modal" role="dialog" aria-modal="true" aria-labelledby="termsAcceptanceTitle">
       <p class="eyebrow">Zustimmung erforderlich</p>
       <h2 id="termsAcceptanceTitle">Nutzungsbedingungen & Datenschutz</h2>
-      <p>Bitte bestätige die aktuell hinterlegten Versionen, bevor du MediTest weiter nutzt.</p>
+      <p>Bitte bestätige die aktuell hinterlegten Versionen, bevor du ${APP_BRAND.productName} weiter nutzt.</p>
       <p class="muted">AGB-Version ${esc(config.currentTermsVersion || '-')} · Datenschutz-Version ${esc(config.currentPrivacyVersion || '-')}</p>
       <label class="checkline"><input id="acceptTermsCheck" type="checkbox"> <span>Ich akzeptiere die Nutzungsbedingungen.</span></label>
       <label class="checkline"><input id="acceptPrivacyCheck" type="checkbox"> <span>Ich akzeptiere die Datenschutzerklärung.</span></label>
@@ -934,32 +943,32 @@ function renderAccountDock(user) {
 
 const productLogoMarkup = `
   <span class="brand-mark" aria-hidden="true">
-    <img src="/assets/meditest-logo.svg" alt="">
+    <img src="${APP_BRAND.logoPath}" alt="">
   </span>`;
 
 function applyProductBranding() {
   document.querySelectorAll('a.brand').forEach(link => {
     if (link.querySelector('.brand-mark')) return;
-    link.innerHTML = `${productLogoMarkup}<span>MediTest</span>`;
-    link.setAttribute('aria-label', 'MediTest Startseite');
+    link.innerHTML = `${productLogoMarkup}<span>${APP_BRAND.productName}</span>`;
+    link.setAttribute('aria-label', `${APP_BRAND.productName} Startseite`);
   });
 
   const authTitle = document.querySelector('.auth-brand h1');
   if (authTitle && !authTitle.querySelector('.brand-mark')) {
     authTitle.classList.add('auth-brand-logo');
-    authTitle.innerHTML = `${productLogoMarkup}<span>MediTest</span>`;
+    authTitle.innerHTML = `${productLogoMarkup}<span>${APP_BRAND.productName}</span>`;
   }
 
   const successLogo = document.querySelector('.login-success-logo');
   if (successLogo) {
-    successLogo.innerHTML = '<img src="/assets/meditest-logo.svg" alt="">';
+    successLogo.innerHTML = `<img src="${APP_BRAND.logoPath}" alt="">`;
   }
 
   if (!document.querySelector('link[rel="icon"]')) {
     const favicon = document.createElement('link');
     favicon.rel = 'icon';
     favicon.type = 'image/svg+xml';
-    favicon.href = '/assets/meditest-logo.svg';
+    favicon.href = APP_BRAND.logoPath;
     document.head.appendChild(favicon);
   }
 }

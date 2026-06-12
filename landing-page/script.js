@@ -1,15 +1,20 @@
 "use strict";
 
 const SITE_CONFIG = Object.freeze({
-  brandName: "MediTest",
-  purchasePrice: "9,99 €",
+  brandName: "Meduvalo",
+  domain: "meduvalo.at",
+  websiteUrl: "https://meduvalo.at",
+  claim: "Prüfungsnah lernen. Sicherer bestehen.",
+  shortClaim: "Medizinfragen smart trainieren.",
+  description: "Meduvalo ist eine Lernsoftware für Medizinstudenten zur prüfungsnahen Vorbereitung mit strukturierten Fragen, Tests, Lernmodulen, Fortschrittsübersicht und KI-gestützter Fragengenerierung.",
+  purchasePrice: "14,99 €",
   monthlyPrice: "5,99 €",
   purchaseUrl: "./purchase.html"
 });
 
 const LEGAL_CONFIG = Object.freeze({
   operatorName: "Lukas Hofer",
-  businessName: "MediTest",
+  businessName: "Meduvalo",
   contactEmail: "lhofer9@gmail.com",
   postalAddress: "Lerchenweg 21b, 4203 Altenberg bei Linz",
   country: "Österreich"
@@ -21,7 +26,7 @@ document.querySelectorAll("[data-brand-name]").forEach((element) => {
 
 document.querySelectorAll("[data-legal-field]").forEach((element) => {
   const value = LEGAL_CONFIG[element.dataset.legalField];
-  element.textContent = value || "Vor Veröffentlichung ergänzen";
+  element.textContent = value || "Nicht angegeben";
   element.classList.toggle("legal-field-missing", !value);
 });
 
@@ -32,7 +37,7 @@ document.querySelectorAll("[data-contact-email]").forEach((link) => {
     return;
   }
 
-  link.textContent = "Kontaktadresse vor Veröffentlichung ergänzen";
+  link.textContent = "Kontakt nicht verfügbar";
   link.removeAttribute("href");
   link.setAttribute("aria-disabled", "true");
   link.classList.add("legal-field-missing");

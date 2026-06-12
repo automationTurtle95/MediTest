@@ -5,7 +5,8 @@ import * as logger from "firebase-functions/logger";
 import { defineInt, defineSecret, defineString } from "firebase-functions/params";
 import { onRequest } from "firebase-functions/v2/https";
 import { setGlobalOptions } from "firebase-functions/v2/options";
-import { createHash } from "node:crypto";
+import { GoogleGenAI } from "@google/genai";
+import { createHash, randomInt } from "node:crypto";
 import Stripe from "stripe";
 
 initializeApp();
@@ -13,6 +14,14 @@ initializeApp();
 setGlobalOptions({
   region: "europe-west3",
   maxInstances: 10
+});
+
+const BRAND = Object.freeze({
+  productName: "Meduvalo",
+  domain: "meduvalo.at",
+  websiteUrl: "https://meduvalo.at",
+  claim: "Prüfungsnah lernen. Sicherer bestehen.",
+  shortClaim: "Medizinfragen smart trainieren."
 });
 
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
@@ -28,27 +37,40 @@ const aiMaxPromptChars = defineInt("AI_MAX_PROMPT_CHARS", { default: 50000 });
 const freeCatalogCodeHashList = defineString("FREE_CATALOG_CODE_HASHES", {
   default: ""
 });
+const freeProductCodeHashList = defineString("FREE_PRODUCT_CODE_HASHES", {
+  default: ""
+});
 const premiumCodeHashList = defineString("PREMIUM_CODE_HASHES", {
   default: ""
 });
 const billingTrialDays = defineInt("BILLING_TRIAL_DAYS", { default: 7 });
-const billingProductPriceCents = defineInt("BILLING_PRODUCT_PRICE_CENTS", { default: 999 });
+const billingProductPriceCents = defineInt("BILLING_PRODUCT_PRICE_CENTS", { default: 1499 });
 const billingMonthlyPriceCents = defineInt("BILLING_MONTHLY_PRICE_CENTS", { default: 599 });
 const billingCatalogQuestionPriceCents = defineInt("BILLING_CATALOG_QUESTION_PRICE_CENTS", { default: 10 });
 const billingCatalogPriceEndingCents = defineInt("BILLING_CATALOG_PRICE_ENDING_CENTS", { default: 9 });
 const billingCurrency = defineString("BILLING_CURRENCY", { default: "EUR" });
 const billingReturnBaseUrl = defineString("BILLING_RETURN_BASE_URL", { default: "http://127.0.0.1:55000" });
 const billingWebsiteBaseUrl = defineString("BILLING_WEBSITE_BASE_URL", {
-  default: "https://meditest-12354.web.app"
+  default: BRAND.websiteUrl
 });
 const stripeCustomersCollection = defineString("STRIPE_CUSTOMERS_COLLECTION", { default: "customers" });
 const stripeCatalogUnitPriceId = defineString("STRIPE_CATALOG_UNIT_PRICE_ID", { default: "not-configured" });
 const stripeCatalogEndingPriceId = defineString("STRIPE_CATALOG_ENDING_PRICE_ID", { default: "not-configured" });
 const stripePortalConfigurationId = defineString("STRIPE_PORTAL_CONFIGURATION_ID", { default: "not-configured" });
+const currentAppVersion = defineString("CURRENT_APP_VERSION", { default: "5.0.4" });
 const windowsDownloadUrl = defineString("WINDOWS_DOWNLOAD_URL", {
-  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.3/MediTest-Setup-5.0.3-win-x64.msi"
+  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.4/MediTest-Setup-5.0.4-win-x64.msi"
+});
+const macosArm64DownloadUrl = defineString("MACOS_ARM64_DOWNLOAD_URL", {
+  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.4/MediTest-Setup-5.0.4-macos-arm64.pkg"
+});
+const macosX64DownloadUrl = defineString("MACOS_X64_DOWNLOAD_URL", {
+  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.4/MediTest-Setup-5.0.4-macos-x64.pkg"
 });
 const db = getFirestore();
+const legacyExpiredTrialDate = "1970-01-01T00:00:00.000Z";
+
+type DownloadPlatform = "windows-x64" | "macos-arm64" | "macos-x64";
 
 type GenerateQuestionsRequest = {
   messages?: unknown;
@@ -66,14 +88,6 @@ type QuestionResponse = {
     topic: string;
     difficulty: "leicht" | "mittel" | "schwer";
   }>;
-};
-
-type GenerateQuestionsFlow = (request: GenerateQuestionsRequest) => Promise<QuestionResponse>;
-type GenkitRuntime = {
-  ai: any;
-  googleAI: any;
-  QuestionResponseSchema: unknown;
-  GenerateQuestionsInputSchema: unknown;
 };
 
 type LimitConfiguration = {
@@ -104,6 +118,7 @@ type LicenseState = {
   baseProductPurchasedAt: string | null;
   baseProductProvider: string;
   baseProductCheckoutSessionId: string;
+  baseProductCodeHash: string;
   trialStartedAt: string | null;
   trialEndsAt: string | null;
   subscriptionActive: boolean;
@@ -151,9 +166,7 @@ type CommercialLicense = {
   managedBy: string;
 };
 
-let telemetryPromise: Promise<void> | null = null;
-let genkitRuntimePromise: Promise<GenkitRuntime> | null = null;
-let generateQuestionsFlow: GenerateQuestionsFlow | null = null;
+let genAiClient: GoogleGenAI | null = null;
 
 export const meditestAi = onRequest(
   {
@@ -274,7 +287,7 @@ export const meditestAi = onRequest(
         }
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unbekannter Genkit-Fehler";
+      const message = safeAiErrorMessage(error);
       await finalizeUsage(reservation, "failed", 0, message);
       logger.error("AI generation failed", {
         uid: user.uid,
@@ -425,7 +438,7 @@ export const meditestLicenseStatus = onRequest(
     if (!user) return;
 
     const state = await ensureLicenseState(user.uid);
-    res.status(200).json({ state });
+    res.status(200).json({ state: licenseStateResponse(state) });
   }
 );
 
@@ -444,6 +457,13 @@ export const meditestDownloadAccess = onRequest(
     const user = await verifiedUser(req.header("authorization") ?? "", res);
     if (!user) return;
 
+    const requestedPlatform = normalizeDownloadPlatform(req.body?.platform);
+    if (req.body?.platform && !requestedPlatform) {
+      res.status(400).json({ error: { message: "Diese Download-Plattform wird nicht unterstützt." } });
+      return;
+    }
+
+    const platform = requestedPlatform ?? "windows-x64";
     const state = await ensureLicenseState(user.uid);
     const downloadAllowed = user.admin === true ||
       user.isAdmin === true ||
@@ -453,17 +473,38 @@ export const meditestDownloadAccess = onRequest(
     if (!downloadAllowed) {
       res.status(403).json({
         error: {
-          message: "Der Windows-Download wird nach erfolgreichem Kauf freigeschaltet."
+          message: "Der Software-Download wird nach erfolgreichem Kauf freigeschaltet."
         }
       });
       return;
     }
 
+    const version = currentAppVersion.value().trim() || "5.0.4";
+    const downloads: Record<DownloadPlatform, { fileName: string; url: string }> = {
+      "windows-x64": {
+        fileName: `MediTest-Setup-${version}-win-x64.msi`,
+        url: windowsDownloadUrl.value().trim()
+      },
+      "macos-arm64": {
+        fileName: `MediTest-Setup-${version}-macos-arm64.pkg`,
+        url: macosArm64DownloadUrl.value().trim()
+      },
+      "macos-x64": {
+        fileName: `MediTest-Setup-${version}-macos-x64.pkg`,
+        url: macosX64DownloadUrl.value().trim()
+      }
+    };
+    const download = downloads[platform];
+    if (!download.url) {
+      res.status(503).json({ error: { message: "Der ausgewählte Download ist noch nicht konfiguriert." } });
+      return;
+    }
+
     res.status(200).json({
-      platform: "windows-x64",
-      version: "5.0.3",
-      fileName: "MediTest-Setup-5.0.3-win-x64.msi",
-      url: windowsDownloadUrl.value().trim()
+      platform,
+      version,
+      fileName: download.fileName,
+      url: download.url
     });
   }
 );
@@ -610,6 +651,49 @@ export const meditestRedeemPremiumCode = onRequest(
   }
 );
 
+export const meditestRedeemProductCode = onRequest(
+  {
+    invoker: "public",
+    memory: "256MiB",
+    timeoutSeconds: 30
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.set("Allow", "POST").status(405).json({ error: { message: "Nur POST-Anfragen sind erlaubt." } });
+      return;
+    }
+
+    const user = await verifiedUser(req.header("authorization") ?? "", res);
+    if (!user) return;
+
+    const normalizedCode = normalizeAccessCode(req.body?.code);
+    const codeHash = hashAccessCode(normalizedCode);
+    if (!normalizedCode || !configuredFreeProductCodeHashes().has(codeHash)) {
+      res.status(400).json({ error: { message: "Dieser Gratis-Code ist ungültig." } });
+      return;
+    }
+
+    const state = await updateLicenseState(user.uid, (current) => {
+      if (current.baseProductPurchased || current.premiumActive || current.subscriptionActive) return current;
+      const purchasedAt = new Date().toISOString();
+      const trialDays = Math.min(60, Math.max(1, Number(billingTrialDays.value()) || 7));
+      current.baseProductPurchased = true;
+      current.baseProductPurchasedAt = purchasedAt;
+      current.baseProductProvider = "product-code";
+      current.baseProductCheckoutSessionId = "";
+      current.baseProductCodeHash = codeHash;
+      current.trialStartedAt = purchasedAt;
+      current.trialEndsAt = new Date(Date.parse(purchasedAt) + trialDays * 86_400_000).toISOString();
+      return current;
+    });
+    res.status(200).json({
+      redeemed: true,
+      state: licenseStateResponse(state),
+      message: `${BRAND.productName} wurde kostenlos freigeschaltet.`
+    });
+  }
+);
+
 export const meditestConsumeCatalogCredit = onRequest(
   {
     invoker: "public",
@@ -672,6 +756,12 @@ export const meditestCreateCheckout = onRequest(
     const kind = stringValue(req.body?.kind).toLowerCase();
     const source = stringValue(req.body?.source).toLowerCase();
     const catalogId = stringValue(req.body?.catalogId).slice(0, 200);
+    const requestedPlatform = normalizeDownloadPlatform(req.body?.platform);
+    if (kind === "product" && req.body?.platform && !requestedPlatform) {
+      res.status(400).json({ error: { message: "Diese Kaufplattform wird nicht unterstützt." } });
+      return;
+    }
+    const downloadPlatform = requestedPlatform ?? "windows-x64";
     const returnBaseUrl = billingReturnBaseUrl.value().replace(/\/+$/, "");
     const websiteBaseUrl = billingWebsiteBaseUrl.value().replace(/\/+$/, "");
     const state = await ensureLicenseState(user.uid);
@@ -681,7 +771,7 @@ export const meditestCreateCheckout = onRequest(
 
     if (kind === "product") {
       if (state.baseProductPurchased || state.premiumActive || state.subscriptionActive) {
-        res.status(409).json({ error: { message: "MediTest wurde für dieses Konto bereits gekauft." } });
+        res.status(409).json({ error: { message: `${BRAND.productName} wurde für dieses Konto bereits gekauft.` } });
         return;
       }
       await expireOpenCheckoutSessions(
@@ -696,6 +786,7 @@ export const meditestCreateCheckout = onRequest(
         meditestPurchaseType: "base-product",
         firebaseUid: user.uid,
         purchaseSource: source === "landing" ? "landing" : "app",
+        downloadPlatform,
         productPriceCents: String(productPriceCents),
         trialDays: String(Math.min(60, Math.max(1, Number(billingTrialDays.value()) || 7))),
         currency: currency.toUpperCase()
@@ -708,15 +799,15 @@ export const meditestCreateCheckout = onRequest(
             currency,
             unit_amount: productPriceCents,
             product_data: {
-              name: "MediTest für Windows",
-              description: "Einmaliger Softwarekauf inklusive 7 Tagen vollständigem MediTest-Zugang"
+              name: `${BRAND.productName} für Windows und macOS`,
+              description: `Einmaliger Softwarekauf inklusive aller Desktop-Versionen und 7 Tagen vollständigem ${BRAND.productName}-Zugang`
             }
           },
           quantity: 1
         }],
         client_reference_id: user.uid,
-        success_url: `${websiteBaseUrl}/purchase.html?checkout=success`,
-        cancel_url: `${websiteBaseUrl}/purchase.html?checkout=cancelled`,
+        success_url: `${websiteBaseUrl}/purchase.html?checkout=success&platform=${downloadPlatform}`,
+        cancel_url: `${websiteBaseUrl}/purchase.html?checkout=cancelled&platform=${downloadPlatform}`,
         metadata,
         payment_intent_data: { metadata }
       };
@@ -728,7 +819,7 @@ export const meditestCreateCheckout = onRequest(
       if (!state.baseProductPurchased) {
         res.status(403).json({
           error: {
-            message: "Das Monatsabo ist nach dem einmaligen Kauf von MediTest verfügbar."
+            message: `Das Monatsabo ist nach dem einmaligen Kauf von ${BRAND.productName} verfügbar.`
           }
         });
         return;
@@ -782,8 +873,8 @@ export const meditestCreateCheckout = onRequest(
             unit_amount: monthlyPriceCents,
             recurring: { interval: "month" },
             product_data: {
-              name: "MediTest",
-              description: "Monatlicher Zugang zur MediTest Lernsoftware"
+              name: BRAND.productName,
+              description: `Monatlicher Zugang zur ${BRAND.productName} Lernsoftware`
             }
           },
           quantity: 1
@@ -853,7 +944,7 @@ export const meditestCreateCheckout = onRequest(
               unit_amount: expectedPriceCents,
               product_data: {
                 name: catalog.title,
-                description: "MediTest MedAT-Katalogtest"
+                description: `${BRAND.productName} MedAT-Katalogtest`
               }
             },
             quantity: 1
@@ -1110,7 +1201,9 @@ async function ensureGlobalAppConfig(): Promise<GlobalAppConfig> {
   const storedAppVersion = stringValue(source.currentAppVersion);
   const storedTermsVersion = stringValue(source.currentTermsVersion);
   const config: GlobalAppConfig = {
-    currentAppVersion: !storedAppVersion || storedAppVersion === "5.0.2" ? "5.0.3" : storedAppVersion,
+    currentAppVersion: !storedAppVersion || storedAppVersion === "5.0.2" || storedAppVersion === "5.0.3"
+      ? "5.0.4"
+      : storedAppVersion,
     currentTermsVersion: !storedTermsVersion || storedTermsVersion === "5.0" ? "5.1" : storedTermsVersion,
     currentPrivacyVersion: stringValue(source.currentPrivacyVersion) || "5.0",
     allowedOfflineDays: boundedInt(source.allowedOfflineDays, 7, 0, 30),
@@ -1608,6 +1701,7 @@ function normalizeLicenseState(source: Record<string, any>, createdAt: string): 
     baseProductPurchasedAt,
     baseProductProvider: stringValue(source.baseProductProvider) || (legacyPaidAccess ? "legacy-access" : ""),
     baseProductCheckoutSessionId: stringValue(source.baseProductCheckoutSessionId),
+    baseProductCodeHash: stringValue(source.baseProductCodeHash),
     trialStartedAt,
     trialEndsAt,
     subscriptionActive: source.subscriptionActive === true,
@@ -1625,6 +1719,15 @@ function normalizeLicenseState(source: Record<string, any>, createdAt: string): 
     freeCatalogCreditRedeemedAt: validIsoString(source.freeCatalogCreditRedeemedAt),
     purchasedCatalogTestIds: [...new Set(purchased)].sort(),
     updatedAt: validIsoString(source.updatedAt) ?? new Date().toISOString()
+  };
+}
+
+function licenseStateResponse(state: LicenseState): LicenseState {
+  // MediTest <= 5.0.2 deserializes both fields as non-nullable DateTime values.
+  return {
+    ...state,
+    trialStartedAt: state.trialStartedAt ?? legacyExpiredTrialDate,
+    trialEndsAt: state.trialEndsAt ?? legacyExpiredTrialDate
   };
 }
 
@@ -1661,7 +1764,7 @@ async function findCatalogTest(catalogId: string): Promise<{
         );
       return {
         questionCount: Math.min(1000, questionCount),
-        title: stringValue(data.title) || "MediTest Katalogtest",
+        title: stringValue(data.title) || `${BRAND.productName} Katalogtest`,
         category,
         priceCents,
         currency: (stringValue(data.currency) || billingCurrency.value() || "EUR").toUpperCase()
@@ -1893,105 +1996,131 @@ async function finalizeUsage(
 }
 
 async function generateQuestions(request: GenerateQuestionsRequest) {
-  await ensureTelemetryEnabled();
-  const flow = await getGenerateQuestionsFlow();
-  return flow(request);
-}
-
-async function ensureTelemetryEnabled(): Promise<void> {
-  if (!telemetryPromise) {
-    telemetryPromise = (async () => {
-      const { enableFirebaseTelemetry } = await import("@genkit-ai/firebase");
-      await enableFirebaseTelemetry({
-        metricExportIntervalMillis: 180_000,
-        metricExportTimeoutMillis: 180_000
-      });
-    })().catch((error: unknown) => {
-      telemetryPromise = null;
-      logger.error("Genkit Firebase telemetry could not be enabled", error);
-    });
+  const expectedQuestions = readRequestedQuestionCount(request);
+  if (!expectedQuestions) {
+    throw new Error("Die Fragenanzahl im Request und im Prompt stimmt nicht überein.");
   }
-
-  await telemetryPromise;
-}
-
-async function getGenkitRuntime(): Promise<GenkitRuntime> {
-  if (!genkitRuntimePromise) {
-    genkitRuntimePromise = (async () => {
-      const [{ genkit, z }, { googleAI }] = await Promise.all([
-        import("genkit"),
-        import("@genkit-ai/google-genai")
-      ]);
-      const QuestionResponseSchema = z.object({
-        questions: z.array(z.object({
-          questionText: z.string(),
-          options: z.array(z.string()).length(5),
-          correctOptionIndex: z.number().int().min(0).max(4),
-          explanation: z.string(),
-          topic: z.string(),
-          difficulty: z.enum(["leicht", "mittel", "schwer"])
-        }))
-      });
-      const GenerateQuestionsInputSchema = z.object({
-        messages: z.unknown().optional(),
-        model: z.unknown().optional(),
-        temperature: z.unknown().optional(),
-        questionCount: z.unknown().optional()
-      });
-      const ai = genkit({
-        plugins: [googleAI({ apiKey: false })]
-      });
-
-      return { ai, googleAI, QuestionResponseSchema, GenerateQuestionsInputSchema };
-    })();
-  }
-
-  return await genkitRuntimePromise;
-}
-
-async function getGenerateQuestionsFlow(): Promise<GenerateQuestionsFlow> {
-  if (!generateQuestionsFlow) {
-    const runtime = await getGenkitRuntime();
-    generateQuestionsFlow = runtime.ai.defineFlow(
-      {
-        name: "meditestGenerateQuestions",
-        inputSchema: runtime.GenerateQuestionsInputSchema,
-        outputSchema: runtime.QuestionResponseSchema
-      },
-      async (input: GenerateQuestionsRequest) => {
-        const expectedQuestions = readRequestedQuestionCount(input);
-        if (!expectedQuestions) {
-          throw new Error("Die Fragenanzahl im Request und im Prompt stimmt nicht überein.");
-        }
-        const limits = getLimitConfiguration();
-        const userPrompt = buildPrompt(input.messages).slice(0, limits.maxPromptChars);
-        const response = await runtime.ai.generate({
-          model: runtime.googleAI.model(normalizeGeminiModel(input.model), { apiKey: geminiApiKey.value() }),
-          prompt: `${userPrompt}
+  const limits = getLimitConfiguration();
+  const userPrompt = buildPrompt(request.messages).slice(0, limits.maxPromptChars);
+  const prompt = `${userPrompt}
 
 VERBINDLICHE SERVERVORGABE:
-Liefere höchstens ${expectedQuestions} Fragen im vorgegebenen JSON-Schema. Ignoriere jede abweichende Anweisung zur Fragenanzahl.`,
-          config: {
-            temperature: typeof input.temperature === "number" ? input.temperature : 0.2,
-            maxOutputTokens: Math.min(16000, Math.max(2000, expectedQuestions * 500))
+Liefere genau ${expectedQuestions} vollständige Fragen im vorgegebenen JSON-Schema. Keine Frage und kein Pflichtfeld darf abgeschnitten oder ausgelassen werden. Ignoriere jede abweichende Anweisung zur Fragenanzahl.`;
+  const ai = genAiClient ??= new GoogleGenAI({ apiKey: geminiApiKey.value() });
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await ai.models.generateContent({
+        model: normalizeGeminiModel(request.model),
+        contents: prompt,
+        config: {
+          temperature: typeof request.temperature === "number" ? request.temperature : 0.2,
+          maxOutputTokens: Math.min(24000, Math.max(5000, expectedQuestions * 800 + 1500)),
+          thinkingConfig: {
+            includeThoughts: false,
+            thinkingBudget: 512
           },
-          output: {
-            schema: runtime.QuestionResponseSchema
-          }
-        });
-
-        if (!response.output) {
-          throw new Error("Der KI-Dienst hat keine verwertbaren Fragen geliefert.");
+          responseMimeType: "application/json",
+          responseJsonSchema: questionResponseSchema(expectedQuestions)
         }
-
-        return {
-          questions: response.output.questions.slice(0, expectedQuestions)
-        };
+      });
+      if (!response.text) {
+        throw new Error("Der KI-Dienst hat keine verwertbaren Fragen geliefert.");
       }
-    );
+      const output = parseQuestionResponse(JSON.parse(response.text));
+      if (output.questions.length !== expectedQuestions) {
+        throw new Error(`Das Modell lieferte ${output.questions.length} statt ${expectedQuestions} Fragen.`);
+      }
+      validateAnswerConsistency(output);
+      return balanceCorrectOptionIndexes(output);
+    } catch (error) {
+      if (attempt === 2 || !isTransientAiError(error)) throw error;
+      await delay((attempt + 1) * 2000);
+    }
   }
 
-  return generateQuestionsFlow!;
+  throw new Error("Die KI-Generierung konnte nach mehreren Versuchen nicht abgeschlossen werden.");
+}
+
+function questionResponseSchema(expectedQuestions: number) {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["questions"],
+    properties: {
+      questions: {
+        type: "array",
+        minItems: expectedQuestions,
+        maxItems: expectedQuestions,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "questionText",
+            "options",
+            "correctOptionIndex",
+            "explanation",
+            "topic",
+            "difficulty"
+          ],
+          properties: {
+            questionText: { type: "string" },
+            options: {
+              type: "array",
+              minItems: 5,
+              maxItems: 5,
+              items: { type: "string" }
+            },
+            correctOptionIndex: { type: "integer", minimum: 0, maximum: 4 },
+            explanation: { type: "string" },
+            topic: { type: "string" },
+            difficulty: { type: "string", enum: ["leicht", "mittel", "schwer"] }
+          }
+        }
+      }
+    }
+  };
+}
+
+function parseQuestionResponse(value: unknown): QuestionResponse {
+  if (!value || typeof value !== "object" || !Array.isArray((value as { questions?: unknown }).questions)) {
+    throw new Error("Die Modellantwort entsprach nicht vollständig dem Fragenschema.");
+  }
+
+  const questions = (value as { questions: unknown[] }).questions.map((item) => {
+    if (!item || typeof item !== "object") {
+      throw new Error("Die Modellantwort entsprach nicht vollständig dem Fragenschema.");
+    }
+    const question = item as Record<string, unknown>;
+    const options = question.options;
+    const correctOptionIndex = question.correctOptionIndex;
+    const difficulty = question.difficulty;
+    if (
+      typeof question.questionText !== "string" ||
+      !Array.isArray(options) ||
+      options.length !== 5 ||
+      options.some((option) => typeof option !== "string") ||
+      !Number.isInteger(correctOptionIndex) ||
+      Number(correctOptionIndex) < 0 ||
+      Number(correctOptionIndex) > 4 ||
+      typeof question.explanation !== "string" ||
+      typeof question.topic !== "string" ||
+      (difficulty !== "leicht" && difficulty !== "mittel" && difficulty !== "schwer")
+    ) {
+      throw new Error("Die Modellantwort entsprach nicht vollständig dem Fragenschema.");
+    }
+
+    return {
+      questionText: question.questionText,
+      options: options as string[],
+      correctOptionIndex: Number(correctOptionIndex),
+      explanation: question.explanation,
+      topic: question.topic,
+      difficulty: difficulty as "leicht" | "mittel" | "schwer"
+    };
+  });
+
+  return { questions };
 }
 
 function getLimitConfiguration(): LimitConfiguration {
@@ -2018,6 +2147,72 @@ function numberField(source: Record<string, unknown>, key: string): number {
 
 function timestampMillis(value: unknown): number {
   return value instanceof Timestamp ? value.toMillis() : 0;
+}
+
+function safeAiErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error || "Unbekannter KI-Fehler");
+  if (/schema validation failed/i.test(raw)) return "Die Modellantwort entsprach nicht vollständig dem Fragenschema.";
+  if (/max[_\s-]*tokens|finish reason.*length|truncat/i.test(raw)) return "Die Modellantwort wurde wegen des Ausgabelimits abgeschnitten.";
+  return raw.split(/\r?\n/, 1)[0].slice(0, 300) || "Unbekannter KI-Fehler";
+}
+
+function isTransientAiError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /\b(429|500|502|503|504)\b|unavailable|resource_exhausted|high demand|temporar|schema validation failed|widerspricht der erklärung|statt \d+ fragen/i.test(message);
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function balanceCorrectOptionIndexes(output: QuestionResponse): QuestionResponse {
+  const targetIndexes = Array.from({ length: output.questions.length }, (_, index) => index % 5);
+  for (let index = targetIndexes.length - 1; index > 0; index -= 1) {
+    const swapIndex = randomInt(index + 1);
+    [targetIndexes[index], targetIndexes[swapIndex]] = [targetIndexes[swapIndex], targetIndexes[index]];
+  }
+
+  return {
+    questions: output.questions.map((question, index) => {
+      const options = [...question.options];
+      const [correctOption] = options.splice(question.correctOptionIndex, 1);
+      const correctOptionIndex = targetIndexes[index];
+      options.splice(correctOptionIndex, 0, correctOption);
+      return { ...question, options, correctOptionIndex };
+    })
+  };
+}
+
+function validateAnswerConsistency(output: QuestionResponse): void {
+  for (const question of output.questions) {
+    const explanationTokens = answerEvidenceTokens(question.explanation);
+    const scores = question.options.map((option) => {
+      const optionTokens = answerEvidenceTokens(option);
+      if (!optionTokens.size) return 0;
+      const matches = [...optionTokens].filter((token) => explanationTokens.has(token)).length;
+      return matches / optionTokens.size;
+    });
+    const declaredScore = scores[question.correctOptionIndex] ?? 0;
+    const bestScore = Math.max(...scores);
+    const bestIndex = scores.indexOf(bestScore);
+    if (bestIndex !== question.correctOptionIndex && bestScore >= 0.75 && bestScore - declaredScore >= 0.2) {
+      throw new Error("Die markierte richtige Antwort widerspricht der Erklärung.");
+    }
+  }
+}
+
+function answerEvidenceTokens(value: unknown): Set<string> {
+  const stopWords = new Set([
+    "DIE", "DER", "DAS", "DEN", "DEM", "DES", "EIN", "EINE", "EINER", "EINEN",
+    "UND", "ODER", "BEI", "MIT", "VON", "VOM", "FÜR", "IST", "SIND", "WIRD", "WERDEN",
+    "DURCH", "NACH", "LAUT", "ALS", "AUF", "ZU", "ZUR", "ZUM"
+  ]);
+  const words = typeof value === "string"
+    ? value.normalize("NFKC").toLocaleUpperCase("de").match(/[\p{L}\p{N}]+/gu) ?? []
+    : [];
+  return new Set(words
+    .filter((word) => word.length >= 4 && !stopWords.has(word))
+    .map((word) => word.slice(0, 6)));
 }
 
 function readRequestedQuestionCount(request: GenerateQuestionsRequest): number {
@@ -2066,12 +2261,28 @@ function normalizeAccessCode(code: unknown): string {
   return typeof code === "string" ? code.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") : "";
 }
 
+function normalizeDownloadPlatform(value: unknown): DownloadPlatform | null {
+  const platform = stringValue(value).toLowerCase();
+  if (!platform) return null;
+  if (platform === "windows-x64" || platform === "windows" || platform === "win-x64") return "windows-x64";
+  if (platform === "macos-arm64" || platform === "mac-arm64" || platform === "apple-silicon") return "macos-arm64";
+  if (platform === "macos-x64" || platform === "mac-x64" || platform === "intel-mac") return "macos-x64";
+  return null;
+}
+
 function hashAccessCode(code: string): string {
   return code ? createHash("sha256").update(code, "utf8").digest("hex").toUpperCase() : "";
 }
 
 function configuredFreeCatalogCodeHashes(): Set<string> {
   return new Set(freeCatalogCodeHashList.value()
+    .split(/[,\s;]+/)
+    .map((value) => value.trim().toUpperCase())
+    .filter(Boolean));
+}
+
+function configuredFreeProductCodeHashes(): Set<string> {
+  return new Set(freeProductCodeHashList.value()
     .split(/[,\s;]+/)
     .map((value) => value.trim().toUpperCase())
     .filter(Boolean));

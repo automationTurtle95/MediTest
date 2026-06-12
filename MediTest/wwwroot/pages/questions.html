@@ -1,13 +1,13 @@
-<!doctype html>
+<!DOCTYPE HTML>
 <html lang="de">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Fragen · MediTest</title>
+  <title>Fragen · Meduvalo</title>
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
-<header class="topbar"><a class="brand" href="/pages/documents.html">MediTest</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
+<header class="topbar"><a class="brand" href="/pages/documents.html">Meduvalo</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
 <main>
   <section class="card">
     <p><a href="/pages/documents.html">&larr; Zurück zur Dokumentenübersicht</a></p>
@@ -106,14 +106,14 @@ function editQuestion(questionId){
   const options=[...(q.options||[])].sort((a,b)=>a.optionIndex-b.optionIndex);
   article.innerHTML=`<h2>Frage bearbeiten</h2>
     <label>Fragetext</label><textarea id="qt-${questionId}" rows="4">${esc(q.questionText)}</textarea>
-    <label>Thema</label><input id="topic-${questionId}" value="${esc(q.topic)}">
+    <label>Thema</label><input type="text" id="topic-${questionId}" value="${esc(q.topic)}">
     <label>Schwierigkeit</label><select id="diff-${questionId}"><option ${q.difficulty==='leicht'?'selected':''}>leicht</option><option ${q.difficulty==='mittel'?'selected':''}>mittel</option><option ${q.difficulty==='schwer'?'selected':''}>schwer</option></select>
     <label>Bild austauschen</label><input id="img-${questionId}" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
     <p class="subtle">Leer lassen, um das vorhandene Bild zu behalten. Maximum: 600 KB.</p>
     ${q.imageDataUrl?`<figure class="question-image"><img src="${esc(q.imageDataUrl)}" alt="${esc(q.imageAltText||'Fragebild')}"><figcaption>${esc(q.imageFileName||'Aktuelles Bild')}</figcaption></figure><label class="checkline"><input id="clear-img-${questionId}" type="checkbox"> Bild entfernen</label>`:''}
-    <label>Bildbeschreibung</label><input id="img-alt-${questionId}" value="${esc(q.imageAltText||'')}">
+    <label>Bildbeschreibung</label><input type="text" id="img-alt-${questionId}" value="${esc(q.imageAltText||'')}">
     <label>Antwortmöglichkeiten</label>
-    ${options.map(o=>`<div class="option-edit"><label><input type="radio" name="correct-${questionId}" value="${o.optionIndex}" ${o.isCorrect?'checked':''}> ${optionLetter(o.optionIndex)} ist richtig</label><input id="opt-${questionId}-${o.optionIndex}" value="${esc(o.text)}"></div>`).join('')}
+    ${options.map(o=>`<div class="option-edit"><label><input type="radio" name="correct-${questionId}" value="${o.optionIndex}" ${o.isCorrect?'checked':''}> ${optionLetter(o.optionIndex)} ist richtig</label><input type="text" id="opt-${questionId}-${o.optionIndex}" value="${esc(o.text)}"></div>`).join('')}
     <label>Erklärung</label><textarea id="exp-${questionId}" rows="3">${esc(q.explanation)}</textarea>
     <div class="actions"><button class="primary" type="button" onclick="saveQuestion(${questionId})">Speichern</button><button type="button" onclick="loadQuestions()">Abbrechen</button></div>`;
   enhanceTooltips(article);

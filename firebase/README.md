@@ -1,12 +1,21 @@
-# MediTest Firebase Backend
+# Meduvalo Firebase Backend
 
-Diese Firebase-Konfiguration enthält den KI-Proxy und die Firestore-Regeln für den MediTest-Katalog sowie die privaten Nutzerdaten. MediTest sendet das Firebase-ID-Token des angemeldeten Nutzers mit. Die Function prüft dieses Token und generiert die Fragen serverseitig mit Genkit und Gemini. Der geheime Gemini-Key liegt als `GEMINI_API_KEY` in Firebase Secret Manager.
+Diese Firebase-Konfiguration enthält den KI-Proxy und die Firestore-Regeln für den Meduvalo-Katalog sowie die privaten Nutzerdaten. Meduvalo sendet das Firebase-ID-Token des angemeldeten Nutzers mit. Die Function prüft dieses Token und generiert die Fragen serverseitig mit dem offiziellen Google Gen AI SDK und Gemini. Der geheime Gemini-Key liegt als `GEMINI_API_KEY` in Firebase Secret Manager.
+
+Das bestehende Firebase-Projekt bleibt `meditest-12354`. Projekt-ID,
+Function-Namen, Codebase, Collections, Secret-Namen und Datenpfade werden für
+die Umbenennung nicht geändert. Die öffentliche Produktdomain ist
+`https://meduvalo.at`; `BILLING_WEBSITE_BASE_URL` muss diesen Wert verwenden.
 
 ## Einmalige Einrichtung
 
 Wenn ein Gemini-Key versehentlich in Chat, Logs oder Screenshots gelandet ist, lösche ihn zuerst in der Google/Firebase Console und erstelle einen neuen Key.
 
-Aktiviere in Firebase Authentication unter `Sign-in method` die Anbieter `Email/Password`, `Google` und `Apple`. Unter `Settings -> Authorized domains` müssen für die lokale MediTest-App mindestens `127.0.0.1` und `localhost` freigegeben sein. Der Apple-Anbieter benötigt zusätzlich die vollständige Apple-Developer-Konfiguration mit Service ID, Team ID, Key ID und privatem Schlüssel. In MediTest werden die sichtbaren Provider über `Auth:Firebase:GoogleEnabled` und `Auth:Firebase:AppleEnabled` gesteuert.
+Aktiviere in Firebase Authentication unter `Sign-in method` die Anbieter `Email/Password`, `Google` und `Apple`. Unter `Settings -> Authorized domains` müssen für die lokale Meduvalo-App mindestens `127.0.0.1` und `localhost` freigegeben sein. Der Apple-Anbieter benötigt zusätzlich die vollständige Apple-Developer-Konfiguration mit Service ID, Team ID, Key ID und privatem Schlüssel. In Meduvalo werden die sichtbaren Provider über `Auth:Firebase:GoogleEnabled` und `Auth:Firebase:AppleEnabled` gesteuert.
+
+Nach erfolgreicher Domain-Verbindung sollte auch `meduvalo.at` unter
+`Authentication -> Settings -> Authorized domains` geprüft beziehungsweise
+ergänzt werden.
 
 1. Firebase CLI installieren und anmelden:
 
@@ -90,7 +99,7 @@ Die Function speichert keine Skripttexte und keine Prompts. Gespeichert werden N
 - `aiUsage/{uid}/months/{YYYY-MM}`: Monatsstand
 - `aiGenerationEvents/{eventId}`: einzelne Generierungsversuche
 
-Angemeldete Nutzer erhalten ihr persönliches Restkontingent über `meditestAiStatus`; MediTest zeigt diese Werte im KI-Startfenster vor der Generierung. Admins mit Firebase Custom Claim `admin=true` sehen die gesammelten Daten in MediTest unter `Katalog -> KI-Nutzung`. Die Admin-Function `meditestAiUsage` liefert dafür eine geschützte Übersicht. Strukturierte Laufzeitprotokolle sind außerdem in Cloud Logging und über folgenden Befehl verfügbar:
+Angemeldete Nutzer erhalten ihr persönliches Restkontingent über `meditestAiStatus`; Meduvalo zeigt diese Werte im KI-Startfenster vor der Generierung. Admins mit Firebase Custom Claim `admin=true` sehen die gesammelten Daten in Meduvalo unter `Katalog -> KI-Nutzung`. Die Admin-Function `meditestAiUsage` liefert dafür eine geschützte Übersicht. Strukturierte Laufzeitprotokolle sind außerdem in Cloud Logging und über folgenden Befehl verfügbar:
 
 ```powershell
 npx firebase-tools functions:log --only meditestAi
@@ -125,7 +134,7 @@ Firestore trennt Katalog und Nutzerdaten:
 - `appConfig/global`: Globale Versionsstände, Offline-Tage, Links und Standardwerte.
 - `thematicTests`: Legacy-Katalogpfad mit denselben Admin-Regeln, falls ältere Katalogdaten noch vorhanden sind.
 
-1. Admin-Benutzer in Firebase Authentication anlegen oder über MediTest registrieren.
+1. Admin-Benutzer in Firebase Authentication anlegen oder über Meduvalo registrieren.
 2. Custom Claim setzen. Das Skript nutzt das Firebase Admin SDK; lokal braucht es Application Default Credentials, z. B. über `gcloud auth application-default login` oder `GOOGLE_APPLICATION_CREDENTIALS` mit einem Service-Account.
 
    ```powershell
@@ -133,24 +142,24 @@ Firestore trennt Katalog und Nutzerdaten:
    npm run admin:set -- admin@example.com
    ```
 
-3. In MediTest abmelden und wieder anmelden, damit das neue Firebase-ID-Token den Claim enthält.
+3. In Meduvalo abmelden und wieder anmelden, damit das neue Firebase-ID-Token den Claim enthält.
 
-## MediTest konfigurieren
+## Meduvalo konfigurieren
 
-MediTest nutzt standardmäßig die Firebase Function:
+Meduvalo nutzt standardmäßig die Firebase Function:
 
 - KI-Anbieter: `Firebase Function`
 - KI-Modell: `gemini-2.5-flash`
 - API-Basis-URL: die bereitgestellte Function-URL, z. B. `https://europe-west3-DEIN_PROJEKT.cloudfunctions.net/meditestAi`
-- API-Key: keiner in MediTest
+- API-Key: keiner in Meduvalo
 
-Danach läuft die Fragegenerierung über Firebase. Der echte Gemini-Key liegt nicht mehr in MediTest.
+Danach läuft die Fragegenerierung über Firebase. Der echte Gemini-Key liegt nicht mehr in Meduvalo.
 
 ## Lizenz und Zahlungen
 
-MediTest integriert folgendes Lizenzmodell:
+Meduvalo integriert folgendes Lizenzmodell:
 
-- einmaliger Basiskauf für 9,99 EUR
+- einmaliger Basiskauf für 14,99 EUR
 - 7 Tage vollständige Testphase ab bestätigtem Basiskauf
 - danach optionales Monatsabo für 5,99 EUR
 - ohne Abo eingeschränkter Modus für vorhandene Tests und Auswertungen
@@ -162,8 +171,12 @@ MediTest integriert folgendes Lizenzmodell:
 
 Die geschützte Function `meditestLicenseAccess` legt Nutzer-, Lizenz-, Geräte- und Zustimmungsdaten ausschließlich mit dem verifizierten Firebase-Token an. Der Client kann diese sicherheitsrelevanten Dokumente nicht direkt schreiben.
 
-Die geschützte Function `meditestCreateCheckout` erstellt getrennte Stripe-Checkouts für den Basiskauf (`BILLING_PRODUCT_PRICE_CENTS`), das Monatsabo (`BILLING_MONTHLY_PRICE_CENTS`) und Katalogtests. Bestehende Katalogpreise verwenden `STRIPE_CATALOG_UNIT_PRICE_ID` und `STRIPE_CATALOG_ENDING_PRICE_ID`; MedAT verwendet einen serverseitigen Festpreis von 49,99 EUR. `meditestStripeWebhook` prüft jedes Ereignis mit `MEDITEST_STRIPE_WEBHOOK_SECRET` und startet die Testphase erst nach bestätigtem Basiskauf. `meditestDownloadAccess` gibt den Windows-Download nur nach diesem Kauf oder einer administrativen Freischaltung aus. `meditestStripePortal` verwendet `STRIPE_PORTAL_CONFIGURATION_ID`.
+Die geschützte Function `meditestCreateCheckout` erstellt getrennte Stripe-Checkouts für den Basiskauf (`BILLING_PRODUCT_PRICE_CENTS`), das Monatsabo (`BILLING_MONTHLY_PRICE_CENTS`) und Katalogtests. Bestehende Katalogpreise verwenden `STRIPE_CATALOG_UNIT_PRICE_ID` und `STRIPE_CATALOG_ENDING_PRICE_ID`; MedAT verwendet einen serverseitigen Festpreis von 49,99 EUR. `meditestStripeWebhook` prüft jedes Ereignis mit `MEDITEST_STRIPE_WEBHOOK_SECRET` und startet die Testphase erst nach bestätigtem Basiskauf. `meditestDownloadAccess` liefert nach diesem Kauf oder einer administrativen Freischaltung den ausgewählten Windows-, Apple-Silicon- oder Intel-Mac-Download. Die URLs werden über `WINDOWS_DOWNLOAD_URL`, `MACOS_ARM64_DOWNLOAD_URL`, `MACOS_X64_DOWNLOAD_URL` und `CURRENT_APP_VERSION` konfiguriert. `meditestStripePortal` verwendet `STRIPE_PORTAL_CONFIGURATION_ID`.
 
 Die Payments-Extension kann für diese Datenbank nicht verwendet werden, weil ihre Gen-1-Firestore-Trigger mit dem Firestore-Multiregionsstandort `eur3` nicht bereitgestellt werden können. Die direkten Functions liefern denselben Checkout-, Webhook- und Portalablauf ohne diese Standortbeschränkung.
+
+Stripe-Extensions werden deshalb nicht mehr in `firebase.json` verwaltet. Bereits
+installierte Legacy-Instanzen dürfen erst nach Prüfung ihrer Firestore-Daten und
+Webhook-Konfiguration in der Firebase Console deinstalliert werden.
 
 Die Firestore-Regeln erlauben Nutzern nur Lesezugriff auf Lizenz- und Stripe-Ausgabedaten. Premium-Code, Gratis-Code und Gratis-Katalogverbrauch laufen ebenfalls über geschützte Functions. Bei einer Kontolöschung werden private Firestore-Daten, Stripe-Kundendaten, KI-Nutzungsdaten und das Authentication-Konto entfernt.

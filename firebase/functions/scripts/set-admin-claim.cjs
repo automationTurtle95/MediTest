@@ -23,7 +23,7 @@ admin.auth()
     admin: true
   }))
   .then(() => {
-    console.log(`Admin-Claim gesetzt für ${email}. Danach in MediTest ab- und wieder anmelden.`);
+    console.log(`Admin-Claim gesetzt für ${email}. Danach in Meduvalo ab- und wieder anmelden.`);
   })
   .catch((error) => {
     console.error(error);

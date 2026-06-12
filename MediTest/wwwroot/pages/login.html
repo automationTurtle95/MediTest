@@ -1,25 +1,25 @@
-<!doctype html>
+<!DOCTYPE HTML>
 <html lang="de">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Anmeldung · MediTest</title>
+  <title>Anmeldung · Meduvalo</title>
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
 <main class="auth-page">
   <section class="auth-brand">
     <div>
-      <h1>MediTest</h1>
-      <p>Multiple-Choice-Prüfungssimulation für Medizinstudenten.</p>
+      <h1>Meduvalo</h1>
+      <p>Prüfungsnah lernen. Sicherer bestehen.</p>
     </div>
-    <div class="auth-version">Version 5.0.3</div>
+    <div class="auth-version">Version 5.0.4</div>
   </section>
   <section class="auth-main">
     <div class="card auth-panel">
       <p class="eyebrow">Konto</p>
       <h2 id="formTitle">Einloggen</h2>
-      <p id="authHint" class="muted">Melde dich an, um MediTest zu nutzen.</p>
+      <p id="authHint" class="muted">Melde dich an, um Meduvalo zu nutzen.</p>
       <div class="auth-tabs">
         <button id="loginTab" class="active" type="button">Einloggen</button>
         <button id="registerTab" type="button">Konto erstellen</button>
@@ -47,7 +47,7 @@
       <form id="authForm">
         <div id="displayNameWrap" class="hidden">
           <label for="displayName">Name</label>
-          <input id="displayName" autocomplete="name" placeholder="Vor- und Nachname">
+          <input type="text" id="displayName" autocomplete="name" placeholder="Vor- und Nachname">
         </div>
         <label for="email">E-Mail</label>
         <input id="email" type="email" autocomplete="email" required>
@@ -57,6 +57,7 @@
           <button id="submitBtn" class="primary" type="submit">Einloggen</button>
           <button id="resetPasswordBtn" type="button">Passwort vergessen?</button>
           <button id="resendVerificationBtn" class="hidden" type="button">Bestätigungs-E-Mail erneut senden</button>
+          <button type="button" onclick="shutdownApp()">Meduvalo schließen</button>
         </div>
       </form>
       <div id="msg" class="hidden"></div>

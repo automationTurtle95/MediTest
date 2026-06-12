@@ -1,13 +1,13 @@
-<!doctype html>
+<!DOCTYPE HTML>
 <html lang="de">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Statistik · MediTest</title>
+  <title>Statistik · Meduvalo</title>
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
-<header class="topbar"><a class="brand" href="/pages/documents.html">MediTest</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
+<header class="topbar"><a class="brand" href="/pages/documents.html">Meduvalo</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
 <main>
   <section class="card">
     <h1>Gesamtstatistik</h1>
@@ -15,8 +15,8 @@
     <label for="testSelect">Test auswählen</label>
     <select id="testSelect"><option value="">Alle Tests</option></select>
     <div class="actions">
-      <button onclick="loadStats()">Aktualisieren</button>
-      <button class="danger" onclick="resetTests()">Tests & Statistik zurücksetzen</button>
+      <button type="button" onclick="loadStats()">Aktualisieren</button>
+      <button class="danger" type="button" onclick="resetTests()">Tests &amp; Statistik zurücksetzen</button>
     </div>
     <div id="msg" class="hidden"></div>
   </section>

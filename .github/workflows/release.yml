@@ -15,16 +15,17 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
 
       - name: Install WiX
         shell: pwsh
         run: |
+          # WiX 6+ requires the OSMF for revenue-generating use.
           dotnet tool install --global wix --version 5.0.2
           "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
@@ -46,28 +47,26 @@ jobs:
       - name: Build Windows artifacts
         shell: pwsh
         working-directory: MediTest
-        run: .\scripts\build-release.ps1 -GitHubRepository "${{ github.repository }}"
+        run: .\scripts\build-release.ps1 -WindowsOnly -GitHubRepository "${{ github.repository }}"
 
-      - name: Upload Windows artifacts and unsigned macOS fallback
-        uses: actions/upload-artifact@v4
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v7
         with:
           name: windows-release
           if-no-files-found: error
           path: |
             MediTest/dist/MediTest-*/windows/MediTest-Setup-*-win-x64.msi
             MediTest/dist/MediTest-*/windows/MediTest-*-win-x64-portable.zip
-            MediTest/dist/MediTest-*/macos/MediTest-*-macos-arm64-setup.zip
-            MediTest/dist/MediTest-*/macos/MediTest-*-macos-x64-setup.zip
 
   macos:
     runs-on: macos-14
+    timeout-minutes: 75
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      - name: Detect Apple release secrets
-        id: apple-secrets
+      - name: Verify Apple release secrets
         shell: bash
         env:
           APP_CERTIFICATE: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_P12_BASE64 }}
@@ -78,25 +77,23 @@ jobs:
           NOTARY_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
         run: |
           set -euo pipefail
-          configured=true
+          missing=()
           for value in APP_CERTIFICATE INSTALLER_CERTIFICATE CERTIFICATE_PASSWORD NOTARY_KEY NOTARY_KEY_ID NOTARY_ISSUER_ID; do
             if [[ -z "${!value}" ]]; then
-              configured=false
+              missing+=("$value")
             fi
           done
-          echo "configured=$configured" >> "$GITHUB_OUTPUT"
-          if [[ "$configured" != "true" ]]; then
-            echo "::warning::Apple-Signing-Secrets fehlen. Der Release verwendet vorerst die unsignierten macOS-ZIPs aus dem Windows-Build."
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Fehlende Apple-Release-Secrets: %s\n' "${missing[*]}" >&2
+            exit 1
           fi
 
       - name: Setup .NET
-        if: steps.apple-secrets.outputs.configured == 'true'
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
 
       - name: Import Developer ID certificates
-        if: steps.apple-secrets.outputs.configured == 'true'
         shell: bash
         env:
           APP_CERTIFICATE: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_P12_BASE64 }}
@@ -134,7 +131,6 @@ jobs:
           echo "APPLE_SIGNING_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
       - name: Prepare notarization API key
-        if: steps.apple-secrets.outputs.configured == 'true'
         shell: bash
         env:
           NOTARY_KEY: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
@@ -149,19 +145,38 @@ jobs:
           echo "APPLE_API_KEY_ID=$NOTARY_KEY_ID" >> "$GITHUB_ENV"
           echo "APPLE_API_ISSUER_ID=$NOTARY_ISSUER_ID" >> "$GITHUB_ENV"
 
+      - name: Validate Apple notarization credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun notarytool history \
+            --key "$APPLE_API_KEY_FILE" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER_ID" \
+            --output-format json >/dev/null
+
       - name: Build, sign and notarize macOS installers
-        if: steps.apple-secrets.outputs.configured == 'true'
         shell: bash
         working-directory: MediTest
         run: bash ./scripts/build-macos-release.sh
 
       - name: Upload macOS installers
-        if: steps.apple-secrets.outputs.configured == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macos-release
           if-no-files-found: error
           path: MediTest/dist/MediTest-*/macos/MediTest-Setup-*-macos-*.pkg
+
+      - name: Remove temporary Apple credentials
+        if: always()
+        shell: bash
+        run: |
+          if [[ -n "${APPLE_SIGNING_KEYCHAIN:-}" ]]; then
+            security delete-keychain "$APPLE_SIGNING_KEYCHAIN" 2>/dev/null || true
+          fi
+          rm -f "$RUNNER_TEMP/developer-id-application.p12" \
+            "$RUNNER_TEMP/developer-id-installer.p12" \
+            "$RUNNER_TEMP"/AuthKey_*.p8
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -172,10 +187,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Download release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: downloaded-artifacts
           merge-multiple: true
@@ -204,21 +219,16 @@ jobs:
             Copy-Item -LiteralPath $matches[0].FullName -Destination (Join-Path $assetRoot $file)
           }
 
-          function Select-MacArtifact($signedName, $fallbackName) {
+          function Select-MacArtifact($signedName) {
             $signed = @(Get-ChildItem -LiteralPath $downloadRoot -Recurse -File -Filter $signedName)
-            if ($signed.Count -eq 1) {
-              return $signed[0]
+            if ($signed.Count -ne 1) {
+              throw "Signierte macOS-Release-Datei fehlt: $signedName"
             }
-
-            $fallback = @(Get-ChildItem -LiteralPath $downloadRoot -Recurse -File -Filter $fallbackName)
-            if ($fallback.Count -ne 1) {
-              throw "macOS-Release-Datei fehlt: $signedName oder $fallbackName"
-            }
-            return $fallback[0]
+            return $signed[0]
           }
 
-          $macArm64 = Select-MacArtifact "MediTest-Setup-$version-macos-arm64.pkg" "MediTest-$version-macos-arm64-setup.zip"
-          $macX64 = Select-MacArtifact "MediTest-Setup-$version-macos-x64.pkg" "MediTest-$version-macos-x64-setup.zip"
+          $macArm64 = Select-MacArtifact "MediTest-Setup-$version-macos-arm64.pkg"
+          $macX64 = Select-MacArtifact "MediTest-Setup-$version-macos-x64.pkg"
           Copy-Item -LiteralPath $macArm64.FullName -Destination (Join-Path $assetRoot $macArm64.Name)
           Copy-Item -LiteralPath $macX64.FullName -Destination (Join-Path $assetRoot $macX64.Name)
 
@@ -238,7 +248,7 @@ jobs:
             version = $version
             releaseDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd")
             releaseUrl = "https://github.com/$env:REPOSITORY/releases/tag/v$version"
-            notes = "MediTest $version"
+            notes = "Meduvalo $version"
             downloads = [ordered]@{
               "windows-x64" = New-Download "windows-x64" $files.windows
               "macos-arm64" = New-Download "macos-arm64" $macArm64.Name
@@ -265,19 +275,16 @@ jobs:
           $version = [string]($project.Project.PropertyGroup | Select-Object -First 1).Version
           $tag = "v$version"
           $files = Get-ChildItem ./release-assets -File | Select-Object -ExpandProperty FullName
-          $hasSignedMacPackages = @(Get-ChildItem ./release-assets -File -Filter *.pkg).Count -eq 2
-          $notes = if ($hasSignedMacPackages) {
-            "MediTest $version`n`nDie macOS-Pakete sind signiert und von Apple notarisiert."
+          if (@(Get-ChildItem ./release-assets -File -Filter *.pkg).Count -ne 2) {
+            throw "Der Release benötigt zwei signierte und notarisierte macOS-PKGs."
           }
-          else {
-            "MediTest $version`n`nHinweis: Die macOS-ZIPs sind vorerst nicht mit einer Apple Developer ID signiert oder notarisiert."
-          }
+          $notes = "Meduvalo $version`n`nDie macOS-Pakete sind mit einer Apple Developer ID signiert und von Apple notarisiert."
 
           $null = gh release view $tag 2>$null
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag @files --clobber
-            gh release edit $tag --title "MediTest $version" --notes $notes
+            gh release edit $tag --title "Meduvalo $version" --notes $notes
           }
           else {
-            gh release create $tag @files --title "MediTest $version" --notes $notes
+            gh release create $tag @files --title "Meduvalo $version" --notes $notes
           }

@@ -21,6 +21,14 @@ INSTALLER_SIGNING_IDENTITY="${APPLE_DEVELOPER_ID_INSTALLER:-}"
 NOTARY_KEY_ID="${APPLE_API_KEY_ID:-}"
 NOTARY_ISSUER_ID="${APPLE_API_ISSUER_ID:-}"
 NOTARY_KEY_FILE="${APPLE_API_KEY_FILE:-}"
+SIGNING_KEYCHAIN="${APPLE_SIGNING_KEYCHAIN:-}"
+
+CODESIGN_KEYCHAIN_ARGS=()
+PRODUCTBUILD_KEYCHAIN_ARGS=()
+if [[ -n "$SIGNING_KEYCHAIN" ]]; then
+  CODESIGN_KEYCHAIN_ARGS=(--keychain "$SIGNING_KEYCHAIN")
+  PRODUCTBUILD_KEYCHAIN_ARGS=(--keychain "$SIGNING_KEYCHAIN")
+fi
 
 if [[ -z "$APP_SIGNING_IDENTITY" || -z "$INSTALLER_SIGNING_IDENTITY" ]]; then
   echo "Developer-ID-Signatur fehlt. APPLE_DEVELOPER_ID_APPLICATION und APPLE_DEVELOPER_ID_INSTALLER muessen gesetzt sein." >&2
@@ -46,7 +54,7 @@ write_info_plist() {
   <key>CFBundleDevelopmentRegion</key>
   <string>de</string>
   <key>CFBundleDisplayName</key>
-  <string>MediTest</string>
+  <string>Meduvalo</string>
   <key>CFBundleExecutable</key>
   <string>MediTest</string>
   <key>CFBundleIdentifier</key>
@@ -56,9 +64,11 @@ write_info_plist() {
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>MediTest</string>
+  <string>Meduvalo</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.education</string>
   <key>CFBundleShortVersionString</key>
   <string>$VERSION</string>
   <key>CFBundleVersion</key>
@@ -105,14 +115,17 @@ sign_app_bundle() {
       if [[ "$file_path" == "$app_host" ]]; then
         continue
       fi
-      codesign --force --timestamp --options runtime --sign "$APP_SIGNING_IDENTITY" "$file_path"
+      codesign --force --timestamp --options runtime "${CODESIGN_KEYCHAIN_ARGS[@]}" \
+        --sign "$APP_SIGNING_IDENTITY" "$file_path"
     fi
   done < <(find "$app_bundle/Contents/Resources/app" -type f -print0)
 
-  codesign --force --timestamp --options runtime --entitlements "$ENTITLEMENTS" \
+  codesign --force --timestamp --options runtime "${CODESIGN_KEYCHAIN_ARGS[@]}" --entitlements "$ENTITLEMENTS" \
     --sign "$APP_SIGNING_IDENTITY" "$app_host"
-  codesign --force --timestamp --options runtime --sign "$APP_SIGNING_IDENTITY" "$launcher"
-  codesign --force --timestamp --options runtime --sign "$APP_SIGNING_IDENTITY" "$app_bundle"
+  codesign --force --timestamp --options runtime "${CODESIGN_KEYCHAIN_ARGS[@]}" \
+    --sign "$APP_SIGNING_IDENTITY" "$launcher"
+  codesign --force --timestamp --options runtime "${CODESIGN_KEYCHAIN_ARGS[@]}" \
+    --sign "$APP_SIGNING_IDENTITY" "$app_bundle"
   codesign --verify --deep --strict --verbose=2 "$app_bundle"
 }
 
@@ -122,8 +135,9 @@ build_package() {
   local clang_arch="$3"
   local work_dir="$MAC_ROOT/work-$architecture"
   local publish_dir="$work_dir/publish"
-  local app_bundle="$work_dir/MediTest.app"
+  local app_bundle="$work_dir/Meduvalo.app"
   local package_file="$MAC_ROOT/MediTest-Setup-$VERSION-macos-$architecture.pkg"
+  local notary_result_file="$work_dir/notary-result.json"
 
   rm -rf "$work_dir" "$package_file"
   mkdir -p "$app_bundle/Contents/MacOS" "$app_bundle/Contents/Resources"
@@ -155,16 +169,36 @@ build_package() {
   sign_app_bundle "$app_bundle"
 
   productbuild \
+    "${PRODUCTBUILD_KEYCHAIN_ARGS[@]}" \
     --sign "$INSTALLER_SIGNING_IDENTITY" \
     --component "$app_bundle" /Applications \
     "$package_file"
 
   pkgutil --check-signature "$package_file"
-  xcrun notarytool submit "$package_file" \
+  if ! xcrun notarytool submit "$package_file" \
     --key "$NOTARY_KEY_FILE" \
     --key-id "$NOTARY_KEY_ID" \
     --issuer "$NOTARY_ISSUER_ID" \
-    --wait
+    --wait \
+    --output-format json > "$notary_result_file"; then
+    cat "$notary_result_file" >&2
+    exit 1
+  fi
+
+  cat "$notary_result_file"
+  local notary_status
+  local submission_id
+  notary_status="$(plutil -extract status raw -o - "$notary_result_file")"
+  submission_id="$(plutil -extract id raw -o - "$notary_result_file")"
+  if [[ "$notary_status" != "Accepted" ]]; then
+    xcrun notarytool log "$submission_id" \
+      --key "$NOTARY_KEY_FILE" \
+      --key-id "$NOTARY_KEY_ID" \
+      --issuer "$NOTARY_ISSUER_ID" || true
+    echo "Apple-Notarisierung wurde mit Status '$notary_status' beendet." >&2
+    exit 1
+  fi
+
   xcrun stapler staple "$package_file"
   xcrun stapler validate "$package_file"
   spctl --assess --type install --verbose=4 "$package_file"

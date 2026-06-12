@@ -1,16 +1,16 @@
-<!doctype html>
+<!DOCTYPE HTML>
 <html lang="de">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Dokumente · MediTest</title>
+  <title>Dokumente · Meduvalo</title>
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
-<header class="topbar"><a class="brand" href="/pages/documents.html">MediTest</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
+<header class="topbar"><a class="brand" href="/pages/documents.html">Meduvalo</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
 <main>
   <section class="card">
-    <h1>Dokumente & Fragenpools</h1>
+    <h1>Dokumente &amp; Fragenpools</h1>
     <p class="muted">Lade Unterlagen hoch, importiere vorhandene Fragen, generiere KI-Fragen und starte Tests aus deinen Fragenpools.</p>
     <div id="msg" class="hidden"></div>
   </section>
@@ -22,7 +22,9 @@
       <form id="uploadForm">
         <label for="file">Unterlage</label>
         <input id="file" name="file" type="file" accept=".pdf,.pptx,.txt" required>
-        <div class="actions"><button class="primary" type="submit">Hochladen & Text extrahieren</button></div>
+        <label for="uploadFolder">Ordner (optional)</label>
+        <input type="text" id="uploadFolder" name="folderPath" placeholder="z. B. Studium/Innere Medizin">
+        <div class="actions"><button class="primary" type="submit">Hochladen &amp; Text extrahieren</button></div>
       </form>
     </article>
 
@@ -33,7 +35,9 @@
         <label for="importFile">TXT-Datei</label>
         <input id="importFile" type="file" accept=".txt" required>
         <label for="importName">Fragenpool-Name (optional)</label>
-        <input id="importName" placeholder="z. B. Innere Medizin Altfragen">
+        <input type="text" id="importName" placeholder="z. B. Innere Medizin Altfragen">
+        <label for="importFolder">Ordner (optional)</label>
+        <input type="text" id="importFolder" placeholder="z. B. Altfragen/Innere Medizin">
         <div class="actions"><button type="submit" id="importBtn">Importieren</button></div>
       </form>
     </article>
@@ -41,7 +45,8 @@
 
   <section class="card">
     <h2>Gespeicherte Dokumente</h2>
-    <div id="docs" class="grid"></div>
+    <p class="muted">Ordner können mit einem Pfad wie „Studium/Innere Medizin“ angelegt werden.</p>
+    <div id="docs" class="catalog-explorer"></div>
   </section>
 </main>
 <script src="/js/api.js"></script>
@@ -55,6 +60,71 @@ function questionCountOptions(selected){const counts=[5,10,15,25]; selected=Math
 function documentTypeLabel(doc){
   const extension=String(doc?.fileName||'').split('.').pop().toUpperCase();
   return ['PDF','PPTX','TXT'].includes(extension)?extension:'Dokument';
+}
+function documentFolderSegments(doc){
+  const source=String(doc?.folderPath||'').trim()||'Unsortiert';
+  return source.split(/[\\/]+/).map(value=>value.trim()).filter(Boolean);
+}
+function createDocumentFolderNode(name,path){
+  return {name,path,folders:new Map(),documents:[],documentCount:0};
+}
+function buildDocumentTree(documents){
+  const root=createDocumentFolderNode('Dokumente','');
+  documents.forEach(doc=>{
+    let node=root;
+    documentFolderSegments(doc).forEach(segment=>{
+      const key=segment.toLocaleLowerCase('de');
+      let child=[...node.folders.values()].find(entry=>entry.name.toLocaleLowerCase('de')===key);
+      if(!child){
+        const path=node.path?`${node.path}/${segment}`:segment;
+        child=createDocumentFolderNode(segment,path);
+        node.folders.set(segment,child);
+      }
+      node=child;
+    });
+    node.documents.push(doc);
+  });
+  function count(node){
+    node.documentCount=node.documents.length;
+    node.folders.forEach(child=>{node.documentCount+=count(child);});
+    return node.documentCount;
+  }
+  count(root);
+  return root;
+}
+function documentCard(d,generateDefault,testDefault){
+  return `<article class="catalog-file">
+    <span class="catalog-file-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5M10 12h6M10 16h6"></path></svg>
+    </span>
+    <div class="catalog-file-main">
+      <div class="catalog-file-title"><h3>${esc(d.fileName)}</h3><span class="badge">${d.questionCount} Fragen</span><span class="badge">${documentTypeLabel(d)}</span>${pageRestrictedMode?' <span class="badge">Vorhandener Inhalt</span>':''}</div>
+      <p class="muted">${d.textLength} Zeichen · ${new Date(d.createdAt).toLocaleString()} · ${esc(d.folderPath||'Unsortiert')}</p>
+      <label>Testname (optional)</label>
+      <input type="text" id="testname-${d.id}" placeholder="z. B. Kardiologie Probe 1">
+      <div class="field-row">${pageRestrictedMode?'':`<div><label>Fragen generieren</label><select id="count-${d.id}">${questionCountOptions(generateDefault)}</select></div>`}<div><label>Testlänge</label><input id="testcount-${d.id}" type="number" min="1" max="100" step="1" value="${testDefault}"></div></div>
+      <div class="actions">${pageRestrictedMode?'':`<button type="button" onclick="openAiGenerationModal(${d.id})">Generieren</button>`}<button type="button" onclick="openDocumentPreview(${d.id})">Dokument ansehen</button><a class="button" href="/pages/questions.html?id=${d.id}">Fragen ansehen</a><button type="button" class="primary" onclick="startTest(${d.id})">Test starten</button><button type="button" onclick="exportTxt(${d.id})">Export .txt</button>${pageRestrictedMode?'':`<button type="button" onclick="moveDocument(${d.id})">Verschieben</button><button type="button" class="danger" onclick="deleteDocument(${d.id})">Löschen</button>`}</div>
+    </div>
+  </article>`;
+}
+function documentFolder(node,generateDefault,testDefault,depth=0){
+  const folders=[...node.folders.values()]
+    .sort((a,b)=>a.name.localeCompare(b.name,'de'))
+    .map(child=>documentFolder(child,generateDefault,testDefault,depth+1))
+    .join('');
+  const documents=node.documents.slice()
+    .sort((a,b)=>String(a.fileName).localeCompare(String(b.fileName),'de'))
+    .map(doc=>documentCard(doc,generateDefault,testDefault))
+    .join('');
+  return `<details class="catalog-tree-folder depth-${Math.min(depth,4)}" ${depth<1?'open':''}>
+    <summary>
+      <span class="catalog-folder-chevron" aria-hidden="true">›</span>
+      <span class="catalog-folder-icon" aria-hidden="true"></span>
+      <span class="catalog-folder-name">${esc(node.name)}</span>
+      <span class="catalog-folder-count">${node.documentCount} ${node.documentCount===1?'Dokument':'Dokumente'}</span>
+    </summary>
+    <div class="catalog-tree-contents">${folders}${documents}</div>
+  </details>`;
 }
 async function loadDocs(){
   const box=document.getElementById('docs');
@@ -75,7 +145,11 @@ async function loadDocs(){
   }
   const generateDefault=Number(pageSettings.defaultGenerateQuestionCount)||25;
   const testDefault=Number(pageSettings.defaultTestQuestionCount)||25;
-  box.innerHTML=docs.map(d=>`<article class="card doc-card"><div><span class="badge">${d.questionCount} Fragen</span> <span class="badge">${documentTypeLabel(d)}</span>${pageRestrictedMode?' <span class="badge">Vorhandener Inhalt</span>':''}</div><h2>${esc(d.fileName)}</h2><p class="muted">${d.textLength} Zeichen · ${new Date(d.createdAt).toLocaleString()}</p><label>Testname (optional)</label><input id="testname-${d.id}" placeholder="z. B. Kardiologie Probe 1"><div class="field-row">${pageRestrictedMode?'':`<div><label>Fragen generieren</label><select id="count-${d.id}">${questionCountOptions(generateDefault)}</select></div>`}<div><label>Testlänge</label><input id="testcount-${d.id}" type="number" min="1" max="100" step="1" value="${testDefault}"></div></div><div class="actions">${pageRestrictedMode?'':`<button onclick="openAiGenerationModal(${d.id})">Generieren</button>`}<button onclick="openDocumentPreview(${d.id})">Dokument ansehen</button><a class="button" href="/pages/questions.html?id=${d.id}">Fragen ansehen</a><button class="primary" onclick="startTest(${d.id})">Test starten</button><button onclick="exportTxt(${d.id})">Export .txt</button>${pageRestrictedMode?'':`<button class="danger" onclick="deleteDocument(${d.id}, '${esc(d.fileName).replace(/'/g, "&#39;")}')">Löschen</button>`}</div></article>`).join('');
+  const tree=buildDocumentTree(docs);
+  box.innerHTML=[...tree.folders.values()]
+    .sort((a,b)=>a.name.localeCompare(b.name,'de'))
+    .map(folder=>documentFolder(folder,generateDefault,testDefault))
+    .join('');
   enhanceTooltips(box);
 }
 function closeDocumentPreview(){
@@ -101,7 +175,7 @@ async function openDocumentPreview(id){
       <div class="recommendation-head">
         <div>
           <h2 id="documentPreviewTitle">${esc(doc.fileName)}</h2>
-          <p class="muted">${documentTypeLabel(doc)} · ${aiSourceSize(doc.textLength)} · hochgeladen am ${new Date(doc.createdAt).toLocaleString()}</p>
+          <p class="muted">${documentTypeLabel(doc)} · ${aiSourceSize(doc.textLength)} · ${esc(doc.folderPath||'Unsortiert')} · hochgeladen am ${new Date(doc.createdAt).toLocaleString()}</p>
         </div>
         <button type="button" onclick="closeDocumentPreview()">Schließen</button>
       </div>
@@ -330,8 +404,21 @@ async function startAiGeneration(){
   }
 }
 async function startTest(id){ const msg=document.getElementById('msg'); status(msg,'Starte Test...'); const testName=document.getElementById(`testname-${id}`)?.value?.trim()||null; const questionCount=Number(document.getElementById(`testcount-${id}`)?.value)||pageSettings.defaultTestQuestionCount||25; try{const t=await api('/api/tests/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({documentId:id,questionCount,testName})}); sessionStorage.setItem('currentTest',JSON.stringify(t)); location.href=`/pages/test.html?id=${t.testSessionId}`;}catch(e){status(msg,e.message,'status error');}}
-async function exportTxt(id){ try{await downloadApiFile(`/api/documents/${id}/export-txt`,'MediTest-Fragenexport.txt');}catch(e){status(document.getElementById('msg'),e.message,'status error');} }
-async function deleteDocument(id, name){ const msg=document.getElementById('msg'); if(!confirm(`Dokument wirklich löschen?\n\n${name}\n\nAlle Fragen und Tests dazu werden ebenfalls gelöscht.`)) return; status(msg,'Lösche Dokument...'); try{await api(`/api/documents/${id}`,{method:'DELETE'}); status(msg,'Dokument gelöscht.','status success'); await loadDocs();}catch(e){status(msg,e.message,'status error');}}
+async function exportTxt(id){ try{await downloadApiFile(`/api/documents/${id}/export-txt`,`${APP_BRAND.productName}-Fragenexport.txt`);}catch(e){status(document.getElementById('msg'),e.message,'status error');} }
+async function moveDocument(id){
+  const doc=pageDocuments.find(item=>Number(item.id)===Number(id));
+  if(!doc)return;
+  const folderPath=prompt('Neuer Ordnerpfad, z. B. Studium/Innere Medizin:',doc.folderPath||'');
+  if(folderPath===null)return;
+  const msg=document.getElementById('msg');
+  status(msg,'Verschiebe Dokument...');
+  try{
+    await api(`/api/documents/${id}/folder`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({folderPath})});
+    status(msg,'Dokument wurde verschoben.','status success');
+    await loadDocs();
+  }catch(e){status(msg,e.message,'status error');}
+}
+async function deleteDocument(id){ const doc=pageDocuments.find(item=>Number(item.id)===Number(id)); const name=doc?.fileName||'Dokument'; const msg=document.getElementById('msg'); if(!confirm(`Dokument wirklich löschen?\n\n${name}\n\nAlle Fragen und Tests dazu werden ebenfalls gelöscht.`)) return; status(msg,'Lösche Dokument...'); try{await api(`/api/documents/${id}`,{method:'DELETE'}); status(msg,'Dokument gelöscht.','status success'); await loadDocs();}catch(e){status(msg,e.message,'status error');}}
 
 document.getElementById('uploadForm').addEventListener('submit', async e=>{
   e.preventDefault(); const msg=document.getElementById('msg'); status(msg,'Hochladen läuft...');
@@ -352,7 +439,7 @@ document.getElementById('importForm').addEventListener('submit', async e=>{
   e.preventDefault(); const msg=document.getElementById('msg'); status(msg,'Import läuft...');
   const file=document.getElementById('importFile').files[0]; if(!file){status(msg,'Bitte eine TXT-Datei auswählen.','status error'); return;}
   const importButton=document.getElementById('importBtn');
-  const fd=new FormData(); fd.append('file',file); const name=document.getElementById('importName').value.trim(); if(name) fd.append('documentName',name);
+  const fd=new FormData(); fd.append('file',file); const name=document.getElementById('importName').value.trim(); if(name) fd.append('documentName',name); const folder=document.getElementById('importFolder').value.trim(); if(folder) fd.append('folderPath',folder);
   try{importButton.disabled=true; importButton.setAttribute('aria-busy','true'); importButton.textContent='Import wird verarbeitet...'; const r=await api('/api/documents/import-txt',{method:'POST',body:fd}); status(msg,`Import fertig: ${r.importedQuestions} Fragen in „${r.documentName}“.`, 'status success'); document.getElementById('importForm').reset(); await loadDocs();}
   catch(err){status(msg,err.message,'status error');}
   finally{importButton.disabled=false; importButton.setAttribute('aria-busy','false'); importButton.textContent='Importieren';}

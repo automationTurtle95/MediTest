@@ -1,6 +1,6 @@
 # API
 
-MediTest stellt eine lokale HTTP-API bereit. Standardadresse:
+Meduvalo stellt eine lokale HTTP-API bereit. Standardadresse:
 
 ```text
 http://127.0.0.1:55000
@@ -46,7 +46,7 @@ Validiert den Firebase-ID-Token und liefert den aktuellen Benutzer.
 
 Bestätigt die Abmeldung für das Frontend. Das lokale Token wird clientseitig aus `sessionStorage` entfernt.
 
-E-Mail-Bestätigung, Passwort-Reset und Passwortänderung laufen für E-Mail-/Passwort-Konten direkt im Browser über Firebase Authentication. Google- und Apple-Konten verwalten ihre Anmeldesicherheit beim jeweiligen Anbieter. Die lokale MediTest-API speichert keine Passwörter und kennt keine Passwort-Hashes.
+E-Mail-Bestätigung, Passwort-Reset und Passwortänderung laufen für E-Mail-/Passwort-Konten direkt im Browser über Firebase Authentication. Google- und Apple-Konten verwalten ihre Anmeldesicherheit beim jeweiligen Anbieter. Die lokale Meduvalo-API speichert keine Passwörter und kennt keine Passwort-Hashes.
 
 `DELETE /api/account`
 
@@ -267,7 +267,7 @@ Liefert Statistik für einen einzelnen Test.
 
 `GET /api/settings`
 
-Liefert Profil- und Programmeinstellungen. Die KI-Generierung ist fest auf Firebase/Gemini eingestellt; ein KI-API-Key wird in MediTest nicht gespeichert.
+Liefert Profil- und Programmeinstellungen. Die KI-Generierung ist fest auf Firebase/Gemini eingestellt; ein KI-API-Key wird in Meduvalo nicht gespeichert.
 
 `PUT /api/settings`
 
@@ -306,15 +306,15 @@ Prüft die konfigurierte GitHub-Release-Quelle oder `latest.json` und liefert di
 ```json
 {
   "configured": true,
-  "currentVersion": "5.0.3",
+  "currentVersion": "5.0.4",
   "currentPlatform": "windows-x64",
-  "latestVersion": "5.0.3",
+  "latestVersion": "5.0.4",
   "updateAvailable": false,
-  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v5.0.3",
+  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v5.0.4",
   "recommendedDownload": {
     "platform": "windows-x64",
-    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.3/MediTest-Setup-5.0.3-win-x64.msi",
-    "fileName": "MediTest-Setup-5.0.3-win-x64.msi",
+    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.4/MediTest-Setup-5.0.4-win-x64.msi",
+    "fileName": "MediTest-Setup-5.0.4-win-x64.msi",
     "sha256": "...",
     "sizeBytes": 42400000
   }
@@ -323,4 +323,4 @@ Prüft die konfigurierte GitHub-Release-Quelle oder `latest.json` und liefert di
 
 `POST /api/system/shutdown`
 
-Beendet die lokale App, das zugehörige App-Fenster und weitere MediTest-Prozesse derselben Installation. Der Endpunkt ist auf Loopback-Zugriffe beschränkt.
+Beendet die lokale App, das zugehörige App-Fenster und weitere Meduvalo-Prozesse derselben Installation. Der Endpunkt ist auf Loopback-Zugriffe beschränkt.

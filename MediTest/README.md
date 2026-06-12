@@ -1,6 +1,18 @@
-# MediTest
+# Meduvalo
 
-MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choice-Fragen aus medizinischen Unterlagen. Version 5.0.3 nutzt Firebase Authentication, Firestore und Stripe Checkout.
+Meduvalo ist eine Lernsoftware für Medizinstudenten zur prüfungsnahen Vorbereitung mit strukturierten Fragen, Tests, Lernmodulen, Fortschrittsübersicht und KI-gestützter Fragengenerierung. Version 5.0.4 nutzt Firebase Authentication, Firestore und Stripe Checkout.
+
+## Branding und Kompatibilität
+
+Die sichtbare Produktmarke, Domain und Claims sind zentral in `Branding.cs`
+definiert. Das statische Frontend spiegelt diese Werte in `wwwroot/js/api.js`
+unter `APP_BRAND`.
+
+Technische Bestandsnamen wie `MediTest.csproj`, C#-Namespaces,
+`meditest-12354`, Function-Namen, Firestore-Pfade, lokale Cache-Schlüssel und
+Release-Dateinamen bleiben aus Kompatibilitätsgründen erhalten. Sie sind keine
+sichtbare Dachmarke und dürfen nicht ohne eigene Daten- und Update-Migration
+umbenannt werden. Details stehen in [../BRANDING.md](../BRANDING.md).
 
 ## Funktionen
 
@@ -23,7 +35,7 @@ MediTest ist eine lokale Web-App zum Erstellen und Trainieren von Multiple-Choic
 - Firestore-Katalog als aufklappbares Fach- und Themenverzeichnis mit sichtbaren Preisen, Kaufübersicht und Admin-Veröffentlichung
 - Katalogordner `MedAT` mit festem Einzelpreis von 49,99 EUR pro Test
 - Stripe Checkout für Basiskauf, Monatsabo und Katalogtests, Stripe-Kundenportal sowie serverseitige Lizenz-Synchronisierung
-- Lizenzmodell mit 9,99 EUR Einmalkauf, 7 Tagen Vollzugang und optional 5,99 EUR/Monat
+- Lizenzmodell mit 14,99 EUR Einmalkauf, 7 Tagen Vollzugang und optional 5,99 EUR/Monat
 - eingeschränkter Modus nach der Testphase: vorhandene Tests bleiben ausführbar
 - Bereich `Rechtliches & Lizenz` mit zentralen Produktdaten, rechtlichen Links, Gerätebindung und Lizenzprüfung
 - Versionierte AGB-/Datenschutz-Zustimmung in Firestore und begrenzter Offline-Modus mit verschlüsseltem Cache
@@ -61,7 +73,7 @@ Alternativ unter Windows: `Start_MediTest.bat` doppelklicken. Die App läuft sta
 
 ## Anmeldung mit Firebase
 
-V5.0.3 speichert keine Nutzerdaten mehr in einer lokalen `meditest.db`. Registrierung und Anmeldung laufen über Firebase Authentication wahlweise mit E-Mail/Passwort, Google oder Apple. Bei E-Mail/Passwort muss die Adresse nach der Registrierung bestätigt werden; Google- und Apple-Konten übernehmen den bestätigten Anmeldestatus des jeweiligen Anbieters. Passwort-Reset und Passwortänderung gelten nur für E-Mail/Passwort-Konten. Im Browser werden ID-Token und Refresh-Token nur in `sessionStorage` gehalten und verschwinden beim Schließen der Browser-Sitzung.
+V5.0.4 speichert keine Nutzerdaten mehr in einer lokalen `meditest.db`. Registrierung und Anmeldung laufen über Firebase Authentication wahlweise mit E-Mail/Passwort, Google oder Apple. Bei E-Mail/Passwort muss die Adresse nach der Registrierung bestätigt werden; Google- und Apple-Konten übernehmen den bestätigten Anmeldestatus des jeweiligen Anbieters. Passwort-Reset und Passwortänderung gelten nur für E-Mail/Passwort-Konten. Im Browser werden ID-Token und Refresh-Token nur in `sessionStorage` gehalten und verschwinden beim Schließen der Browser-Sitzung.
 
 In Firebase müssen unter `Authentication -> Sign-in method` die verwendeten Anbieter aktiviert sein. Die Firebase-Web-Konfiguration steht in `appsettings.json`:
 
@@ -83,13 +95,13 @@ In Firebase müssen unter `Authentication -> Sign-in method` die verwendeten Anb
 }
 ```
 
-Unter `Authentication -> Settings -> Authorized domains` müssen mindestens `127.0.0.1` und `localhost` eingetragen sein, weil MediTest lokal unter `http://127.0.0.1:55000` läuft. Für Apple müssen zusätzlich die Apple-Developer-Konfiguration und die in Firebase verlangten Service-ID-/Schlüsselangaben vollständig hinterlegt sein.
+Unter `Authentication -> Settings -> Authorized domains` müssen mindestens `127.0.0.1` und `localhost` eingetragen sein, weil Meduvalo lokal unter `http://127.0.0.1:55000` läuft. Für Apple müssen zusätzlich die Apple-Developer-Konfiguration und die in Firebase verlangten Service-ID-/Schlüsselangaben vollständig hinterlegt sein.
 
 Die Firebase-Web-API-Konfiguration ist im Frontend sichtbar und darf dort stehen. Sicherheitsregeln, echte Lizenzpläne und spätere Abo-Entscheidungen gehören in Firebase/Cloud-Funktionen bzw. einen späteren Server.
 
 ## Einstellungen und KI-Generierung
 
-Die KI-Generierung läuft standardmäßig über die Firebase Function. Dabei wird kein KI-API-Key in MediTest gespeichert: Der Browser meldet sich per Firebase an, MediTest reicht das Firebase-ID-Token an die Cloud Function weiter, und die Function liest den echten `GEMINI_API_KEY` aus Firebase Secret Manager.
+Die KI-Generierung läuft standardmäßig über die Firebase Function. Dabei wird kein KI-API-Key in Meduvalo gespeichert: Der Browser meldet sich per Firebase an, Meduvalo reicht das Firebase-ID-Token an die Cloud Function weiter, und die Function liest den echten `GEMINI_API_KEY` aus Firebase Secret Manager.
 
 Die Firebase-Function-Vorlage liegt unter `../firebase`. Die App ist fest auf `firebase` mit `gemini-2.5-flash` und die hinterlegte Function-URL eingestellt.
 
@@ -101,13 +113,13 @@ Die Seite `Einstellungen` speichert Profil und Programmeinstellungen unter `user
 
 Die Seite `Katalog` liest themenspezifische Tests aus der Firestore-Collection `catalogTests` und zeigt vorhandene Legacy-Einträge aus `thematicTests` weiterhin an. Tests werden in einem aufklappbaren Verzeichnis nach Bereich und frei wählbarem Ordnerpfad dargestellt. Admins können beim Veröffentlichen Pfade wie `Innere Medizin/Kardiologie` vergeben. Ältere Einträge ohne `folderPath` werden automatisch aus Kategorie und Thema einsortiert. Der Ordner `MedAT` ist dauerhaft sichtbar; dort veröffentlichte Tests kosten jeweils 49,99 EUR. Vor einem Checkout öffnet sich eine Kaufübersicht mit Preis, Umfang, Thema und Schwierigkeit. Katalogtests bleiben unabhängig von Basiskauf, Testphase, Abo und Premium-Status separate Kaufartikel; Admin-Konten behalten ihren Verwaltungszugriff.
 
-MediTest läuft installationsbezogen als Einzelinstanz. Unter Windows wird die Oberfläche in einem eigenen App-Fenster mit separatem Browserprofil geöffnet. `Programm schließen` beendet dieses Fenster, den lokalen Server und weitere Prozesse derselben MediTest-Installation.
+Meduvalo läuft installationsbezogen als Einzelinstanz. Unter Windows wird die Oberfläche in einem eigenen App-Fenster mit separatem Browserprofil geöffnet. `Programm schließen` beendet dieses Fenster, den lokalen Server und weitere Prozesse derselben Meduvalo-Installation.
 
 ## Lizenzmodell
 
 Die Seite `Rechtliches & Lizenz` zeigt Produkt- und Entwicklerdaten, den Firebase-Nutzer, Lizenztyp, Lizenzstatus, Gerätebelegung, rechtliche Links, Basiskauf, Testphase, Abo-Status und Premium-Code-Eingabe. Standardwerte:
 
-- 9,99 EUR einmalig für Installer und Basiskauf
+- 14,99 EUR einmalig für Installer und Basiskauf
 - 7 Tage vollständige Testphase ab bestätigter Zahlung
 - 5,99 EUR pro Monat für den optionalen Vollzugang danach
 - ohne Abo bleiben vorhandene Tests, Ergebnisse und gekaufte Katalogtests nutzbar
@@ -120,7 +132,7 @@ Die geschützte Function `meditestLicenseAccess` verwaltet `users`, `licenses`, 
 
 Die geschützte Function `meditestCreateCheckout` erstellt getrennte Checkout-Sitzungen für Basiskauf, Abo und Katalog. Für MedAT wird der feste Preis aus dem Katalogeintrag verwendet; bestehende Katalogtests behalten das bisherige Fragenpreismodell. `meditestStripeWebhook` prüft die Stripe-Signatur, startet die Testphase nach dem Basiskauf und überträgt aktive Abos sowie erfolgreiche Katalogkäufe nach `users/{uid}/billing/license`. Nutzer dürfen diesen Lizenzpfad lesen, aber nicht direkt schreiben. `meditestStripePortal` ermöglicht die Verwaltung von Zahlungsmittel und Abo.
 
-Der Gemini-Key gehört nicht in das Repository und nicht in die MediTest-Installation. Er wird als Firebase Secret `GEMINI_API_KEY` gespeichert. Ohne gültiges Secret funktioniert die App weiter, aber die KI-Fragengenerierung meldet einen Konfigurationsfehler.
+Der Gemini-Key gehört nicht in das Repository und nicht in die Meduvalo-Installation. Er wird als Firebase Secret `GEMINI_API_KEY` gespeichert. Ohne gültiges Secret funktioniert die App weiter, aber die KI-Fragengenerierung meldet einen Konfigurationsfehler.
 
 ## Release bauen
 
@@ -131,14 +143,14 @@ cd MediTest
 powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 ```
 
-Die fertigen Artefakte liegen danach unter `dist/MediTest-5.0.3/`. Frühere Release-Ordner bleiben erhalten.
+Die fertigen Artefakte liegen danach unter `dist/MediTest-5.0.4/`. Frühere Release-Ordner bleiben erhalten.
 
-Ohne `-WindowsOnly` entstehen zusätzlich vorläufige, unsignierte macOS-Setup-ZIPs für Intel und Apple Silicon. Sind die Apple-Secrets in GitHub eingerichtet, ersetzt der Release-Workflow diese automatisch durch signierte und notarisierte PKG-Installer.
+Ohne `-WindowsOnly` können lokal weiterhin Test-ZIPs für Intel und Apple Silicon erzeugt werden. Der produktive Release-Workflow akzeptiert ab Version 5.0.4 ausschließlich signierte und von Apple notarisierte PKG-Installer.
 
 Die veröffentlichte Windows-EXE ist als GUI-Anwendung gebaut. Beim Start über MSI-Verknüpfung oder Portable-ZIP bleibt deshalb kein Konsolenfenster sichtbar.
 
 Der GitHub-Workflow erzeugt aus den erfolgreich gebauten Windows- und macOS-Artefakten automatisch `latest.json` und `SHA256SUMS.txt`. Die App kann auf der Seite `Einstellungen` nach neuen Versionen suchen.
 
-Solange die Apple-Secrets fehlen, kennzeichnet der Release die macOS-ZIPs ausdrücklich als nicht signiert und nicht notarisiert.
+Fehlen Apple-Secrets oder lehnt Apple eine Notarisierung ab, wird kein produktiver Release veröffentlicht.
 
 Weitere Details stehen in [docs/INSTALLATION.md](docs/INSTALLATION.md), [docs/MACOS_SIGNING.md](docs/MACOS_SIGNING.md), [docs/API.md](docs/API.md), [docs/RELEASE.md](docs/RELEASE.md) und [docs/WEBSITE_DISTRIBUTION.md](docs/WEBSITE_DISTRIBUTION.md).

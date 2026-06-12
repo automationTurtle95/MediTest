@@ -2,7 +2,7 @@ namespace MediTest.Models;
 
 public sealed class AppLegalInfo
 {
-    public string ProductName { get; set; } = "MediTest";
+    public string ProductName { get; set; } = global::MediTest.Brand.ProductName;
     public string ProductVersion { get; set; } = string.Empty;
     public string BuildNumber { get; set; } = string.Empty;
     public DateTime? ReleaseDate { get; set; }

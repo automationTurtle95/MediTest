@@ -1,13 +1,13 @@
-<!doctype html>
+<!DOCTYPE HTML>
 <html lang="de">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Einstellungen · MediTest</title>
+  <title>Einstellungen · Meduvalo</title>
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
-<header class="topbar"><a class="brand" href="/pages/documents.html">MediTest</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
+<header class="topbar"><a class="brand" href="/pages/documents.html">Meduvalo</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
 <main>
   <section class="card">
     <h1>Einstellungen</h1>
@@ -18,13 +18,13 @@
   <form id="settingsForm" class="settings-grid">
     <section class="card">
       <h2>Profil</h2>
-      <label for="displayName">Name</label><input id="displayName" autocomplete="name" placeholder="Vor- und Nachname">
+      <label for="displayName">Name</label><input type="text" id="displayName" autocomplete="name" placeholder="Vor- und Nachname">
       <div class="field-row">
-        <div><label for="matriculationNumber">Matrikelnummer</label><input id="matriculationNumber" autocomplete="off"></div>
-        <div><label for="semester">Semester</label><input id="semester" placeholder="z. B. 6. Semester"></div>
+        <div><label for="matriculationNumber">Matrikelnummer</label><input type="text" id="matriculationNumber" autocomplete="off"></div>
+        <div><label for="semester">Semester</label><input type="text" id="semester" placeholder="z. B. 6. Semester"></div>
       </div>
-      <label for="studyProgram">Studiengang</label><input id="studyProgram" placeholder="z. B. Humanmedizin">
-      <label for="university">Hochschule / Universität</label><input id="university" autocomplete="organization">
+      <label for="studyProgram">Studiengang</label><input type="text" id="studyProgram" placeholder="z. B. Humanmedizin">
+      <label for="university">Hochschule / Universität</label><input type="text" id="university" autocomplete="organization">
       <label for="email">Bestätigte Konto-E-Mail</label><input id="email" type="email" autocomplete="email" readonly>
     </section>
 
@@ -172,7 +172,7 @@ function openDeleteAccountModal(){
       <label for="deleteAccountEmail">Konto-E-Mail</label>
       <input id="deleteAccountEmail" type="email" autocomplete="off" oninput="updateDeleteAccountButton()">
       <label for="deleteAccountPhrase">Bestätigung</label>
-      <input id="deleteAccountPhrase" autocomplete="off" placeholder="LÖSCHEN" oninput="updateDeleteAccountButton()">
+      <input type="text" id="deleteAccountPhrase" autocomplete="off" placeholder="LÖSCHEN" oninput="updateDeleteAccountButton()">
       <div id="deleteAccountStatus" class="hidden"></div>
       <div class="actions">
         <button type="button" onclick="closeDeleteAccountModal()">Abbrechen</button>

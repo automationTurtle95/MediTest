@@ -16,6 +16,7 @@ Thumbs.db
 # Node/Firebase generated output
 **/node_modules/
 firebase/functions/lib/
+.firebase/
 
 # Local data, logs, and secrets
 *.log
@@ -23,6 +24,7 @@ firebase/functions/lib/
 meditest.db
 API.txt
 PremiumCode.txt
+GratisCode.txt
 OPENAI_API_KEY.txt
 GEMINI_API_KEY.txt
 appsettings.Development.json

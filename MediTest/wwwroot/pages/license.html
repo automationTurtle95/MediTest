@@ -1,17 +1,17 @@
-<!doctype html>
+<!DOCTYPE HTML>
 <html lang="de">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Rechtliches & Lizenz · MediTest</title>
+  <title>Rechtliches &amp; Lizenz · Meduvalo</title>
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
-<header class="topbar"><a class="brand" href="/pages/documents.html">MediTest</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/catalog.html">Katalog</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
+<header class="topbar"><a class="brand" href="/pages/documents.html">Meduvalo</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/catalog.html">Katalog</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
 <main>
   <section class="card">
     <p class="eyebrow">Produkt, Konto und Nutzung</p>
-    <h1>Rechtliches & Lizenz</h1>
+    <h1>Rechtliches &amp; Lizenz</h1>
     <p class="muted">Produktdaten, rechtliche Verweise, Gerätebindung und Lizenzstatus an einem Ort.</p>
     <div id="msg" class="status">Lade Lizenzstatus...</div>
   </section>
@@ -58,7 +58,7 @@ function renderLegalLicense(data){
   document.getElementById('msg').textContent=result.message||'Lizenzstatus unbekannt.';
   document.getElementById('legalLicenseBox').innerHTML=`
     <article class="card doc-card">
-      <span class="badge">${esc(legal.productName||'MediTest')}</span>
+      <span class="badge">${esc(legal.productName||APP_BRAND.productName)}</span>
       <h2>Produkt</h2>
       <dl class="legal-details">
         <div><dt>Version</dt><dd>${esc(valueOr(legal.productVersion,'-'))}</dd></div>
@@ -137,12 +137,12 @@ function renderBilling(s){
         isPremium
           ? 'Premium ist aktiv. Katalogfreischaltungen per Premium-Code sind eine gesonderte Sonderberechtigung.'
           : hasSubscription
-            ? 'Alle MediTest-Funktionen sind verfügbar. Katalogtests bleiben separate Kaufartikel.'
+            ? `Alle ${APP_BRAND.productName}-Funktionen sind verfügbar. Katalogtests bleiben separate Kaufartikel.`
             : s.status==='trial'
               ? `Der Kauf enthält 7 Tage Vollzugang. Danach kostet das optionale Abo <b>${priceLabel(s.monthlyPriceCents,s.currency)} pro Monat</b>. Katalogtests sind nicht enthalten.`
               : isRestricted
                 ? `Vorhandene Tests, Ergebnisse und gekaufte Katalogtests bleiben nutzbar. Neue Inhalte, Bearbeitung und KI-Funktionen werden mit dem Abo für <b>${priceLabel(s.monthlyPriceCents,s.currency)} pro Monat</b> wieder freigeschaltet.`
-                : `MediTest muss zuerst einmalig für <b>${priceLabel(s.productPriceCents,s.currency)}</b> gekauft werden. Der Kauf startet die 7-tägige Testphase und schaltet den Installer frei.`
+                : `${APP_BRAND.productName} muss zuerst einmalig für <b>${priceLabel(s.productPriceCents,s.currency)}</b> gekauft werden. Der Kauf startet die 7-tägige Testphase und schaltet den Installer frei.`
       }</p>
       <div class="actions">${
         isPremium
@@ -151,7 +151,7 @@ function renderBilling(s){
             ? '<button class="primary" type="button" onclick="manageSubscription()">Abo verwalten</button>'
             : productPurchased
               ? `<button class="primary" type="button" onclick="startSubscription()" ${s.checkoutConfigured?'':'disabled'}>${s.status==='trial'?'Abo für danach abschließen':'Vollzugang abonnieren'} · ${priceLabel(s.monthlyPriceCents,s.currency)}/Monat</button>`
-              : '<a class="button primary" href="https://meditest-12354.web.app/purchase" target="_blank" rel="noopener">MediTest kaufen</a>'
+              : `<a class="button primary" href="${APP_BRAND.websiteUrl}/purchase" target="_blank" rel="noopener">${APP_BRAND.productName} kaufen</a>`
       }</div>
     </article>
     <article class="card doc-card">
@@ -167,17 +167,17 @@ function renderBilling(s){
       <p class="muted">${freeCreditText}</p>
       <form onsubmit="redeemCatalogCode(event)">
         <label for="catalogCode">Gratis-Katalog-Code</label>
-        <input id="catalogCode" autocomplete="off" placeholder="Gratis-Katalog-Code eingeben" ${freeCreditAvailable||freeCreditRedeemed?'disabled':''}>
+        <input type="text" id="catalogCode" autocomplete="off" placeholder="Gratis-Katalog-Code eingeben" ${freeCreditAvailable||freeCreditRedeemed?'disabled':''}>
         <div class="actions">${freeCreditAvailable?'<a class="button primary" href="/pages/catalog.html">Gratis-Test auswählen</a>':`<button class="primary" type="submit" ${freeCreditRedeemed?'disabled':''}>Code einlösen</button>`}</div>
       </form>
     </article>
     <article class="card doc-card">
       <span class="badge">Premium-Code</span>
       <h2>Code einlösen</h2>
-      <p class="muted">Ein gültiger administrativer Code schaltet die MediTest-Vollfunktionen frei. Katalogtests bleiben separate Kaufartikel.</p>
+      <p class="muted">Ein gültiger administrativer Code schaltet die Meduvalo-Vollfunktionen frei. Katalogtests bleiben separate Kaufartikel.</p>
       <form onsubmit="redeemPremiumCode(event)">
         <label for="premiumCode">Premium-Code</label>
-        <input id="premiumCode" autocomplete="off" placeholder="MT-PREMIUM-XXXX-XXXX-XXXX-XXXX" ${isPremium?'disabled':''}>
+        <input type="text" id="premiumCode" autocomplete="off" placeholder="MT-PREMIUM-XXXX-XXXX-XXXX-XXXX" ${isPremium?'disabled':''}>
         <div class="actions"><button class="primary" type="submit" ${isPremium?'disabled':''}>Code einlösen</button></div>
       </form>
     </article>`;

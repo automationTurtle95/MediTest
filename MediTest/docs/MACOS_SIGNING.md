@@ -1,41 +1,45 @@
 # macOS-Signierung und Notarisierung
 
-## Warum Apple-Zugangsdaten notwendig sind
+Meduvalo wird außerhalb des Mac App Store verteilt. Der produktive Release benötigt deshalb zwei Developer-ID-Zertifikate und eine erfolgreiche Apple-Notarisierung. Ab Version 5.0.4 veröffentlicht der Workflow keine unsignierten macOS-Fallbacks mehr.
 
-Ein normales ZIP oder ein unsigniertes PKG wird von macOS als Software eines nicht verifizierten Entwicklers behandelt. Ein vertrauenswürdiger Installer außerhalb des Mac App Store benötigt:
+## Voraussetzungen
 
-- eine aktive Mitgliedschaft im Apple Developer Program
-- ein Zertifikat `Developer ID Application`
-- ein Zertifikat `Developer ID Installer`
-- eine Notarisierung durch Apples Notary Service
+- aktive Mitgliedschaft im Apple Developer Program
+- Zugriff als Account Holder auf Developer-ID-Zertifikate
+- ein Mac zum Erstellen der Zertifikatsanfragen und Exportieren der privaten Schlüssel
+- Admin-Zugriff auf das GitHub-Repository
 
-Ohne diese Apple-Zertifikate kann kein Buildskript die Gatekeeper-Warnung seriös entfernen.
+Die App verwendet die Bundle-ID:
 
-## Apple-Zertifikate erstellen
+```text
+com.automationturtle95.meditest
+```
 
-Im Apple Developer Portal unter `Certificates, Identifiers & Profiles`:
+## Developer-ID-Zertifikate
 
-1. Ein Zertifikat vom Typ `Developer ID Application` erstellen.
-2. Ein Zertifikat vom Typ `Developer ID Installer` erstellen.
-3. Beide Zertifikate samt privatem Schlüssel auf einem Mac in der Schlüsselbundverwaltung installieren.
+Im Apple Developer Portal unter `Certificates, Identifiers & Profiles -> Certificates`:
+
+1. Über `+` ein Zertifikat vom Typ `Developer ID Application` erstellen.
+2. Über `+` ein Zertifikat vom Typ `Developer ID Installer` erstellen.
+3. Beide Zertifikate samt privatem Schlüssel im macOS-Schlüsselbund installieren.
 4. Jedes Zertifikat mit privatem Schlüssel als `.p12` exportieren.
 5. Für beide Exporte dasselbe starke Exportpasswort verwenden.
 
-Die Zertifikate müssen zum gleichen Apple-Developer-Team gehören.
+Beide Zertifikate müssen zum selben Apple-Developer-Team gehören. Die `.cer`-Datei allein reicht nicht; GitHub Actions benötigt den zugehörigen privaten Schlüssel im `.p12`.
 
-## Notarisierungs-API-Key
+## Notarisierungs-Key
 
-In App Store Connect unter `Users and Access` einen Team-API-Key für die Notarisierung erstellen. Benötigt werden:
+In App Store Connect unter `Users and Access -> Integrations` einen Team-API-Key für die Notarisierung erstellen. Benötigt werden:
 
-- die heruntergeladene Datei `AuthKey_<KEY_ID>.p8`
-- die Key ID
-- die Issuer ID
+- `AuthKey_<KEY_ID>.p8`
+- Key ID
+- Issuer ID
 
-Die `.p8`-Datei kann bei Apple nur einmal heruntergeladen werden und darf nicht ins Repository gelangen.
+Die `.p8`-Datei kann nur einmal heruntergeladen werden und darf nicht in Git oder in einen öffentlichen Cloud-Ordner gelangen.
 
-## Dateien in Base64 umwandeln
+## GitHub-Secrets
 
-Auf dem Mac:
+Auf dem Mac die drei Binärdateien jeweils einzeilig in Base64 umwandeln:
 
 ```bash
 base64 < DeveloperIDApplication.p12 | tr -d '\n' | pbcopy
@@ -43,11 +47,7 @@ base64 < DeveloperIDInstaller.p12 | tr -d '\n' | pbcopy
 base64 < AuthKey_DEINE_KEY_ID.p8 | tr -d '\n' | pbcopy
 ```
 
-Jeden Befehl einzeln ausführen und den jeweiligen Inhalt als GitHub Secret speichern.
-
-## GitHub-Secrets
-
-Im Repository unter `Settings -> Secrets and variables -> Actions` folgende Secrets anlegen:
+Im GitHub-Repository unter `Settings -> Secrets and variables -> Actions` diese Repository-Secrets anlegen:
 
 ```text
 APPLE_DEVELOPER_ID_APPLICATION_P12_BASE64
@@ -64,38 +64,50 @@ Optional:
 APPLE_KEYCHAIN_PASSWORD
 ```
 
-Wenn `APPLE_KEYCHAIN_PASSWORD` fehlt, erzeugt der Workflow ein temporäres Passwort.
+Wenn `APPLE_KEYCHAIN_PASSWORD` fehlt, erzeugt GitHub Actions ein temporäres Passwort. Zertifikate, API-Key und temporärer Schlüsselbund werden nach dem Job gelöscht.
 
-## Release-Ablauf
+## Apple-Anmeldung in Firebase
 
-Beim Push eines Versionstags:
+Die Developer-ID-Signierung ist unabhängig von `Mit Apple anmelden`. Für den Apple-Login zusätzlich:
+
+1. Im Apple Developer Portal eine Services ID für Meduvalo registrieren.
+2. `Sign in with Apple` aktivieren und `meditest-12354.firebaseapp.com` als Web-Domain konfigurieren.
+3. Als Return URL `https://meditest-12354.firebaseapp.com/__/auth/handler` hinterlegen.
+4. Einen Sign-in-with-Apple-Key erstellen und Team ID, Services ID, Key ID sowie privaten Schlüssel im Firebase-Provider `Apple` eintragen.
+5. In Firebase Authentication den Apple-Provider aktivieren.
+
+## Release
+
+Nach dem Einrichten der Secrets:
 
 ```bash
-git tag v5.0.3
+git tag v5.0.4
 git push origin main
-git push origin v5.0.3
+git push origin v5.0.4
 ```
 
-führt GitHub Actions folgende Schritte aus:
+Der Workflow:
 
-1. Windows-MSI und Portable-ZIP auf Windows bauen.
-2. Intel- und Apple-Silicon-App auf macOS bauen.
-3. Alle nativen Mach-O-Dateien mit `Developer ID Application` signieren.
-4. Den .NET-Apphost mit Hardened Runtime und `allow-jit` signieren.
-5. Native PKG-Installer mit `Developer ID Installer` erstellen.
-6. Beide PKGs mit `notarytool` bei Apple einreichen.
-7. Das Notarisierungsticket mit `stapler` anheften.
-8. Signatur und Gatekeeper-Freigabe prüfen.
-9. Erst danach den GitHub Release veröffentlichen.
+1. importiert beide Developer-ID-Zertifikate in einen temporären Schlüsselbund,
+2. validiert die Notarisierungs-Zugangsdaten,
+3. baut Intel- und Apple-Silicon-App,
+4. signiert alle Mach-O-Komponenten mit Hardened Runtime,
+5. erstellt signierte PKG-Installer,
+6. reicht beide Pakete über `notarytool` bei Apple ein,
+7. hängt das Notarisierungsticket mit `stapler` an,
+8. prüft Signatur und Gatekeeper-Freigabe,
+9. veröffentlicht erst danach den GitHub Release.
 
-Fehlen die Apple-Secrets, veröffentlicht der Workflow vorerst die unsignierten macOS-ZIPs aus dem plattformübergreifenden Fallback-Build. Sobald alle Secrets vorhanden sind, werden sie automatisch durch signierte und notarisierte PKGs ersetzt. Lehnt Apple bei konfigurierten Secrets die Signierung oder Notarisierung ab, schlägt der Release weiterhin fehl.
+Fehlt ein Secret oder lehnt Apple ein Paket ab, schlägt der Release fehl. Der Workflow veröffentlicht dann keine unsignierte Ersatzdatei.
 
-## Manuelle Kontrolle auf einem Mac
+## Manuelle Kontrolle
+
+Auf einem Mac:
 
 ```bash
-pkgutil --check-signature MediTest-Setup-5.0.3-macos-arm64.pkg
-xcrun stapler validate MediTest-Setup-5.0.3-macos-arm64.pkg
-spctl --assess --type install --verbose=4 MediTest-Setup-5.0.3-macos-arm64.pkg
+pkgutil --check-signature MediTest-Setup-5.0.4-macos-arm64.pkg
+xcrun stapler validate MediTest-Setup-5.0.4-macos-arm64.pkg
+spctl --assess --type install --verbose=4 MediTest-Setup-5.0.4-macos-arm64.pkg
 ```
 
-Die abschließende Praxiskontrolle sollte auf einem Mac erfolgen, auf dem MediTest zuvor noch nie installiert oder manuell freigegeben wurde.
+Zusätzlich sollte das Paket auf einem Mac getestet werden, auf dem Meduvalo zuvor weder installiert noch manuell freigegeben wurde.

@@ -1,57 +1,66 @@
 # Webseiten-Vertrieb
 
-## Dateien für die Webseite
+Die öffentliche Meduvalo-Landingpage liegt getrennt unter `landing-page/` und
+wird über die bestehende Firebase-Hosting-Site für `https://meduvalo.at`
+bereitgestellt. Die Desktop-Anwendung bleibt außerhalb des Hosting-Public-
+Ordners.
 
-Nach dem Release-Build liegen die verkaufbaren Pakete hier:
+## Release-Dateien
+
+Version 5.0.4 veröffentlicht:
 
 ```text
-MediTest-Setup-5.0.3-win-x64.msi
-MediTest-5.0.3-win-x64-portable.zip
-MediTest-5.0.3-macos-x64-setup.zip
-MediTest-5.0.3-macos-arm64-setup.zip
+MediTest-Setup-5.0.4-win-x64.msi
+MediTest-5.0.4-win-x64-portable.zip
+MediTest-Setup-5.0.4-macos-arm64.pkg
+MediTest-Setup-5.0.4-macos-x64.pkg
 SHA256SUMS.txt
 ```
 
-Für normale Kunden sollten auf der Webseite primär diese Downloads sichtbar sein:
+Die beiden macOS-PKGs müssen mit `Developer ID Application` und `Developer ID Installer` signiert, von Apple notarisiert und mit einem Ticket versehen sein.
 
-- Windows: `MediTest-Setup-5.0.3-win-x64.msi`
-- Mac Intel: `MediTest-5.0.3-macos-x64-setup.zip`
-- Mac Apple Silicon: `MediTest-5.0.3-macos-arm64-setup.zip`
+## Geschützter Download
 
-Das portable Windows-ZIP ist praktisch für Support oder Tests, sollte aber nicht der Hauptdownload sein.
+Die Kaufseite übergibt eine Plattform an `meditestDownloadAccess`:
 
-## GitHub-Downloadlinks
-
-Wenn der GitHub Release `v5.0.3` veröffentlicht ist, können die Buttons auf der Webseite direkt auf die Release-Assets zeigen:
-
-```html
-<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-Setup-5.0.3-win-x64.msi">Windows herunterladen</a>
-<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-5.0.3-macos-arm64-setup.zip">Mac Apple Silicon herunterladen</a>
-<a href="https://github.com/automationTurtle95/MediTest/releases/latest/download/MediTest-5.0.3-macos-x64-setup.zip">Mac Intel herunterladen</a>
+```text
+windows-x64
+macos-arm64
+macos-x64
 ```
 
-Alternativ kannst du die Dateien des GitHub Release `v5.0.3` auf deinen eigenen Webserver hochladen. Dann müssen die Links auf deiner Webseite auf die dortigen Dateien zeigen.
+Ein Basiskauf oder Gratis-Produktcode gilt für alle Desktop-Plattformen. Die Function liefert nach der Lizenzprüfung nur die zum ausgewählten System passende URL.
 
-## Verkauf und Freischaltung
+Firebase-Functions-Parameter:
 
-MediTest ist technisch für Verkauf vorbereitet:
+```text
+CURRENT_APP_VERSION
+WINDOWS_DOWNLOAD_URL
+MACOS_ARM64_DOWNLOAD_URL
+MACOS_X64_DOWNLOAD_URL
+```
 
-- Basiskauf zum serverseitig konfigurierten Preis `BILLING_PRODUCT_PRICE_CENTS`
-- 7 Tage Testphase ab bestätigtem Basiskauf
-- optionales Monatsabo zum serverseitig konfigurierten Preis `BILLING_MONTHLY_PRICE_CENTS`
-- eingeschränkte Nutzung vorhandener Tests nach Ablauf ohne Abo
-- Katalogpreise über `STRIPE_CATALOG_UNIT_PRICE_ID` und `STRIPE_CATALOG_ENDING_PRICE_ID`
-- Premium- und Gratis-Code-Hashes über Firebase-Functions-Parameter
+Nach einem neuen Release müssen Version und URLs gemeinsam aktualisiert und die Functions erneut bereitgestellt werden.
 
-Stripe Checkout und der signaturgeprüfte Webhook setzen nach erfolgreicher Zahlung den Basiskauf, den Abo-Status oder die gekauften Katalogtest-IDs im Firebase-/Firestore-Nutzerkonto. Der Basiskauf verlängert sich nicht automatisch; das Abo wird separat abgeschlossen.
+## Kauf und Freischaltung
 
-## Gratis-Katalog-Code
+- einmaliger Basiskauf zum serverseitig konfigurierten Preis
+- Download für Windows, Apple Silicon oder Intel-Mac
+- 7 Tage vollständiger Zugang ab Kauf
+- optionales Monatsabo
+- Gratis-Produktcode als alternative Basiskauf-Freischaltung
+- separate Katalogtest-Käufe
 
-Der Klartext eines Gratis-Codes sollte nicht auf einer öffentlichen Webseite oder in der App als Beispiel angezeigt werden. In `appsettings.json` liegt nur der SHA-256-Hash. Die geschützte Cloud Function speichert die Einlösung atomar im persönlichen Lizenzstatus. Jedes Benutzerkonto kann den Code genau einmal verwenden und damit einen gesperrten Katalogtest dauerhaft freischalten.
+Stripe Checkout und der signaturgeprüfte Webhook setzen die Lizenz im Firebase-/Firestore-Konto. Die gewählte Plattform wird nur für die Rückleitung und Downloadauswahl gespeichert; die Lizenz selbst bleibt plattformübergreifend.
 
 ## Produktive Hinweise
 
-- GitHub Releases müssen öffentlich erreichbar sein, wenn die App Updates direkt über GitHub prüfen soll.
-- Die vorläufigen Mac-ZIPs sind nicht mit einer Apple Developer ID signiert oder notarisiert und müssen entsprechend gekennzeichnet werden. Sobald die Apple-Secrets vorhanden sind, sollen die Downloadlinks auf die signierten PKGs umgestellt werden.
-- Für Windows-Vertrauen ist später ein Code-Signing-Zertifikat sinnvoll.
-- Vor Verkauf auf der Webseite sollten Impressum, Datenschutz, Widerruf, AGB und Lizenzbedingungen geprüft werden.
+- Hosting-Deployment aus dem Repository-Stamm:
+  `npx firebase-tools deploy --config firebase.hosting.json --only hosting --project meditest-12354`
+- Die Custom Domain `meduvalo.at` muss in der Firebase Console hinzugefügt und
+  über die von Firebase vorgegebenen DNS-Records beim Domainanbieter bestätigt
+  werden. SSL wird anschließend von Firebase bereitgestellt.
+- GitHub Releases müssen erreichbar sein, solange die Download-URLs auf öffentliche Release-Assets zeigen.
+- Ein wirklich nicht öffentlich abrufbarer Binärdownload benötigt später private Cloud-Storage-Objekte mit kurzlebigen signierten URLs.
+- Vor jedem Release müssen beide macOS-PKGs auf einem frischen Mac über Gatekeeper getestet werden.
+- Impressum, Datenschutz, Widerruf, AGB und Lizenzbedingungen müssen alle angebotenen Desktop-Plattformen abdecken.

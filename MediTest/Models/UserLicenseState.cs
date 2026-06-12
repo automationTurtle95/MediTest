@@ -6,6 +6,7 @@ public sealed class UserLicenseState
     public DateTime? BaseProductPurchasedAt { get; set; }
     public string BaseProductProvider { get; set; } = string.Empty;
     public string BaseProductCheckoutSessionId { get; set; } = string.Empty;
+    public string BaseProductCodeHash { get; set; } = string.Empty;
     public DateTime? TrialStartedAt { get; set; }
     public DateTime? TrialEndsAt { get; set; }
     public bool SubscriptionActive { get; set; }

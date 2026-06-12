@@ -68,6 +68,7 @@ public sealed class FirestoreUserDataStore
         var state = stateElement.Deserialize<UserLicenseState>(JsonOptions) ?? new UserLicenseState();
         state.BaseProductProvider ??= string.Empty;
         state.BaseProductCheckoutSessionId ??= string.Empty;
+        state.BaseProductCodeHash ??= string.Empty;
         state.SubscriptionProvider ??= string.Empty;
         state.SubscriptionCustomerId ??= string.Empty;
         state.PremiumProvider ??= string.Empty;
@@ -83,6 +84,7 @@ public sealed class FirestoreUserDataStore
         state.UpdatedAt = DateTime.UtcNow;
         state.BaseProductProvider ??= string.Empty;
         state.BaseProductCheckoutSessionId ??= string.Empty;
+        state.BaseProductCodeHash ??= string.Empty;
         state.SubscriptionProvider ??= string.Empty;
         state.SubscriptionCustomerId ??= string.Empty;
         state.PremiumProvider ??= string.Empty;
@@ -115,8 +117,25 @@ public sealed class FirestoreUserDataStore
 
         return docs
             .OrderByDescending(d => d.CreatedAt)
-            .Select(d => new DocumentDto(d.Id, d.FileName, d.ContentType, d.CreatedAt, d.QuestionCount, d.TextLength))
+            .Select(d => new DocumentDto(d.Id, d.FileName, d.FolderPath, d.ContentType, d.CreatedAt, d.QuestionCount, d.TextLength))
             .ToList();
+    }
+
+    public async Task<UploadedDocument?> UpdateDocumentFolderAsync(int id, string folderPath, CancellationToken ct)
+    {
+        var fields = await GetDocAsync($"{UserRoot()}/documents/{id}", ct);
+        if (fields == null) return null;
+
+        var doc = DeserializeDoc(fields.Value);
+        doc.FolderPath = folderPath;
+        var textLength = FirestoreInt(fields.Value, "textLength");
+        var questionCount = FirestoreInt(fields.Value, "questionCount");
+        await SetJsonDocAsync($"{UserRoot()}/documents/{id}", ToDocMeta(doc, textLength, questionCount), ct, extraFields: new()
+        {
+            ["textLength"] = FsInt(textLength),
+            ["questionCount"] = FsInt(questionCount)
+        });
+        return doc;
     }
 
     public async Task<UploadedDocument?> GetDocumentAsync(int id, CancellationToken ct, bool includeQuestions = false, bool includeText = true)
@@ -693,7 +712,7 @@ public sealed class FirestoreUserDataStore
     private UploadedDocument DeserializeDoc(JsonElement fields)
     {
         var meta = JsonSerializer.Deserialize<DocMeta>(FirestoreString(fields, "dataJson"), JsonOptions) ?? new DocMeta();
-        return new UploadedDocument { Id = meta.Id, FileName = meta.FileName, ContentType = meta.ContentType, CreatedAt = meta.CreatedAt };
+        return new UploadedDocument { Id = meta.Id, FileName = meta.FileName, FolderPath = meta.FolderPath, ContentType = meta.ContentType, CreatedAt = meta.CreatedAt };
     }
 
     private DocMeta DeserializeDocMeta(JsonElement document)
@@ -706,6 +725,7 @@ public sealed class FirestoreUserDataStore
     {
         Id = doc.Id,
         FileName = doc.FileName,
+        FolderPath = doc.FolderPath,
         ContentType = doc.ContentType,
         CreatedAt = doc.CreatedAt,
         TextLength = textLength,
@@ -813,6 +833,7 @@ public sealed class FirestoreUserDataStore
         {
             Id = NewId(),
             FileName = "Beispiel-Test Medizin",
+            FolderPath = "Beispiele",
             ContentType = "text/plain",
             ExtractedText = "Demo-Dokument mit allgemeinen Beispiel-Fragen für den sofortigen Test der App.",
             CreatedAt = DateTime.UtcNow
@@ -1015,6 +1036,7 @@ public sealed class FirestoreUserDataStore
     {
         public int Id { get; set; }
         public string FileName { get; set; } = string.Empty;
+        public string FolderPath { get; set; } = string.Empty;
         public string ContentType { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public int TextLength { get; set; }

@@ -1,13 +1,13 @@
-<!doctype html>
+<!DOCTYPE HTML>
 <html lang="de">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Manuell · MediTest</title>
+  <title>Manuell · Meduvalo</title>
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
-<header class="topbar"><a class="brand" href="/pages/documents.html">MediTest</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
+<header class="topbar"><a class="brand" href="/pages/documents.html">Meduvalo</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
 <main>
   <section class="card">
     <h1>Frage manuell erstellen</h1>
@@ -17,25 +17,25 @@
       <label for="documentId">Vorhandener Fragenpool</label>
       <select id="documentId"><option value="">Neuen Fragenpool erstellen</option></select>
       <label for="documentName">Neuer Fragenpool-Name</label>
-      <input id="documentName" placeholder="z. B. Anatomie Kopf Hals">
+      <input type="text" id="documentName" placeholder="z. B. Anatomie Kopf Hals">
       <label for="questionText">Fragetext</label>
       <textarea id="questionText" rows="4" required></textarea>
       <div class="field-row">
-        <div><label for="topic">Thema</label><input id="topic" placeholder="z. B. Kardiologie"></div>
+        <div><label for="topic">Thema</label><input type="text" id="topic" placeholder="z. B. Kardiologie"></div>
         <div><label for="difficulty">Schwierigkeit</label><select id="difficulty"><option>leicht</option><option selected>mittel</option><option>schwer</option></select></div>
       </div>
       <label for="imageFile">Bild zur Frage</label>
       <input id="imageFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
       <p class="subtle">PNG, JPEG, WebP oder GIF bis 600 KB.</p>
       <label for="imageAltText">Bildbeschreibung</label>
-      <input id="imageAltText" placeholder="z. B. EKG mit ST-Hebung">
+      <input type="text" id="imageAltText" placeholder="z. B. EKG mit ST-Hebung">
       <figure id="imagePreview" class="question-image hidden"></figure>
       <div class="field-row">
-        <div><label for="option0">Antwort A</label><input id="option0" required></div>
-        <div><label for="option1">Antwort B</label><input id="option1" required></div>
-        <div><label for="option2">Antwort C</label><input id="option2" required></div>
-        <div><label for="option3">Antwort D</label><input id="option3" required></div>
-        <div><label for="option4">Antwort E</label><input id="option4" required></div>
+        <div><label for="option0">Antwort A</label><input type="text" id="option0" required></div>
+        <div><label for="option1">Antwort B</label><input type="text" id="option1" required></div>
+        <div><label for="option2">Antwort C</label><input type="text" id="option2" required></div>
+        <div><label for="option3">Antwort D</label><input type="text" id="option3" required></div>
+        <div><label for="option4">Antwort E</label><input type="text" id="option4" required></div>
       </div>
       <label for="correctOptionIndex">Richtige Antwort</label>
       <select id="correctOptionIndex"><option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option><option value="4">E</option></select>

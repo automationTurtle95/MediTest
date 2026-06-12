@@ -1,78 +1,82 @@
 # Release-Prozess
 
+Release-Titel und sichtbare Installer-Metadaten verwenden Meduvalo. Die
+bestehenden technischen Artefaktnamen mit `MediTest` bleiben für Update-URLs,
+GitHub Releases und bereits veröffentlichte Installationen kompatibel.
+
 ## Ziel
 
-Ein Release besteht aus frisch erzeugten, reproduzierbaren Artefakten unter:
+Version 5.0.4 wird als Windows-MSI, Windows-Portable-ZIP und zwei signierte, von Apple notarisierte macOS-PKGs veröffentlicht.
 
 ```text
-dist/MediTest-5.0.3/
+dist/MediTest-5.0.4/
 ```
 
-Bestehende stabile Releases bleiben erhalten. Insbesondere darf `dist/MediTest-2.0.0/` nicht gelöscht werden, solange V2 als lauffähiges Produkt archiviert bleiben soll.
+Lokale Datenbanken, API-Keys, Secrets, Debug-Symbole und temporäre Build-Dateien dürfen nicht in Release-Artefakte gelangen.
 
-Alte Build-Zwischenstände gehören nicht ins Quellprojekt. `bin/`, `obj/`, `.wix/`, lokale Datenbanken und lokale API-Key- oder Secret-Dateien werden nicht in Release-Pakete übernommen.
-
-## Build ausführen
+## Lokaler Windows-Build
 
 ```powershell
 cd MediTest
-powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1 -WindowsOnly
 ```
 
-Das Skript führt aus:
+Das Skript:
 
-1. die Version aus `MediTest.csproj` lesen, sofern `-Version` nicht explizit gesetzt wurde
-2. nur den Zielordner `dist/MediTest-5.0.3/` entfernen
-3. `dotnet restore`
-4. `dotnet build --configuration Release`
-5. self-contained Publish für `win-x64`, `osx-x64` und `osx-arm64`
-6. Debug-Symbole, XML-Dokumentation, lokale Daten und temporäre Dateien aus den Publish-Ordnern entfernen
-7. Windows-Portable-ZIP erzeugen
-8. Windows-MSI mit WiX erzeugen, inklusive MediTest-Design und `assets/LicenseAgreement.rtf`
-9. unsignierte macOS-ZIPs als vorläufigen Fallback erzeugen
-10. Dokumentation in das Release kopieren
-11. `latest.json` und `SHA256SUMS.txt` erzeugen
+1. liest die Version aus `MediTest.csproj`,
+2. führt Restore und Release-Build aus,
+3. veröffentlicht `win-x64` self-contained,
+4. entfernt Debug- und lokale Dateien,
+5. erzeugt Portable-ZIP und MSI,
+6. erstellt Prüfsummen und Update-Metadaten.
 
-Sind die Apple-Secrets konfiguriert, baut der GitHub-Workflow zusätzlich signierte macOS-Pakete auf einem macOS-Runner:
+## Produktiver GitHub-Release
 
-1. self-contained Publish für `osx-x64` und `osx-arm64`
-2. native App-Bundles mit unsichtbarem Launcher erstellen
-3. alle Mach-O-Komponenten mit `Developer ID Application` signieren
-4. native PKG-Installer mit `Developer ID Installer` erstellen
-5. beide Pakete bei Apple notarisieren
-6. Notarisierungsticket anheften und Gatekeeper-Prüfung ausführen
-
-## Erwartete Artefakte
+Der Workflow `.github/workflows/release.yml` baut:
 
 ```text
-dist/MediTest-5.0.3/windows/MediTest-Setup-5.0.3-win-x64.msi
-dist/MediTest-5.0.3/windows/MediTest-5.0.3-win-x64-portable.zip
-dist/MediTest-5.0.3/macos/MediTest-5.0.3-macos-x64-setup.zip
-dist/MediTest-5.0.3/macos/MediTest-5.0.3-macos-arm64-setup.zip
+MediTest-Setup-5.0.4-win-x64.msi
+MediTest-5.0.4-win-x64-portable.zip
+MediTest-Setup-5.0.4-macos-arm64.pkg
+MediTest-Setup-5.0.4-macos-x64.pkg
 latest.json
 SHA256SUMS.txt
 ```
 
-Wenn alle Apple-Secrets vorhanden sind, ersetzt der Workflow die beiden macOS-ZIPs im GitHub-Release durch signierte und notarisierte PKGs. Ohne Secrets werden die ZIPs mit einem deutlichen Hinweis veröffentlicht.
+Der macOS-Job:
 
-## GitHub Releases
+1. prüft, dass alle Apple-Secrets vorhanden sind,
+2. importiert `Developer ID Application` und `Developer ID Installer`,
+3. validiert die Notarisierungs-Zugangsdaten,
+4. baut beide Architekturen,
+5. signiert alle Mach-O-Dateien mit Hardened Runtime,
+6. erstellt signierte PKGs,
+7. wartet auf Apples Notarisierung,
+8. heftet die Tickets an und führt Gatekeeper-Prüfungen aus.
 
-`latest.json` und die abschließende `SHA256SUMS.txt` werden im GitHub-Release-Job aus den erfolgreich gebauten Windows- und macOS-Artefakten erzeugt.
+Fehlt ein Secret oder schlägt eine Apple-Prüfung fehl, wird der gesamte Release abgebrochen. Es gibt keinen unsignierten macOS-Fallback.
 
-Danach in GitHub einen Release mit dem Tag `v5.0.3` erstellen. Der Workflow veröffentlicht:
+## Veröffentlichung
 
-```text
-MediTest-Setup-5.0.3-win-x64.msi
-MediTest-5.0.3-win-x64-portable.zip
-MediTest-5.0.3-macos-arm64-setup.zip
-MediTest-5.0.3-macos-x64-setup.zip
-latest.json
-SHA256SUMS.txt
+Vor dem Tag:
+
+1. Versionsnummern und Release-Datum prüfen.
+2. Tests und Builds erfolgreich ausführen.
+3. Apple-Secrets nach [MACOS_SIGNING.md](MACOS_SIGNING.md) einrichten.
+4. Änderungen committen und `main` pushen.
+
+Danach:
+
+```powershell
+git tag v5.0.4
+git push origin v5.0.4
 ```
 
-Mit eingerichteten Apple-Secrets heißen die beiden Mac-Dateien stattdessen `MediTest-Setup-5.0.3-macos-<arch>.pkg`.
+Der Workflow prüft, dass Tag und Projektversion übereinstimmen, und erstellt erst nach erfolgreichen Windows- und macOS-Jobs den GitHub Release.
 
-Die installierte App kann Updates direkt über die GitHub-Release-API prüfen, wenn in `appsettings.json` konfiguriert ist:
+## Update-Prüfung
+
+Die App liest standardmäßig den neuesten GitHub Release:
 
 ```json
 {
@@ -84,43 +88,21 @@ Die installierte App kann Updates direkt über die GitHub-Release-API prüfen, w
 }
 ```
 
-Alternativ kann `ManifestUrl` auf eine veröffentlichte `latest.json` zeigen. Wenn `ManifestUrl` gesetzt ist, hat sie Vorrang vor `GitHubRepository`.
-
-Wenn das Repository auf GitHub liegt, kann `.github/workflows/release.yml` den Release automatisch bauen. Dafür die Version in `MediTest.csproj` erhöhen, committen und einen passenden Tag pushen:
-
-```powershell
-git tag v5.0.3
-git push origin main
-git push origin v5.0.3
-```
-
-Der Workflow prüft, dass der Git-Tag zur Projektversion passt. Fehlen die Apple-Secrets, bleibt der macOS-Signierungsjob erfolgreich übersprungen und die Fallback-ZIPs werden veröffentlicht. Die benötigten Secrets für spätere signierte PKGs sind in [MACOS_SIGNING.md](MACOS_SIGNING.md) beschrieben.
+`latest.json` enthält die plattformspezifischen Download-URLs, Dateinamen, Dateigrößen und SHA-256-Hashes.
 
 ## Release-Regeln
 
-- Keine `.pdb`-Dateien im Release.
-- Keine lokale `meditest.db` im Release.
-- Keine lokalen API-Key- oder Secret-Dateien im Release.
-- Keine alten `release/v2.0`- oder `1.0.0`-Artefakte im Projekt.
-- `dist/MediTest-2.0.0/` bleibt als stabile V2-Linie erhalten.
-- Versionsnummern in `.csproj`, MSI und Dateinamen müssen übereinstimmen.
-- Unsignierte macOS-ZIPs müssen im Release als nicht signiert und nicht notarisiert gekennzeichnet sein.
-- Sobald die Apple-Secrets vorhanden sind, sollen Kunden-Mac-Pakete als signierte und notarisierte `.pkg` veröffentlicht werden.
-- Für neue Features immer die `<Version>` in `MediTest.csproj` erhöhen; das Release-Skript übernimmt diese Version automatisch.
-- Das MSI enthält ein Major-Upgrade mit konstantem `UpgradeCode`, damit eine neuere Version über eine bestehende Installation installiert werden kann.
-- Private Nutzerdaten werden unter `users/{uid}/...` in Firestore gespeichert; der Katalog liegt getrennt in `catalogTests`.
+- Keine `.pdb`, lokale Datenbank oder Secret-Datei im Release.
+- Versionsnummern in `.csproj`, App-Konfiguration, Installer und Dateinamen müssen übereinstimmen.
+- macOS-Kundenpakete sind ausschließlich signierte und notarisierte `.pkg`.
+- Das Windows-MSI behält seinen konstanten `UpgradeCode`.
+- Bestehende stabile Release-Archive werden nicht verändert.
 
-## Nach dem Build prüfen
+## Kontrolle
 
 ```powershell
-Get-ChildItem .\dist\MediTest-5.0.3 -Recurse -File |
+Get-ChildItem .\dist\MediTest-5.0.4 -Recurse -File |
   Where-Object { $_.Name -match '\.pdb$|OPENAI_API_KEY|meditest\.db|start-name\.json' }
 ```
 
-Die Ausgabe muss leer sein.
-
-```powershell
-Get-FileHash -Algorithm SHA256 .\dist\MediTest-5.0.3\windows\MediTest-Setup-5.0.3-win-x64.msi
-```
-
-Der Hash muss mit dem Eintrag in `SHA256SUMS.txt` übereinstimmen.
+Die Ausgabe muss leer sein. Anschließend die Hashes mit `SHA256SUMS.txt` vergleichen.

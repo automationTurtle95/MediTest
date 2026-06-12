@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using MediTest;
 using MediTest.Dtos;
 using MediTest.Models;
 using MediTest.Services;
@@ -222,7 +223,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     var url = app.Urls.FirstOrDefault(u => u.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase))
         ?? app.Urls.FirstOrDefault()
         ?? "http://127.0.0.1:55000";
-    managedBrowserProcess = OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=5003");
+    managedBrowserProcess = OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=5004");
 });
 
 app.Lifetime.ApplicationStopping.Register(() =>
@@ -413,7 +414,7 @@ static AuthUserDto ToFirebaseUserDto(ClaimsPrincipal principal, IConfiguration c
     var email = FirstClaim(principal, "email", ClaimTypes.Email);
     var displayName = FirstClaim(principal, "name", "displayName");
     if (string.IsNullOrWhiteSpace(displayName)) displayName = email.Split('@', 2)[0];
-    if (string.IsNullOrWhiteSpace(displayName)) displayName = "MediTest Nutzer";
+    if (string.IsNullOrWhiteSpace(displayName)) displayName = $"{Brand.ProductName} Nutzer";
 
     var expiresAt = DateTime.UtcNow.AddHours(1);
     var exp = FirstClaim(principal, "exp");
@@ -509,7 +510,7 @@ static async Task<UpdateCheckDto> CheckForUpdateAsync(IConfiguration cfg, IHttpC
         var client = httpClientFactory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, manifestUrl);
         request.Headers.TryAddWithoutValidation("Accept", "application/json");
-        request.Headers.TryAddWithoutValidation("User-Agent", $"MediTest/{currentVersion}");
+        request.Headers.TryAddWithoutValidation("User-Agent", $"{Brand.ProductName}/{currentVersion}");
 
         using var response = await client.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode)
@@ -552,7 +553,7 @@ static async Task<UpdateCheckDto> CheckForUpdateAsync(IConfiguration cfg, IHttpC
         var updateAvailable = CompareVersions(manifest.Version, currentVersion) > 0;
         var message = updateAvailable
             ? $"Version {manifest.Version} ist verfügbar."
-            : $"MediTest ist aktuell ({currentVersion}).";
+            : $"{Brand.ProductName} ist aktuell ({currentVersion}).";
 
         return new UpdateCheckDto(
             true,
@@ -925,6 +926,7 @@ app.MapPost("/api/documents/upload", async (HttpRequest request, FirestoreUserDa
     var doc = new UploadedDocument
     {
         FileName = Path.GetFileName(file.FileName),
+        FolderPath = DocumentFolderPath(form["folderPath"].ToString()),
         ContentType = file.ContentType ?? string.Empty,
         ExtractedText = text,
         CreatedAt = DateTime.UtcNow
@@ -947,6 +949,7 @@ app.MapGet("/api/documents/{id:int}/preview", async (int id, FirestoreUserDataSt
     {
         doc.Id,
         doc.FileName,
+        doc.FolderPath,
         doc.ContentType,
         doc.CreatedAt,
         textLength = doc.ExtractedText.Length,
@@ -1060,6 +1063,7 @@ app.MapPost("/api/catalog/tests/{catalogId}/download", async (string catalogId, 
 
     var title = FirestoreString(fields, "title");
     var category = CatalogCategory(FirestoreString(fields, "category"));
+    var catalogFolderPath = CatalogFolderPath(category, FirestoreString(fields, "folderPath"), FirestoreString(fields, "topic"));
     var questionsJson = FirestoreString(fields, "questionsJson");
     var questions = DeserializeCatalogQuestions(questionsJson);
     if (questions.Count == 0) return Results.BadRequest(new { error = "Firestore-Test enthält keine gültigen Fragen." });
@@ -1110,6 +1114,7 @@ app.MapPost("/api/catalog/tests/{catalogId}/download", async (string catalogId, 
     var doc = new UploadedDocument
     {
         FileName = documentName,
+        FolderPath = DocumentFolderPath($"Katalog/{catalogFolderPath}"),
         ContentType = "firestore/catalog-test",
         ExtractedText = $"Aus Firestore heruntergeladener Test: {documentName}",
         CreatedAt = DateTime.UtcNow
@@ -1213,6 +1218,105 @@ app.MapPost("/api/catalog/tests/publish", async (CatalogPublishRequest req, Http
     return Results.Ok(new CatalogPublishResult(documentId, title, questions.Count));
 });
 
+app.MapPut("/api/catalog/tests/{catalogId}", async (string catalogId, CatalogUpdateRequest req, HttpContext context, IConfiguration cfg, IHttpClientFactory httpClientFactory, FirestoreUserDataStore store, CancellationToken ct) =>
+{
+    if (!UserCanPublishCatalog(context, cfg))
+        return Results.Json(new { error = "Nur Admin-Konten dürfen Katalogtests bearbeiten." }, statusCode: StatusCodes.Status403Forbidden);
+
+    catalogId = (catalogId ?? string.Empty).Trim();
+    if (string.IsNullOrWhiteSpace(catalogId)) return Results.BadRequest(new { error = "Katalog-ID fehlt." });
+
+    var client = httpClientFactory.CreateClient();
+    JsonDocument? existingJson = null;
+    var collection = string.Empty;
+    foreach (var candidate in CatalogCollections())
+    {
+        var candidatePath = $"documents/{candidate}/{Uri.EscapeDataString(catalogId)}";
+        var (candidateJson, candidateError) = await SendFirestoreAsync(client, cfg, context, HttpMethod.Get, candidatePath, null, "Katalogtest konnte nicht geladen werden.", ct, allowNotFound: true);
+        if (candidateError != null) return candidateError;
+        if (candidateJson == null) continue;
+        existingJson = candidateJson;
+        collection = candidate;
+        break;
+    }
+    if (existingJson == null) return Results.NotFound(new { error = "Katalogtest nicht gefunden." });
+    using var existingPayload = existingJson;
+    var existingFields = existingPayload.RootElement.GetProperty("fields");
+
+    var doc = await store.GetDocumentAsync(req.DocumentId, ct, includeQuestions: true, includeText: false);
+    if (doc == null) return Results.NotFound(new { error = "Lokaler Fragenpool nicht gefunden." });
+    var questions = BuildCatalogQuestions(doc);
+    if (questions.Count == 0) return Results.BadRequest(new { error = "Dieser Fragenpool enthält keine veröffentlichbaren Fragen." });
+
+    var title = TrimTo(req.Title, 200);
+    if (string.IsNullOrWhiteSpace(title)) title = doc.FileName;
+    var description = TrimTo(req.Description, 600);
+    var category = CatalogCategory(req.Category);
+    var topic = TopicLabel(req.Topic);
+    var folderPath = CatalogFolderPath(category, req.FolderPath, topic);
+    var difficulty = DifficultyLabel(req.Difficulty);
+    var now = DateTime.UtcNow;
+    var user = ToFirebaseUserDto(context.User, cfg);
+    var questionsJson = JsonSerializer.Serialize(questions, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+    if (Encoding.UTF8.GetByteCount(questionsJson) > 900_000)
+        return Results.BadRequest(new { error = "Dieser Fragenpool ist für einen einzelnen Firestore-Katalogeintrag zu groß." });
+
+    var body = new
+    {
+        fields = new Dictionary<string, object>
+        {
+            ["title"] = FirestoreValue(title),
+            ["description"] = FirestoreValue(description),
+            ["category"] = FirestoreValue(category),
+            ["folderPath"] = FirestoreValue(folderPath),
+            ["topic"] = FirestoreValue(topic),
+            ["difficulty"] = FirestoreValue(difficulty),
+            ["questionCount"] = FirestoreIntValue(questions.Count),
+            ["priceCents"] = FirestoreIntValue(BillingCatalogTestPriceCents(cfg, category, questions.Count)),
+            ["schemaVersion"] = FirestoreIntValue(1),
+            ["appVersion"] = FirestoreValue(AppVersion()),
+            ["questionsJson"] = FirestoreValue(questionsJson),
+            ["createdByUid"] = FirestoreValue(FirestoreString(existingFields, "createdByUid") is { Length: > 0 } createdByUid ? createdByUid : user.UserId),
+            ["createdByEmail"] = FirestoreValue(FirestoreString(existingFields, "createdByEmail") is { Length: > 0 } createdByEmail ? createdByEmail : user.Email),
+            ["publishedAt"] = FirestoreTimestampValue(DateTime.TryParse(FirestoreString(existingFields, "publishedAt"), out var publishedAt) ? publishedAt.ToUniversalTime() : now),
+            ["updatedByUid"] = FirestoreValue(user.UserId),
+            ["updatedByEmail"] = FirestoreValue(user.Email),
+            ["updatedAt"] = FirestoreTimestampValue(now)
+        }
+    };
+
+    var path = $"documents/{collection}/{Uri.EscapeDataString(catalogId)}";
+    var (_, error) = await SendFirestoreAsync(client, cfg, context, HttpMethod.Patch, path, body, "Katalogtest konnte nicht aktualisiert werden.", ct);
+    if (error != null) return error;
+    return Results.Ok(new CatalogPublishResult(catalogId, title, questions.Count));
+});
+
+app.MapDelete("/api/catalog/tests/{catalogId}", async (string catalogId, HttpContext context, IConfiguration cfg, IHttpClientFactory httpClientFactory, CancellationToken ct) =>
+{
+    if (!UserCanPublishCatalog(context, cfg))
+        return Results.Json(new { error = "Nur Admin-Konten dürfen Katalogtests löschen." }, statusCode: StatusCodes.Status403Forbidden);
+
+    catalogId = (catalogId ?? string.Empty).Trim();
+    if (string.IsNullOrWhiteSpace(catalogId)) return Results.BadRequest(new { error = "Katalog-ID fehlt." });
+    var client = httpClientFactory.CreateClient();
+    var collection = string.Empty;
+    foreach (var candidate in CatalogCollections())
+    {
+        var candidatePath = $"documents/{candidate}/{Uri.EscapeDataString(catalogId)}";
+        var (candidateJson, candidateError) = await SendFirestoreAsync(client, cfg, context, HttpMethod.Get, candidatePath, null, "Katalogtest konnte nicht geladen werden.", ct, allowNotFound: true);
+        if (candidateError != null) return candidateError;
+        if (candidateJson == null) continue;
+        candidateJson.Dispose();
+        collection = candidate;
+        break;
+    }
+    if (string.IsNullOrWhiteSpace(collection)) return Results.NotFound(new { error = "Katalogtest nicht gefunden." });
+    var path = $"documents/{collection}/{Uri.EscapeDataString(catalogId)}";
+    var (_, error) = await SendFirestoreAsync(client, cfg, context, HttpMethod.Delete, path, null, "Katalogtest konnte nicht gelöscht werden.", ct);
+    if (error != null) return error;
+    return Results.Ok(new { deleted = true, id = catalogId });
+});
+
 app.MapGet("/api/documents/{id:int}/questions", async (int id, FirestoreUserDataStore store, CancellationToken ct) =>
 {
     var doc = await store.GetDocumentAsync(id, ct, includeQuestions: true, includeText: false);
@@ -1299,6 +1403,14 @@ app.MapDelete("/api/documents/{id:int}", async (int id, FirestoreUserDataStore s
     return Results.Ok(new { deleted = true, id });
 });
 
+app.MapPut("/api/documents/{id:int}/folder", async (int id, UpdateDocumentFolderRequest req, FirestoreUserDataStore store, CancellationToken ct) =>
+{
+    var doc = await store.UpdateDocumentFolderAsync(id, DocumentFolderPath(req.FolderPath), ct);
+    return doc == null
+        ? Results.NotFound(new { error = "Dokument nicht gefunden." })
+        : Results.Ok(new { saved = true, doc.Id, doc.FolderPath });
+});
+
 app.MapPost("/api/questions/manual", async (CreateManualQuestionRequest req, FirestoreUserDataStore store, CancellationToken ct) =>
 {
     if (string.IsNullOrWhiteSpace(req.QuestionText)) return Results.BadRequest(new { error = "Fragetext fehlt." });
@@ -1319,6 +1431,7 @@ app.MapPost("/api/questions/manual", async (CreateManualQuestionRequest req, Fir
         doc = new UploadedDocument
         {
             FileName = name,
+            FolderPath = "Manuell",
             ContentType = "manual/question-pool",
             ExtractedText = "Manuell angelegter Fragenpool.",
             CreatedAt = DateTime.UtcNow
@@ -1386,6 +1499,7 @@ app.MapPost("/api/documents/import-txt", async (HttpRequest request, FirestoreUs
 
     var documentName = form["documentName"].ToString();
     if (string.IsNullOrWhiteSpace(documentName)) documentName = Path.GetFileNameWithoutExtension(file.FileName);
+    var folderPath = DocumentFolderPath(form["folderPath"].ToString());
 
     using var reader = new StreamReader(file.OpenReadStream(), Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
     var content = await reader.ReadToEndAsync(ct);
@@ -1395,6 +1509,7 @@ app.MapPost("/api/documents/import-txt", async (HttpRequest request, FirestoreUs
     var doc = new UploadedDocument
     {
         FileName = documentName,
+        FolderPath = folderPath,
         ContentType = "text/imported-question-pool",
         ExtractedText = "Importierter Fragenpool aus TXT.",
         CreatedAt = DateTime.UtcNow
@@ -1566,7 +1681,7 @@ app.MapGet("/api/tests/{id:int}/pdf", async (int id, FirestoreUserDataStore stor
     var settings = await store.GetSettingsAsync(ct);
     var pdf = BuildTestPdf(session, settings);
     var safeName = Regex.Replace(string.IsNullOrWhiteSpace(session.TestName) ? $"Test-{session.Id}" : session.TestName, "[^A-Za-z0-9äöüÄÖÜß _.-]", "_");
-    return Results.File(pdf, "application/pdf", $"{safeName}_MediTest.pdf");
+    return Results.File(pdf, "application/pdf", $"{safeName}_{Brand.ProductName}.pdf");
 });
 
 app.MapDelete("/api/tests", async (FirestoreUserDataStore store, CancellationToken ct) =>
@@ -1737,10 +1852,10 @@ static LicenseStatusDto ToLicenseStatusDto(UserLicenseState state, HttpContext c
     var message = status switch
     {
         "premium" => "Premium aktiv. Katalogtests bleiben separate Kaufartikel.",
-        "active" => "Monatsabo aktiv. Alle MediTest-Funktionen sind verfügbar.",
+        "active" => $"Monatsabo aktiv. Alle {Brand.ProductName}-Funktionen sind verfügbar.",
         "trial" => $"7-tägige Testphase aktiv: noch {daysRemaining} Tag(e).",
         "restricted" => "Testphase beendet. Vorhandene Tests bleiben nutzbar; neue Inhalte und KI-Funktionen benötigen ein Abo.",
-        _ => "MediTest wurde für dieses Konto noch nicht gekauft."
+        _ => $"{Brand.ProductName} wurde für dieses Konto noch nicht gekauft."
     };
 
     return new LicenseStatusDto(
@@ -1825,6 +1940,18 @@ static string CatalogFolderPath(string category, string? folderPath, string? top
     return string.Join('/', new[] { root }.Concat(segments));
 }
 
+static string DocumentFolderPath(string? folderPath)
+{
+    var segments = (folderPath ?? string.Empty)
+        .Replace('\\', '/')
+        .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Select(segment => Regex.Replace(segment, @"\s+", " ").Trim())
+        .Where(segment => !string.IsNullOrWhiteSpace(segment) && segment is not "." and not "..")
+        .Select(segment => TrimTo(segment, 80))
+        .Take(6);
+    return string.Join('/', segments);
+}
+
 static string DifficultyLabel(string? difficulty)
 {
     difficulty = (difficulty ?? "mittel").Trim().ToLowerInvariant();
@@ -1860,7 +1987,7 @@ static string? ValidateQuestionImage(string? imageDataUrl)
 static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
 static int BillingTrialDays(IConfiguration cfg) => Math.Clamp(cfg.GetValue<int?>("Billing:TrialDays") ?? 7, 1, 60);
-static int BillingProductPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:ProductPriceCents") ?? 999);
+static int BillingProductPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:ProductPriceCents") ?? 1499);
 static int BillingMonthlyPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:MonthlyPriceCents") ?? 599);
 static int BillingCatalogQuestionPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:CatalogQuestionPriceCents") ?? 10);
 static int BillingCatalogPriceEndingCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:CatalogPriceEndingCents") ?? 9);
@@ -1960,7 +2087,8 @@ static async Task<(JsonDocument? Json, IResult? Error)> SendFirestoreAsync(
     string pathAndQuery,
     object? body,
     string fallbackError,
-    CancellationToken ct)
+    CancellationToken ct,
+    bool allowNotFound = false)
 {
     var projectId = FirebaseProjectId(cfg);
     if (string.IsNullOrWhiteSpace(projectId))
@@ -1979,11 +2107,15 @@ static async Task<(JsonDocument? Json, IResult? Error)> SendFirestoreAsync(
     }
 
     using var response = await client.SendAsync(request, ct);
+    if (allowNotFound && response.StatusCode == HttpStatusCode.NotFound)
+        return (null, null);
     if (!response.IsSuccessStatusCode)
         return (null, await FirestoreErrorResultAsync(response, fallbackError, ct));
 
-    using var stream = await response.Content.ReadAsStreamAsync(ct);
-    var json = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+    var raw = await response.Content.ReadAsStringAsync(ct);
+    if (string.IsNullOrWhiteSpace(raw))
+        return (null, null);
+    var json = JsonDocument.Parse(raw);
     return (json, null);
 }
 
@@ -2132,7 +2264,7 @@ static List<CatalogQuestionPayload> BuildCatalogQuestions(UploadedDocument doc)
             question.QuestionText.Trim(),
             options,
             Math.Clamp(question.CorrectOptionIndex, 0, options.Count - 1),
-            string.IsNullOrWhiteSpace(question.Explanation) ? "Aus MediTest veröffentlichte Frage." : question.Explanation.Trim(),
+            string.IsNullOrWhiteSpace(question.Explanation) ? $"Aus {Brand.ProductName} veröffentlichte Frage." : question.Explanation.Trim(),
             TopicLabel(question.Topic),
             DifficultyLabel(question.Difficulty),
             false));
@@ -2271,7 +2403,7 @@ static byte[] BuildTestPdf(TestSession session, ProgramSettings settings)
     var submitted = session.SubmittedAt != null;
     var answered = session.Answers.Count(a => a.SelectedAnswerOptionId != null);
 
-    writer.AddTitle("MediTest Testprotokoll");
+    writer.AddTitle($"{Brand.ProductName} Testprotokoll");
     writer.AddLine("Profil", 13, bold: true);
     writer.AddLine($"Name: {EmptyDash(settings.DisplayName)}");
     writer.AddLine($"Matrikelnummer: {EmptyDash(settings.MatriculationNumber)}");

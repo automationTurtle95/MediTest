@@ -1,32 +1,35 @@
-<!doctype html>
+<!DOCTYPE HTML>
 <html lang="de">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="MediTest hilft Medizinstudierenden, sich mit strukturierten Fragen, Tests und Lernmodulen effizient auf Prüfungen vorzubereiten.">
+  <meta name="description" content="Meduvalo ist eine Lernsoftware für Medizinstudenten zur prüfungsnahen Vorbereitung mit strukturierten Fragen, Tests, Lernmodulen, Fortschrittsübersicht und KI-gestützter Fragengenerierung.">
   <meta name="theme-color" content="#0b3b3c">
   <meta property="og:type" content="website">
   <meta property="og:locale" content="de_AT">
-  <meta property="og:title" content="MediTest | Prüfungsnah lernen. Sicherer bestehen.">
+  <meta property="og:title" content="Meduvalo | Prüfungsnah lernen. Sicherer bestehen.">
   <meta property="og:description" content="Strukturierte Fragen, Tests, Lernmodule und KI-gestützte Fragengenerierung für deine Medizinprüfung.">
-  <title>MediTest | Prüfungsnah lernen. Sicherer bestehen.</title>
-  <link rel="icon" href="./logo.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css">
-  <script src="./script.js" defer></script>
+  <meta property="og:url" content="https://meduvalo.at/">
+  <meta property="og:site_name" content="Meduvalo">
+  <title>Meduvalo | Prüfungsnah lernen. Sicherer bestehen.</title>
+  <link rel="canonical" href="https://meduvalo.at/">
+  <link rel="icon" href="./logo.svg?v=5004" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css?v=5004">
+  <script src="./script.js?v=5004" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Zum Inhalt springen</a>
 
   <header class="site-header" data-header>
     <div class="container header-inner">
-      <a class="brand" href="#top" aria-label="MediTest Startseite">
+      <a class="brand" href="#top" aria-label="Meduvalo Startseite">
         <span class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 40 40" role="img">
             <path d="M20 5v30M5 20h30"></path>
             <path d="M9 10.5A15 15 0 0 1 30.5 9M31 29.5A15 15 0 0 1 9.5 31"></path>
           </svg>
         </span>
-        <span data-brand-name>MediTest</span>
+        <span data-brand-name>Meduvalo</span>
       </a>
 
       <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-navigation" data-nav-toggle>
@@ -52,7 +55,7 @@
         <div class="hero-copy" data-reveal>
           <p class="eyebrow"><span></span> Lernsoftware für Medizinstudierende</p>
           <h1>Prüfungsnah lernen.<br><span>Sicherer bestehen.</span></h1>
-          <p class="hero-lead">MediTest hilft Medizinstudenten dabei, sich mit strukturierten Fragen, Tests und Lernmodulen effizient auf Prüfungen vorzubereiten.</p>
+          <p class="hero-lead">Meduvalo hilft Medizinstudenten dabei, sich mit strukturierten Fragen, Tests und Lernmodulen effizient auf Prüfungen vorzubereiten.</p>
           <div class="hero-actions">
             <a class="button button-primary button-large" href="#download">
               Jetzt loslegen
@@ -60,30 +63,30 @@
             </a>
             <a class="button button-secondary button-large" href="#loesung">Mehr erfahren</a>
           </div>
-          <div class="trust-row" aria-label="Produktvorteile">
-            <span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 4 4 8-9"></path></svg> Strukturiert</span>
-            <span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 4 4 8-9"></path></svg> Prüfungsnah</span>
-            <span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 4 4 8-9"></path></svg> Fortschritt im Blick</span>
-          </div>
+          <ul class="trust-row">
+            <li><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 4 4 8-9"></path></svg> Strukturiert</li>
+            <li><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 4 4 8-9"></path></svg> Prüfungsnah</li>
+            <li><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 4 4 8-9"></path></svg> Fortschritt im Blick</li>
+          </ul>
         </div>
 
         <div class="hero-visual" data-reveal>
           <div class="visual-orbit orbit-one" aria-hidden="true"></div>
           <div class="visual-orbit orbit-two" aria-hidden="true"></div>
-          <div class="app-window" aria-label="Beispielhafte MediTest Lernübersicht">
+          <div class="app-window" role="img" aria-label="Beispielhafte Meduvalo Lernübersicht">
             <div class="window-bar">
               <div class="window-dots" aria-hidden="true"><span></span><span></span><span></span></div>
               <span class="window-title">Lernübersicht</span>
               <span class="avatar">LH</span>
             </div>
             <div class="window-body">
-              <aside class="mock-sidebar" aria-hidden="true">
+              <div class="mock-sidebar" aria-hidden="true">
                 <span class="mock-logo">M</span>
                 <span class="side-item active"></span>
                 <span class="side-item"></span>
                 <span class="side-item"></span>
                 <span class="side-item"></span>
-              </aside>
+              </div>
               <div class="mock-content">
                 <div class="mock-heading">
                   <div>
@@ -146,7 +149,7 @@
         <div class="section-heading centered" data-reveal>
           <p class="eyebrow">Kommt dir das bekannt vor?</p>
           <h2 id="problem-title">Medizin lernen ist komplex genug.</h2>
-          <p>Der Lernalltag muss es nicht auch sein. MediTest bringt Ordnung in Prüfungsstoff, Altfragen und deinen Fortschritt.</p>
+          <p>Der Lernalltag muss es nicht auch sein. Meduvalo bringt Ordnung in Prüfungsstoff, Altfragen und deinen Fortschritt.</p>
         </div>
         <div class="problem-grid">
           <article class="problem-card" data-reveal>
@@ -204,7 +207,7 @@
         <div class="solution-copy" data-reveal>
           <p class="eyebrow"><span></span> Eine Plattform, ein klarer Lernweg</p>
           <h2 id="solution-title">Vom Lernstoff zur Prüfungssicherheit.</h2>
-          <p class="section-intro">MediTest verbindet strukturierte Inhalte mit aktivem Wiederholen und aussagekräftigem Feedback. So weißt du jederzeit, was als Nächstes zählt.</p>
+          <p class="section-intro">Meduvalo verbindet strukturierte Inhalte mit aktivem Wiederholen und aussagekräftigem Feedback. So weißt du jederzeit, was als Nächstes zählt.</p>
           <ul class="solution-list">
             <li><span>01</span><div><strong>Strukturiert lernen</strong><p>Fragen sauber nach Themen und Modulen organisieren.</p></div></li>
             <li><span>02</span><div><strong>Realistisch testen</strong><p>Wissen im Testmodus unter prüfungsnahen Bedingungen anwenden.</p></div></li>
@@ -222,7 +225,7 @@
             <p class="eyebrow">Alles für deinen Lernerfolg</p>
             <h2 id="features-title">Funktionen, die dich voranbringen.</h2>
           </div>
-          <p>Konzentriere dich auf das Lernen. MediTest kümmert sich um Struktur, Auswertung und den roten Faden.</p>
+          <p>Konzentriere dich auf das Lernen. Meduvalo kümmert sich um Struktur, Auswertung und den roten Faden.</p>
         </div>
         <div class="feature-grid">
           <article class="feature-card feature-card-large" data-reveal>
@@ -260,7 +263,7 @@
               <p>Erkenne Stärken, Wissenslücken und deine Entwicklung auf einen Blick.</p>
             </div>
             <div class="mini-chart" aria-hidden="true">
-              <span style="height:32%"></span><span style="height:48%"></span><span style="height:42%"></span><span style="height:66%"></span><span style="height:61%"></span><span style="height:84%"></span><span style="height:92%"></span>
+              <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
             </div>
           </article>
           <article class="feature-card feature-ai" data-reveal>
@@ -294,8 +297,8 @@
         <div class="audience-copy" data-reveal>
           <p class="eyebrow"><span></span> Gemacht für deinen Studienalltag</p>
           <h2 id="audience-title">Für alle, die Medizin nicht nur lernen, sondern verstehen wollen.</h2>
-          <p>MediTest richtet sich an Studierende, die aus großen Stoffmengen einen klaren, messbaren Lernprozess machen möchten.</p>
-          <a class="text-link" href="#download">MediTest entdecken <span>→</span></a>
+          <p>Meduvalo richtet sich an Studierende, die aus großen Stoffmengen einen klaren, messbaren Lernprozess machen möchten.</p>
+          <a class="text-link" href="#download">Meduvalo entdecken <span>→</span></a>
         </div>
         <div class="audience-list" data-reveal>
           <article><span>01</span><div><h3>Medizinstudierende</h3><p>Vom Studienbeginn bis zur klinischen Prüfung.</p></div></article>
@@ -309,9 +312,9 @@
     <section class="download-section section" id="download" aria-labelledby="download-title">
       <div class="container">
         <div class="section-heading centered" data-reveal>
-          <p class="eyebrow">MediTest herunterladen</p>
+          <p class="eyebrow">Meduvalo herunterladen</p>
           <h2 id="download-title">Wähle dein Betriebssystem.</h2>
-          <p>Windows ist ab sofort verfügbar. Der Installer wird nach erfolgreichem Kauf in deinem Konto freigeschaltet.</p>
+          <p>Windows und macOS sind verfügbar. Der passende Installer wird nach erfolgreichem Kauf in deinem Konto freigeschaltet.</p>
         </div>
 
         <div class="download-layout">
@@ -322,7 +325,7 @@
               </span>
               <div class="download-copy">
                 <p class="download-kicker">Windows</p>
-                <h3>Windows 10 & 11</h3>
+                <h3>Windows 10 &amp; 11</h3>
                 <p>Installer für aktuelle Windows-Systeme mit automatischer Einrichtung.</p>
                 <span class="system-note">64-Bit · MSI-Installer</span>
               </div>
@@ -336,10 +339,10 @@
               <div class="download-copy">
                 <p class="download-kicker">macOS</p>
                 <h3>Apple Silicon</h3>
-                <p>Die optimierte Version für Mac-Modelle mit Apple-Chip ist in Vorbereitung.</p>
-                <span class="system-note">ARM64 · In Vorbereitung</span>
+                <p>Signiertes und von Apple notarisiertes Paket für Mac-Modelle mit Apple-Chip.</p>
+                <span class="system-note">ARM64 · macOS 11+ · PKG-Installer</span>
               </div>
-              <span class="button button-secondary platform-download button-disabled" aria-disabled="true">Coming soon</span>
+              <a class="button button-secondary platform-download" href="./purchase.html?platform=macos-arm64">Jetzt kaufen</a>
             </article>
 
             <article class="download-card" data-reveal>
@@ -349,27 +352,27 @@
               <div class="download-copy">
                 <p class="download-kicker">macOS</p>
                 <h3>Intel</h3>
-                <p>Die kompatible Version für ältere Mac-Modelle mit Intel-Prozessor ist in Vorbereitung.</p>
-                <span class="system-note">x64 · In Vorbereitung</span>
+                <p>Signiertes und von Apple notarisiertes Paket für Mac-Modelle mit Intel-Prozessor.</p>
+                <span class="system-note">x64 · macOS 11+ · PKG-Installer</span>
               </div>
-              <span class="button button-secondary platform-download button-disabled" aria-disabled="true">Coming soon</span>
+              <a class="button button-secondary platform-download" href="./purchase.html?platform=macos-x64">Jetzt kaufen</a>
             </article>
           </div>
 
-          <aside class="pricing-card" data-reveal>
-            <p class="eyebrow light">MediTest für Windows</p>
+          <aside class="pricing-card" data-reveal aria-label="Preis und Kauf">
+            <p class="eyebrow light">Meduvalo für Windows &amp; macOS</p>
             <div class="price-line">
-              <strong data-purchase-price>9,99 €</strong>
+              <strong data-purchase-price>14,99 €</strong>
               <span>einmalig</span>
             </div>
             <p class="pricing-trial">Inklusive 7 Tagen vollständigem Zugang ab Kauf</p>
             <ul>
-              <li>MSI-Download nach bestätigter Zahlung</li>
+              <li>Windows-MSI oder notarisiertes macOS-PKG nach bestätigter Zahlung</li>
               <li>7 Tage alle Lern-, Test- und KI-Funktionen</li>
               <li>Danach vorhandene Tests dauerhaft ausführbar</li>
               <li>Optionaler Vollzugang für <span data-monthly-price>5,99 €</span> pro Monat</li>
             </ul>
-            <a class="button button-light button-large checkout-button" href="./purchase.html" data-purchase-link>Windows-Version kaufen</a>
+            <a class="button button-light button-large checkout-button" href="./purchase.html" data-purchase-link>Meduvalo kaufen</a>
             <small>Keine automatische Verlängerung durch den Einmalkauf. Katalogtests sind separate Kaufartikel.</small>
           </aside>
         </div>
@@ -401,7 +404,7 @@
           <span class="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 40 40"><path d="M20 5v30M5 20h30"></path><path d="M9 10.5A15 15 0 0 1 30.5 9M31 29.5A15 15 0 0 1 9.5 31"></path></svg>
           </span>
-          <span data-brand-name>MediTest</span>
+          <span data-brand-name>Meduvalo</span>
         </a>
         <p>Prüfungsnahe Lernsoftware für Medizinstudierende.</p>
       </div>
@@ -423,12 +426,12 @@
         <div>
           <h2>Kontakt</h2>
           <a href="./legal.html#kontakt">Kontakt</a>
-          <a href="#download">MediTest herunterladen</a>
+          <a href="#download">Meduvalo herunterladen</a>
         </div>
       </div>
     </div>
     <div class="container footer-bottom">
-      <p>© <span data-current-year>2026</span> <span data-brand-name>MediTest</span>. Alle Rechte vorbehalten.</p>
+      <p>© <span data-current-year>2026</span> <span data-brand-name>Meduvalo</span>. Alle Rechte vorbehalten.</p>
       <p>Entwickelt für Medizinstudierende in Österreich.</p>
     </div>
   </footer>

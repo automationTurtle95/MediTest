@@ -358,15 +358,17 @@ button {
 
 .trust-row {
   display: flex;
+  padding: 0;
   flex-wrap: wrap;
   gap: 22px;
   margin-top: 30px;
   color: #587071;
   font-size: 12px;
   font-weight: 650;
+  list-style: none;
 }
 
-.trust-row span {
+.trust-row li {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1211,6 +1213,14 @@ button {
   background: linear-gradient(to top, var(--green-700), var(--mint-400));
   border-radius: 5px 5px 0 0;
 }
+
+.mini-chart span:nth-child(1) { height: 32%; }
+.mini-chart span:nth-child(2) { height: 48%; }
+.mini-chart span:nth-child(3) { height: 42%; }
+.mini-chart span:nth-child(4) { height: 66%; }
+.mini-chart span:nth-child(5) { height: 61%; }
+.mini-chart span:nth-child(6) { height: 84%; }
+.mini-chart span:nth-child(7) { height: 92%; }
 
 .feature-ai {
   color: var(--white);
@@ -2084,9 +2094,51 @@ button {
 }
 
 #checkoutButton:disabled,
-#authSubmit:disabled {
+#authSubmit:disabled,
+#redeemProductCode:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.free-code-panel {
+  display: grid;
+  padding: 20px;
+  margin-top: 22px;
+  background: var(--mint-50);
+  border: 1px solid #c6e6dd;
+  border-radius: 16px;
+  gap: 12px;
+}
+
+.free-code-panel div {
+  display: grid;
+  gap: 2px;
+}
+
+.free-code-panel span {
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+}
+
+.free-code-panel input {
+  width: 100%;
+  padding: 13px 14px;
+  color: var(--green-950);
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  outline: none;
+  font: inherit;
+  text-transform: uppercase;
+}
+
+.free-code-panel input:focus {
+  border-color: var(--mint-500);
+  box-shadow: 0 0 0 4px rgba(36, 143, 145, 0.12);
+}
+
+.free-code-panel .button {
+  width: 100%;
 }
 
 .secure-note {
@@ -2184,15 +2236,15 @@ button {
 
   .site-nav {
     position: fixed;
-    top: 68px;
+    top: 76px;
     right: 16px;
     left: 16px;
     display: grid;
     padding: 24px;
-    background: rgba(255, 255, 255, 0.98);
-    border: 1px solid var(--border);
+    background: var(--white);
+    border: 1px solid #c9deda;
     border-radius: 18px;
-    box-shadow: var(--shadow-lg);
+    box-shadow: 0 24px 70px rgba(8, 47, 48, 0.24);
     gap: 8px;
     opacity: 0;
     pointer-events: none;
@@ -2208,6 +2260,7 @@ button {
 
   .site-nav > a:not(.button) {
     padding: 12px 8px;
+    border-bottom: 1px solid var(--border);
   }
 
   .nav-toggle {

@@ -134,7 +134,7 @@ public sealed class OpenAiQuestionService : IQuestionGenerationService
         if (provider == "openrouter")
         {
             request.Headers.TryAddWithoutValidation("HTTP-Referer", "http://127.0.0.1:55000");
-            request.Headers.TryAddWithoutValidation("X-Title", "MediTest");
+            request.Headers.TryAddWithoutValidation("X-Title", global::MediTest.Brand.ProductName);
         }
 
         var messages = new object[]
@@ -263,6 +263,11 @@ Qualitätsregeln:
 - Jede Frage hat genau 5 Antwortmöglichkeiten.
 - Genau eine Antwort ist richtig.
 - Distraktoren müssen thematisch ähnlich und plausibel sein, aber klar falsch.
+- Distraktoren bevorzugt aus dem Skript ableiten, etwa durch vertauschte Stadien, Grenzwerte, Lokalisationen, Zuordnungen oder Zusammenhänge.
+- Keine neuen Zahlen, Altersgrenzen oder Leitlinienkriterien erfinden. Wenn vier gute Distraktoren nicht möglich sind, frage eine andere Kernaussage ab.
+- Keine Frage darf dieselbe Kernaussage wie eine andere Frage prüfen.
+- Richtige Antworten bei mehreren Fragen möglichst gleichmäßig über die Indizes 0 bis 4 verteilen; bei 5 Fragen jeden Index genau einmal verwenden.
+- Richtige Antworten dürfen nicht systematisch länger, präziser oder sprachlich auffälliger als die Distraktoren sein. Formuliere die Optionen möglichst in vergleichbarer Länge und Struktur.
 - Erklärung kurz, mit Bezug auf den Skriptinhalt.
 - Thema so spezifisch wie möglich, z. B. "N. facialis", "Basis cranii", "pAVK".
 - Schwierigkeitsgrad nur: leicht, mittel, schwer.

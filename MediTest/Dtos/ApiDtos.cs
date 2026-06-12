@@ -1,6 +1,7 @@
 namespace MediTest.Dtos;
 
-public sealed record DocumentDto(int Id, string FileName, string ContentType, DateTime CreatedAt, int QuestionCount, int TextLength);
+public sealed record DocumentDto(int Id, string FileName, string FolderPath, string ContentType, DateTime CreatedAt, int QuestionCount, int TextLength);
+public sealed record UpdateDocumentFolderRequest(string? FolderPath);
 public sealed record GenerateQuestionsRequest(int Count);
 
 public sealed record CatalogListDto(
@@ -40,6 +41,14 @@ public sealed record CatalogPublishRequest(
     string? Difficulty);
 
 public sealed record CatalogPublishResult(string Id, string Title, int QuestionCount);
+public sealed record CatalogUpdateRequest(
+    int DocumentId,
+    string? Title,
+    string? Description,
+    string? Category,
+    string? FolderPath,
+    string? Topic,
+    string? Difficulty);
 
 public sealed record QuestionListItemDto(
     int QuestionId,

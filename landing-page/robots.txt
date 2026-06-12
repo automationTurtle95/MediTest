@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://meduvalo.at/sitemap.xml

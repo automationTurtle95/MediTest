@@ -82,7 +82,9 @@ public sealed partial class TextExtractionService : ITextExtractionService
             if (string.IsNullOrWhiteSpace(relationshipId)) continue;
             var rel = part.GetPartById(relationshipId);
             if (rel is not SlidePart slidePart) continue;
-            foreach (var text in slidePart.Slide.Descendants<DocumentFormat.OpenXml.Drawing.Text>())
+            var slide = slidePart.Slide;
+            if (slide == null) continue;
+            foreach (var text in slide.Descendants<DocumentFormat.OpenXml.Drawing.Text>())
                 sb.AppendLine(text.Text);
             sb.AppendLine();
         }

@@ -1,17 +1,17 @@
-<!doctype html>
+<!DOCTYPE HTML>
 <html lang="de">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Katalog · MediTest</title>
+  <title>Katalog · Meduvalo</title>
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
-<header class="topbar"><a class="brand" href="/pages/documents.html">MediTest</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/catalog.html">Katalog</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
+<header class="topbar"><a class="brand" href="/pages/documents.html">Meduvalo</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/catalog.html">Katalog</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
 <main>
   <section id="adminIntro" class="card hidden">
     <h1>Firestore-Katalog</h1>
-    <p class="muted">Themenspezifische Tests herunterladen und in deinem MediTest-Konto durchführen.</p>
+    <p class="muted">Themenspezifische Tests herunterladen und in deinem Meduvalo-Konto durchführen.</p>
   </section>
 
   <section class="card">
@@ -28,21 +28,22 @@
   </section>
 
   <section id="adminPanel" class="card hidden">
-    <h2>Admin</h2>
+    <h2 id="adminFormTitle">Neuen Katalogtest veröffentlichen</h2>
+    <p id="adminFormHint" class="muted">Der gewählte Fragenpool wird als neuer Katalogtest veröffentlicht.</p>
     <form id="publishForm">
       <label for="documentId">Fragenpool</label>
       <select id="documentId" required></select>
       <label for="title">Titel</label>
-      <input id="title" required>
+      <input type="text" id="title" required>
       <label for="description">Beschreibung</label>
       <textarea id="description" rows="3"></textarea>
       <div class="field-row">
         <div><label for="category">Bereich</label><select id="category"><option value="Allgemein">Allgemein</option><option value="MedAT">MedAT · 49,99 €</option></select></div>
-        <div><label for="folderPath">Ordner</label><input id="folderPath" placeholder="z. B. Innere Medizin/Kardiologie"></div>
-        <div><label for="topic">Thema</label><input id="topic" placeholder="z. B. Kardiologie"></div>
+        <div><label for="folderPath">Ordner</label><input type="text" id="folderPath" placeholder="z. B. Innere Medizin/Kardiologie"></div>
+        <div><label for="topic">Thema</label><input type="text" id="topic" placeholder="z. B. Kardiologie"></div>
         <div><label for="difficulty">Schwierigkeit</label><select id="difficulty"><option>leicht</option><option selected>mittel</option><option>schwer</option></select></div>
       </div>
-      <div class="actions"><button class="primary" type="submit">Veröffentlichen</button></div>
+      <div class="actions"><button id="publishButton" class="primary" type="submit">Veröffentlichen</button><button id="cancelEditButton" class="hidden" type="button" onclick="cancelCatalogEdit()">Bearbeiten abbrechen</button></div>
     </form>
   </section>
 
@@ -67,6 +68,7 @@
 let catalogState={canPublish:false,freeCatalogCreditAvailable:false,freeCatalogCreditRedeemed:false,tests:[]};
 let localDocs=[];
 let catalogPurchaseOpen=false;
+let editingCatalogId='';
 
 function dateLabel(value){return value?new Date(value).toLocaleDateString():'ohne Datum';}
 function safeJsId(id){return esc(id).replace(/'/g,'&#39;');}
@@ -82,6 +84,7 @@ function catalogCard(t){
   const buyButton=t.requiresPurchase&&!catalogState.canPublish&&!t.purchased?`<button type="button" onclick="openCatalogPurchaseModal('${id}')">Kaufen</button>`:'';
   const downloadButton=t.requiresPurchase&&!t.purchased?'':`<button class="primary" type="button" onclick="downloadTest('${id}')">Herunterladen</button>`;
   const accessLabel=t.purchased?'Freigeschaltet':catalogState.canPublish?'Admin-Zugriff':canUseFree?'Gratis-Code verfügbar':t.requiresPurchase?'Einzelzugang':'Verfügbar';
+  const adminButtons=catalogState.canPublish?`<button type="button" onclick="startCatalogEdit('${id}')">Bearbeiten</button><button class="danger" type="button" onclick="deleteCatalogTest('${id}')">Löschen</button>`:'';
   return `<article class="catalog-file">
     <span class="catalog-file-icon" aria-hidden="true">
       <svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5M10 12h6M10 16h6"></path></svg>
@@ -92,7 +95,7 @@ function catalogCard(t){
       ${t.description?`<p>${esc(t.description)}</p>`:''}
     </div>
     <div class="catalog-file-price"><span>${t.purchased?'Kaufpreis':'Preis'}</span><strong>${esc(priceLabel(t.priceCents,t.currency))}</strong></div>
-    <div class="actions catalog-file-actions">${freeButton}${buyButton}${downloadButton}</div>
+    <div class="actions catalog-file-actions">${freeButton}${buyButton}${downloadButton}${adminButtons}</div>
   </article>`;
 }
 function createFolderNode(name,path){
@@ -232,6 +235,44 @@ function updatePublishTitle(){
   const selected=localDocs.find(d=>String(d.id)===document.getElementById('documentId').value);
   if(selected&&!document.getElementById('title').value.trim()) document.getElementById('title').value=selected.fileName;
 }
+function setCatalogEditMode(test=null){
+  editingCatalogId=test?.id||'';
+  document.getElementById('adminFormTitle').textContent=test?'Katalogtest bearbeiten':'Neuen Katalogtest veröffentlichen';
+  document.getElementById('adminFormHint').textContent=test
+    ? 'Metadaten und Fragen werden mit dem aktuell gewählten lokalen Fragenpool ersetzt.'
+    : 'Der gewählte Fragenpool wird als neuer Katalogtest veröffentlicht.';
+  document.getElementById('publishButton').textContent=test?'Änderungen speichern':'Veröffentlichen';
+  document.getElementById('cancelEditButton').classList.toggle('hidden',!test);
+}
+function startCatalogEdit(id){
+  const test=(catalogState.tests||[]).find(item=>String(item.id)===String(id));
+  if(!test)return;
+  setCatalogEditMode(test);
+  document.getElementById('title').value=test.title||'';
+  document.getElementById('description').value=test.description||'';
+  document.getElementById('category').value=test.category==='MedAT'?'MedAT':'Allgemein';
+  document.getElementById('folderPath').value=test.folderPath||'';
+  document.getElementById('topic').value=test.topic||'';
+  document.getElementById('difficulty').value=['leicht','mittel','schwer'].includes(test.difficulty)?test.difficulty:'mittel';
+  document.getElementById('adminPanel').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function cancelCatalogEdit(){
+  document.getElementById('publishForm').reset();
+  setCatalogEditMode();
+  updatePublishTitle();
+}
+async function deleteCatalogTest(id){
+  const test=(catalogState.tests||[]).find(item=>String(item.id)===String(id));
+  if(!test||!confirm(`Katalogtest wirklich löschen?\n\n${test.title}\n\nDer Test verschwindet für alle Nutzer aus dem Katalog.`))return;
+  const msg=document.getElementById('msg');
+  status(msg,'Lösche Katalogtest...');
+  try{
+    await api(`/api/catalog/tests/${encodeURIComponent(id)}`,{method:'DELETE'});
+    if(editingCatalogId===String(id))cancelCatalogEdit();
+    status(msg,'Katalogtest wurde gelöscht.','status success');
+    await loadCatalog();
+  }catch(e){status(msg,e.message,'status error');}
+}
 
 function closeCatalogPurchaseModal(){
   document.getElementById('catalogPurchaseModal')?.remove();
@@ -309,11 +350,13 @@ document.getElementById('publishForm').addEventListener('submit',async e=>{
     topic:document.getElementById('topic').value.trim(),
     difficulty:document.getElementById('difficulty').value
   };
-  status(msg,'Veröffentliche Firestore-Test...');
+  status(msg,editingCatalogId?'Speichere Änderungen...':'Veröffentliche Firestore-Test...');
   try{
-    const r=await api('/api/catalog/tests/publish',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    status(msg,`Veröffentlicht: ${r.title} (${r.questionCount} Fragen).`,'status success');
+    const url=editingCatalogId?`/api/catalog/tests/${encodeURIComponent(editingCatalogId)}`:'/api/catalog/tests/publish';
+    const r=await api(url,{method:editingCatalogId?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    status(msg,`${editingCatalogId?'Aktualisiert':'Veröffentlicht'}: ${r.title} (${r.questionCount} Fragen).`,'status success');
     document.getElementById('publishForm').reset();
+    setCatalogEditMode();
     await loadCatalog();
   }catch(err){status(msg,err.message,'status error');}
 });

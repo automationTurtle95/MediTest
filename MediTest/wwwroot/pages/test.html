@@ -1,21 +1,21 @@
-<!doctype html>
+<!DOCTYPE HTML>
 <html lang="de">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Test · MediTest</title>
+  <title>Test · Meduvalo</title>
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
-<header class="topbar"><a class="brand" href="/pages/documents.html">MediTest</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
+<header class="topbar"><a class="brand" href="/pages/documents.html">Meduvalo</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
 <main>
   <section class="card">
     <div class="progress"><div id="bar"></div></div>
     <p id="counter" class="muted"></p>
-    <h1 id="question"></h1>
+    <h1 id="question">Frage wird geladen...</h1>
     <figure id="questionImage" class="question-image hidden"></figure>
     <p><span id="topic" class="pill"></span> <span id="difficulty" class="pill"></span> <span id="aiBadge" class="badge ai-badge hidden">KI</span></p>
-    <form id="options"></form>
+    <div id="options" role="radiogroup" aria-label="Antwortmöglichkeiten"></div>
     <div class="actions"><button id="prev" type="button">Zurück</button><button id="next" class="primary" type="button">Weiter</button><button id="submit" class="primary hidden" type="button">Test abgeben</button><a id="pdf" class="button" href="#">PDF herunterladen</a></div>
     <div id="msg" class="hidden"></div>
   </section>
@@ -83,7 +83,7 @@ async function init(){
   else if(id) test=await api(`/api/tests/${id}/resume`);
   else location.href='/pages/documents.html';
   test.questions.forEach(q=>{if(q.selectedAnswerOptionId) answers[q.questionId]=q.selectedAnswerOptionId;});
-  document.getElementById('pdf').onclick=async e=>{e.preventDefault();try{await downloadApiFile(`/api/tests/${test.testSessionId}/pdf`,`MediTest-${test.testSessionId}.pdf`);}catch(err){status(document.getElementById('msg'),err.message,'status error');}};
+  document.getElementById('pdf').onclick=async e=>{e.preventDefault();try{await downloadApiFile(`/api/tests/${test.testSessionId}/pdf`,`${APP_BRAND.productName}-${test.testSessionId}.pdf`);}catch(err){status(document.getElementById('msg'),err.message,'status error');}};
   syncLocal();
   render();
 }

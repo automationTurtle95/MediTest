@@ -19,7 +19,7 @@ public sealed class ProductInfoService
         _configuration.GetSection("Product").Bind(info);
         _configuration.GetSection("Legal").Bind(info);
 
-        info.ProductName = ValueOr(info.ProductName, "MediTest");
+        info.ProductName = ValueOr(info.ProductName, global::MediTest.Brand.ProductName);
         info.ProductVersion = ValueOr(info.ProductVersion, AssemblyVersion());
         info.DeveloperName = ValueOr(info.DeveloperName, "Lukas Hofer");
         info.LegalOwner = ValueOr(info.LegalOwner, "Lukas Hofer");
