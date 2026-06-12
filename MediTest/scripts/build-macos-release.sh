@@ -73,10 +73,10 @@ NOTARY_KEY_FILE="${APPLE_API_KEY_FILE:-}"
 SIGNING_KEYCHAIN="${APPLE_SIGNING_KEYCHAIN:-}"
 
 CODESIGN_KEYCHAIN_ARGS=()
-PKGBUILD_KEYCHAIN_ARGS=()
+PRODUCTSIGN_KEYCHAIN_ARGS=()
 if [[ -n "$SIGNING_KEYCHAIN" ]]; then
   CODESIGN_KEYCHAIN_ARGS=(--keychain "$SIGNING_KEYCHAIN")
-  PKGBUILD_KEYCHAIN_ARGS=(--keychain "$SIGNING_KEYCHAIN")
+  PRODUCTSIGN_KEYCHAIN_ARGS=(--keychain "$SIGNING_KEYCHAIN")
 fi
 
 if [[ -z "$APP_SIGNING_IDENTITY" || -z "$INSTALLER_SIGNING_IDENTITY" ]]; then
@@ -193,6 +193,7 @@ build_package() {
   local publish_dir="$work_dir/publish"
   local app_bundle="$work_dir/Meduvalo.app"
   local package_file="$MAC_ROOT/MediTest-Setup-$VERSION-macos-$architecture.pkg"
+  local unsigned_package_file="$work_dir/MediTest-Setup-$VERSION-macos-$architecture-unsigned.pkg"
 
   rm -rf "$work_dir" "$package_file"
   mkdir -p "$app_bundle/Contents/MacOS" "$app_bundle/Contents/Resources"
@@ -233,16 +234,22 @@ build_package() {
   log_step "INSTALLER_IDENTITY=$INSTALLER_SIGNING_IDENTITY"
   ls -ld "$app_bundle"
   du -sh "$app_bundle"
-  run_logged_phase "pkgbuild-$architecture" pkgbuild \
-    "${PKGBUILD_KEYCHAIN_ARGS[@]}" \
-    --sign "$INSTALLER_SIGNING_IDENTITY" \
-    --timestamp \
+  run_logged_phase "pkgbuild-unsigned-$architecture" pkgbuild \
     --component "$app_bundle" \
     --install-location /Applications \
     --identifier "$BUNDLE_ID" \
     --version "$VERSION" \
+    "$unsigned_package_file"
+  ls -lh "$unsigned_package_file"
+
+  run_logged_phase "productsign-$architecture" productsign \
+    "${PRODUCTSIGN_KEYCHAIN_ARGS[@]}" \
+    --sign "$INSTALLER_SIGNING_IDENTITY" \
+    --timestamp \
+    "$unsigned_package_file" \
     "$package_file"
   ls -lh "$package_file"
+  rm -f "$unsigned_package_file"
 
   log_step "PKG-Signaturprüfung startet für $architecture"
   pkgutil --check-signature "$package_file"
