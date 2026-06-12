@@ -38,7 +38,7 @@ public sealed class AppConfig
     public string PrivacyPolicyUrl { get; set; } = string.Empty;
     public string ImpressumUrl { get; set; } = string.Empty;
     public string LicenseAgreementUrl { get; set; } = string.Empty;
-    public int DefaultMaxDevices { get; set; } = 2;
+    public int DefaultMaxDevices { get; set; } = 1;
     public int TrialDurationDays { get; set; } = 7;
 }
 

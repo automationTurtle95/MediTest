@@ -1,10 +1,11 @@
 using System.Security.Cryptography;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 
 namespace MediTest.Services;
 
-public sealed record DeviceIdentity(string DeviceId, string DeviceName);
+public sealed record DeviceIdentity(string DeviceId, string DeviceName, string Platform);
 
 public sealed class DeviceIdentityService
 {
@@ -23,7 +24,10 @@ public sealed class DeviceIdentityService
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             var secret = await ReadOrCreateSecretAsync(path, ct);
             var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"MediTest|{secret}"));
-            _cached = new DeviceIdentity(Convert.ToHexString(hash).ToLowerInvariant(), DeviceName());
+            _cached = new DeviceIdentity(
+                Convert.ToHexString(hash).ToLowerInvariant(),
+                DeviceName(),
+                DevicePlatform());
             return _cached;
         }
         finally
@@ -66,6 +70,15 @@ public sealed class DeviceIdentityService
             OperatingSystem.IsMacOS() ? "macOS" :
             OperatingSystem.IsLinux() ? "Linux" : "Gerät";
         return $"{os} · {Environment.MachineName}";
+    }
+
+    private static string DevicePlatform()
+    {
+        var architecture = RuntimeInformation.ProcessArchitecture;
+        if (OperatingSystem.IsWindows() && architecture == Architecture.X64) return "windows-x64";
+        if (OperatingSystem.IsMacOS() && architecture == Architecture.Arm64) return "macos-arm64";
+        if (OperatingSystem.IsMacOS() && architecture == Architecture.X64) return "macos-x64";
+        return $"{Environment.OSVersion.Platform}-{architecture}".ToLowerInvariant();
     }
 
     private sealed class DeviceIdentityFile

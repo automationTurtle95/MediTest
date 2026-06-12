@@ -14,7 +14,7 @@ const DOWNLOAD_PRODUCTS = Object.freeze({
     kicker: "Windows-Version",
     lead: "Melde dich an oder erstelle ein Konto. Der einmalige Kauf schaltet den Windows-MSI-Installer und eine 7-tägige Testphase mit allen Funktionen frei.",
     name: "Meduvalo für Windows 10 & 11",
-    details: "64-Bit · MSI-Installer · Version 5.0.4",
+    details: "64-Bit · MSI-Installer · Version 5.0.5",
     benefit: "Windows-MSI direkt nach erfolgreicher Zahlung",
     success: "Dein Kauf ist aktiv und deine 7-tägige Testphase hat begonnen. Der MSI-Installer kann jetzt heruntergeladen werden.",
     downloadLabel: "Windows MSI herunterladen",
@@ -24,20 +24,20 @@ const DOWNLOAD_PRODUCTS = Object.freeze({
     kicker: "macOS · Apple Silicon",
     lead: "Melde dich an oder erstelle ein Konto. Der einmalige Kauf schaltet das signierte und von Apple notarisierte DMG für Apple Silicon sowie eine 7-tägige Testphase frei.",
     name: "Meduvalo für Mac mit Apple Chip",
-    details: "Apple Silicon · signiertes DMG · macOS 11+ · Version 5.0.4",
+    details: "Apple Silicon · signiertes DMG · macOS 11+ · Version 5.0.5",
     benefit: "Notarisiertes macOS-DMG direkt nach erfolgreicher Zahlung",
-    success: "Dein Kauf ist aktiv und deine 7-tägige Testphase hat begonnen. Das PKG für Apple Silicon kann jetzt heruntergeladen werden.",
-    downloadLabel: "Mac-PKG für Apple Silicon herunterladen",
+    success: "Dein Kauf ist aktiv und deine 7-tägige Testphase hat begonnen. Das DMG für Apple Silicon kann jetzt heruntergeladen werden.",
+    downloadLabel: "Mac-DMG für Apple Silicon herunterladen",
     apple: true
   },
   "macos-x64": {
     kicker: "macOS · Intel",
     lead: "Melde dich an oder erstelle ein Konto. Der einmalige Kauf schaltet das signierte und von Apple notarisierte DMG für Intel-Macs sowie eine 7-tägige Testphase frei.",
     name: "Meduvalo für Intel-Mac",
-    details: "Intel 64-Bit · signiertes DMG · macOS 11+ · Version 5.0.4",
+    details: "Intel 64-Bit · signiertes DMG · macOS 11+ · Version 5.0.5",
     benefit: "Notarisiertes macOS-DMG direkt nach erfolgreicher Zahlung",
-    success: "Dein Kauf ist aktiv und deine 7-tägige Testphase hat begonnen. Das PKG für Intel-Macs kann jetzt heruntergeladen werden.",
-    downloadLabel: "Mac-PKG für Intel herunterladen",
+    success: "Dein Kauf ist aktiv und deine 7-tägige Testphase hat begonnen. Das DMG für Intel-Macs kann jetzt heruntergeladen werden.",
+    downloadLabel: "Mac-DMG für Intel herunterladen",
     apple: true
   }
 });
@@ -78,6 +78,7 @@ const windowsPlatformIcon = document.getElementById("windowsPlatformIcon");
 const applePlatformIcon = document.getElementById("applePlatformIcon");
 let authMode = "login";
 let productPurchased = false;
+let pendingSecuredDownload = null;
 
 function applySelectedProduct() {
   productKicker.textContent = downloadProduct.kicker;
@@ -204,6 +205,7 @@ function setAuthenticated(session) {
 
 function setLoggedOut() {
   productPurchased = false;
+  pendingSecuredDownload = null;
   authPanel.classList.remove("hidden");
   checkoutPanel.classList.add("hidden");
   purchaseSuccess.classList.add("hidden");
@@ -267,11 +269,46 @@ async function requestSecuredDownload() {
     method: "POST",
     body: JSON.stringify({ platform: downloadPlatform })
   });
+  pendingSecuredDownload = download;
   securedDownload.href = download.url;
-  securedDownload.setAttribute("download", download.fileName);
+  securedDownload.removeAttribute("download");
   purchaseSuccess.classList.remove("hidden");
   purchaseSuccess.scrollIntoView({ behavior: "smooth", block: "center" });
 }
+
+function downloadInstallationAuthorization(authorization) {
+  if (!authorization?.token) return;
+  const payload = JSON.stringify({
+    schemaVersion: authorization.schemaVersion,
+    token: authorization.token,
+    platform: authorization.platform,
+    version: authorization.version,
+    expiresAt: authorization.expiresAt
+  }, null, 2);
+  const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `Meduvalo-Installationsberechtigung-${authorization.version}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+securedDownload.addEventListener("click", (event) => {
+  if (!pendingSecuredDownload?.url) return;
+  event.preventDefault();
+  downloadInstallationAuthorization(pendingSecuredDownload.installationAuthorization);
+  showMessage(
+    pendingSecuredDownload.installationAuthorization
+      ? "Installationsberechtigung gespeichert. Der Installer wird jetzt heruntergeladen. Lass beide Dateien im Download-Ordner."
+      : "Der Installer wird jetzt heruntergeladen.",
+    "success"
+  );
+  setTimeout(() => {
+    location.href = pendingSecuredDownload.url;
+  }, pendingSecuredDownload.installationAuthorization ? 350 : 0);
+});
 
 async function refreshPurchaseAccess() {
   const status = await authorizedRequest(PURCHASE_CONFIG.statusEndpoint, { method: "GET" });

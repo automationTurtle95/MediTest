@@ -7,7 +7,7 @@ PROJECT_FILE="$PROJECT_ROOT/MediTest.csproj"
 DIST_ROOT="$PROJECT_ROOT/dist"
 BUNDLE_ID="com.automationturtle95.meditest"
 ENTITLEMENTS="$PROJECT_ROOT/assets/macos.entitlements"
-LAUNCHER_SOURCE="$SCRIPT_DIR/macos-launcher.c"
+LAUNCHER_SOURCE="$SCRIPT_DIR/macos-launcher.m"
 ICON_SOURCE="$PROJECT_ROOT/assets/MediTest.png"
 
 log_step() {
@@ -245,7 +245,8 @@ build_macos_artifact() {
 
   mv "$publish_dir" "$app_bundle/Contents/Resources/app"
   log_step "Nativer Launcher wird für $architecture erstellt"
-  clang -arch "$clang_arch" -mmacosx-version-min=11.0 -O2 \
+  clang -arch "$clang_arch" -mmacosx-version-min=11.0 -O2 -fobjc-arc \
+    -framework Cocoa -framework WebKit \
     "$LAUNCHER_SOURCE" -o "$app_bundle/Contents/MacOS/MediTest"
   chmod +x "$app_bundle/Contents/MacOS/MediTest" "$app_bundle/Contents/Resources/app/MediTest"
   write_info_plist "$app_bundle/Contents/Info.plist"

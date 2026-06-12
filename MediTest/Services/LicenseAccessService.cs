@@ -14,6 +14,7 @@ public sealed class LicenseAccessService
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IConfiguration _configuration;
     private readonly DeviceIdentityService _deviceIdentityService;
+    private readonly InstallationAuthorizationService _installationAuthorizationService;
     private readonly LicenseCacheStore _cacheStore;
     private readonly ProductInfoService _productInfoService;
     private readonly IMemoryCache _memoryCache;
@@ -23,6 +24,7 @@ public sealed class LicenseAccessService
         IHttpContextAccessor httpContextAccessor,
         IConfiguration configuration,
         DeviceIdentityService deviceIdentityService,
+        InstallationAuthorizationService installationAuthorizationService,
         LicenseCacheStore cacheStore,
         ProductInfoService productInfoService,
         IMemoryCache memoryCache)
@@ -31,6 +33,7 @@ public sealed class LicenseAccessService
         _httpContextAccessor = httpContextAccessor;
         _configuration = configuration;
         _deviceIdentityService = deviceIdentityService;
+        _installationAuthorizationService = installationAuthorizationService;
         _cacheStore = cacheStore;
         _productInfoService = productInfoService;
         _memoryCache = memoryCache;
@@ -98,11 +101,14 @@ public sealed class LicenseAccessService
             throw new UnauthorizedAccessException("Kein eingeloggter Firebase-Nutzer.");
 
         var product = _productInfoService.GetLegalInfo();
+        var installationAuthorization = await _installationAuthorizationService.FindAsync(identity.Platform, ct);
         var body = new Dictionary<string, object?>
         {
             ["action"] = action,
             ["deviceId"] = identity.DeviceId,
             ["deviceName"] = identity.DeviceName,
+            ["platform"] = identity.Platform,
+            ["installationToken"] = installationAuthorization?.Token ?? string.Empty,
             ["appVersion"] = product.ProductVersion
         };
         if (extra != null)
@@ -125,7 +131,14 @@ public sealed class LicenseAccessService
         }
 
         var snapshot = JsonSerializer.Deserialize<LicenseAccessSnapshot>(raw, JsonOptions);
-        return snapshot ?? throw new JsonException("Der Lizenzdienst hat ungültige Daten geliefert.");
+        if (snapshot == null)
+            throw new JsonException("Der Lizenzdienst hat ungültige Daten geliefert.");
+        if (installationAuthorization != null &&
+            string.Equals(snapshot.Device?.DeviceId, identity.DeviceId, StringComparison.Ordinal))
+        {
+            _installationAuthorizationService.Delete(installationAuthorization);
+        }
+        return snapshot;
     }
 
     private async Task<LicenseAccessSnapshot> OfflineSnapshotAsync(DeviceIdentity identity, CancellationToken ct)

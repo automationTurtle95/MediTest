@@ -9,7 +9,7 @@ Updates vorhandener Installationen weiterhin funktionieren.
 Empfohlen ist das MSI-Paket aus dem Release-Ordner:
 
 ```text
-dist/MediTest-5.0.4/windows/MediTest-Setup-5.0.4-win-x64.msi
+dist/MediTest-5.0.5/windows/MediTest-Setup-5.0.5-win-x64.msi
 ```
 
 Das MSI installiert Meduvalo benutzerbezogen nach:
@@ -27,8 +27,8 @@ Updates funktionieren über dasselbe MSI: Eine neuere `MediTest-Setup-<Version>-
 Für den produktiven Release werden zwei signierte und von Apple notarisierte DMGs veröffentlicht:
 
 ```text
-MediTest-Setup-5.0.4-macos-x64.dmg
-MediTest-Setup-5.0.4-macos-arm64.dmg
+MediTest-Setup-5.0.5-macos-x64.dmg
+MediTest-Setup-5.0.5-macos-arm64.dmg
 ```
 
 `macos-x64` ist für Intel-Macs, `macos-arm64` für Apple-Silicon-Macs.
@@ -39,11 +39,13 @@ Installation:
 2. `Meduvalo.app` auf die im Disk-Image angezeigte Verknüpfung `Applications` ziehen.
 3. Meduvalo anschließend aus `/Applications` oder über Spotlight starten.
 
-Die App öffnet automatisch den Browser unter `http://127.0.0.1:55000`.
+Die App öffnet ein natives Meduvalo-Fenster. Beim Schließen des letzten Fensters wird auch der lokale Serverprozess beendet.
 
 Der Release-Workflow veröffentlicht ab Version 5.0.4 nur noch, wenn beide DMGs erfolgreich signiert, von Apple notarisiert und mit einem Notarisierungsticket versehen wurden.
 
-Version 5.0.4 legt keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden ignoriert.
+Seit Version 5.0.4 legt Meduvalo keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden ignoriert.
+
+Der geschützte Website-Download speichert neben dem Installer eine Datei `Meduvalo-Installationsberechtigung-<Version>.json`. Beide Dateien müssen im Download-Ordner bleiben. Die Berechtigung gilt 24 Stunden, kann nur einmal eingelöst werden und bindet die Lizenz beim ersten Start an genau dieses Gerät.
 
 Die Einrichtung der benötigten Apple-Zertifikate und GitHub-Secrets steht in [MACOS_SIGNING.md](MACOS_SIGNING.md).
 
@@ -65,7 +67,7 @@ Windows-Updates laufen über das neue MSI. macOS-Updates laufen über das signie
 
 ## Erster Start und Anmeldung
 
-Version 5.0.4 startet mit einer Anmeldeseite. Die Anmeldung ist über E-Mail/Passwort, Google oder Apple möglich. Nach einer Kontoerstellung mit E-Mail/Passwort sendet Firebase eine Bestätigungs-E-Mail; erst nach Bestätigung der Adresse ist diese Anmeldemethode nutzbar. Passwort-Reset und Passwortänderung gelten nur für E-Mail/Passwort-Konten. Die Sitzung bleibt nur in der aktuellen Browser-Sitzung gespeichert.
+Meduvalo startet mit einer Anmeldeseite. Die Anmeldung ist über E-Mail/Passwort, Google oder Apple möglich. Nach einer Kontoerstellung mit E-Mail/Passwort sendet Firebase eine Bestätigungs-E-Mail; erst nach Bestätigung der Adresse ist diese Anmeldemethode nutzbar. Passwort-Reset und Passwortänderung gelten nur für E-Mail/Passwort-Konten. Die Sitzung bleibt nur in der aktuellen Browser-Sitzung gespeichert.
 
 Unter Windows öffnet Meduvalo ein eigenes App-Fenster mit separatem Browserprofil. Pro Installation läuft nur eine Instanz. Der Befehl `Programm schließen` beendet App-Fenster, lokalen Server und weitere Prozesse derselben Installation.
 
@@ -176,4 +178,4 @@ Die Stripe-Integration verwendet folgende serverseitige Struktur:
 4. Firestore-Regeln blockieren direkte Nutzer-Schreibzugriffe auf Lizenz- und Stripe-Daten.
 5. Das Stripe-Kundenportal verwaltet Zahlungsmittel und Abos.
 
-Vor dem Checkout müssen in `firebase/functions/.env.<project-id>` der einmalige Kaufpreis `BILLING_PRODUCT_PRICE_CENTS`, der Monatspreis `BILLING_MONTHLY_PRICE_CENTS`, die Katalogparameter `STRIPE_CATALOG_UNIT_PRICE_ID` und `STRIPE_CATALOG_ENDING_PRICE_ID` sowie `STRIPE_PORTAL_CONFIGURATION_ID` gesetzt und die Functions erneut bereitgestellt werden. API-Key und Webhook-Signing-Secret liegen ausschließlich als `MEDITEST_STRIPE_API_KEY` und `MEDITEST_STRIPE_WEBHOOK_SECRET` im Secret Manager.
+Vor dem Checkout müssen in `firebase/functions/.env.<project-id>` der einmalige Kaufpreis `BILLING_PRODUCT_PRICE_CENTS`, der Monatspreis `BILLING_MONTHLY_PRICE_CENTS`, die Katalogpreisparameter, `INSTALLATION_AUTHORIZATION_TTL_HOURS` und `STRIPE_PORTAL_CONFIGURATION_ID` gesetzt und die Functions erneut bereitgestellt werden. Katalogpreise werden serverseitig als Stripe-Inline-Preise erzeugt und funktionieren dadurch getrennt in Test- und Live-Modus. API-Key und Webhook-Signing-Secret liegen ausschließlich als `MEDITEST_STRIPE_API_KEY` und `MEDITEST_STRIPE_WEBHOOK_SECRET` im Secret Manager. Für `https://meduvalo.at` werden ausschließlich ein Live-Key und ein Live-Webhook-Secret akzeptiert.

@@ -1,6 +1,6 @@
 # Meduvalo
 
-Meduvalo ist eine Lernsoftware für Medizinstudenten zur prüfungsnahen Vorbereitung mit strukturierten Fragen, Tests, Lernmodulen, Fortschrittsübersicht und KI-gestützter Fragengenerierung. Version 5.0.4 nutzt Firebase Authentication, Firestore und Stripe Checkout.
+Meduvalo ist eine Lernsoftware für Medizinstudenten zur prüfungsnahen Vorbereitung mit strukturierten Fragen, Tests, Lernmodulen, Fortschrittsübersicht und KI-gestützter Fragengenerierung. Version 5.0.5 nutzt Firebase Authentication, Firestore und Stripe Checkout.
 
 ## Branding und Kompatibilität
 
@@ -73,7 +73,7 @@ Alternativ unter Windows: `Start_MediTest.bat` doppelklicken. Die App läuft sta
 
 ## Anmeldung mit Firebase
 
-V5.0.4 speichert keine Nutzerdaten mehr in einer lokalen `meditest.db`. Registrierung und Anmeldung laufen über Firebase Authentication wahlweise mit E-Mail/Passwort, Google oder Apple. Bei E-Mail/Passwort muss die Adresse nach der Registrierung bestätigt werden; Google- und Apple-Konten übernehmen den bestätigten Anmeldestatus des jeweiligen Anbieters. Passwort-Reset und Passwortänderung gelten nur für E-Mail/Passwort-Konten. Im Browser werden ID-Token und Refresh-Token nur in `sessionStorage` gehalten und verschwinden beim Schließen der Browser-Sitzung.
+Seit V5.0.4 speichert Meduvalo keine Nutzerdaten mehr in einer lokalen `meditest.db`. Registrierung und Anmeldung laufen über Firebase Authentication wahlweise mit E-Mail/Passwort, Google oder Apple. Bei E-Mail/Passwort muss die Adresse nach der Registrierung bestätigt werden; Google- und Apple-Konten übernehmen den bestätigten Anmeldestatus des jeweiligen Anbieters. Passwort-Reset und Passwortänderung gelten nur für E-Mail/Passwort-Konten. Im Browser werden ID-Token und Refresh-Token nur in `sessionStorage` gehalten und verschwinden beim Schließen der Browser-Sitzung.
 
 In Firebase müssen unter `Authentication -> Sign-in method` die verwendeten Anbieter aktiviert sein. Die Firebase-Web-Konfiguration steht in `appsettings.json`:
 
@@ -125,7 +125,8 @@ Die Seite `Rechtliches & Lizenz` zeigt Produkt- und Entwicklerdaten, den Firebas
 - ohne Abo bleiben vorhandene Tests, Ergebnisse und gekaufte Katalogtests nutzbar
 - Premium- und Gratis-Code-Hashes liegen ausschließlich in den Firebase-Functions-Parametern
 - Gratis-Katalog-Codes können von jedem Benutzerkonto genau einmal verwendet werden
-- 2 Geräte pro Lizenz und 7 Tage Offline-Nutzung nach einer erfolgreichen Online-Prüfung
+- 1 Gerät pro neuem Basiskauf und 7 Tage Offline-Nutzung nach einer erfolgreichen Online-Prüfung
+- einmalige, 24 Stunden gültige Installationsberechtigung bindet den ersten Start an das Download-Gerät
 - AGB- und Datenschutz-Version `5.0`; geänderte Versionen erfordern eine neue aktive Zustimmung
 
 Die geschützte Function `meditestLicenseAccess` verwaltet `users`, `licenses`, `deviceActivations`, `termsAcceptances` und `appConfig`. Der Client verwendet ausschließlich die UID aus Firebase Authentication. Direkte Schreibzugriffe auf Lizenz-, Geräte- und Zustimmungsdaten sind in den Firestore-Regeln gesperrt. Lokale Lizenzdaten liegen nur als mit ASP.NET Data Protection verschlüsselter Cache vor.
@@ -143,7 +144,7 @@ cd MediTest
 powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 ```
 
-Die fertigen Artefakte liegen danach unter `dist/MediTest-5.0.4/`. Frühere Release-Ordner bleiben erhalten.
+Die fertigen Artefakte liegen danach unter `dist/MediTest-5.0.5/`. Frühere Release-Ordner bleiben erhalten.
 
 Ohne `-WindowsOnly` können lokal weiterhin Test-ZIPs für Intel und Apple Silicon erzeugt werden. Der produktive Release-Workflow akzeptiert ab Version 5.0.4 ausschließlich signierte und von Apple notarisierte DMG-Disk-Images.
 

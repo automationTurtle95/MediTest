@@ -480,6 +480,56 @@ window.priceLabel = priceLabel;
 
 function qs(name){ return new URLSearchParams(location.search).get(name); }
 function status(el, msg, type='status'){ el.className = type; el.textContent = msg; el.classList.remove('hidden'); }
+
+function openActionPopup(message, title = 'Aktion wird ausgeführt') {
+  document.getElementById('actionProgressModal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'actionProgressModal';
+  modal.className = 'modal-backdrop action-progress-backdrop';
+  modal.innerHTML = `
+    <section class="modal-panel action-progress-modal" role="status" aria-live="polite" aria-labelledby="actionProgressTitle">
+      <span class="action-progress-spinner" aria-hidden="true"></span>
+      <div>
+        <p class="eyebrow">Bitte warten</p>
+        <h2 id="actionProgressTitle">${esc(title)}</h2>
+        <p id="actionProgressMessage" class="muted">${esc(message)}</p>
+        <div id="actionProgressActions" class="actions hidden">
+          <button type="button" onclick="closeActionPopup()">Schließen</button>
+        </div>
+      </div>
+    </section>`;
+  document.body.appendChild(modal);
+
+  return {
+    update(nextMessage, nextTitle = '') {
+      const messageElement = document.getElementById('actionProgressMessage');
+      const titleElement = document.getElementById('actionProgressTitle');
+      if (messageElement) messageElement.textContent = nextMessage;
+      if (nextTitle && titleElement) titleElement.textContent = nextTitle;
+    },
+    success(nextMessage = 'Fertig.') {
+      modal.classList.add('action-progress-success');
+      modal.querySelector('.action-progress-spinner')?.classList.add('action-progress-check');
+      const messageElement = document.getElementById('actionProgressMessage');
+      if (messageElement) messageElement.textContent = nextMessage;
+      setTimeout(() => closeActionPopup(), 650);
+    },
+    fail(errorMessage) {
+      modal.classList.add('action-progress-error');
+      modal.querySelector('.action-progress-spinner')?.classList.add('action-progress-failed');
+      const titleElement = document.getElementById('actionProgressTitle');
+      const messageElement = document.getElementById('actionProgressMessage');
+      const actions = document.getElementById('actionProgressActions');
+      if (titleElement) titleElement.textContent = 'Aktion fehlgeschlagen';
+      if (messageElement) messageElement.textContent = errorMessage;
+      actions?.classList.remove('hidden');
+    }
+  };
+}
+
+function closeActionPopup() {
+  document.getElementById('actionProgressModal')?.remove();
+}
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 const HELP_BY_HEADING = new Map([

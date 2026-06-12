@@ -6,7 +6,7 @@ import { defineInt, defineSecret, defineString } from "firebase-functions/params
 import { onRequest } from "firebase-functions/v2/https";
 import { setGlobalOptions } from "firebase-functions/v2/options";
 import { GoogleGenAI } from "@google/genai";
-import { createHash, randomInt } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
 import Stripe from "stripe";
 
 initializeApp();
@@ -49,23 +49,22 @@ const billingMonthlyPriceCents = defineInt("BILLING_MONTHLY_PRICE_CENTS", { defa
 const billingCatalogQuestionPriceCents = defineInt("BILLING_CATALOG_QUESTION_PRICE_CENTS", { default: 10 });
 const billingCatalogPriceEndingCents = defineInt("BILLING_CATALOG_PRICE_ENDING_CENTS", { default: 9 });
 const billingCurrency = defineString("BILLING_CURRENCY", { default: "EUR" });
+const installationAuthorizationTtlHours = defineInt("INSTALLATION_AUTHORIZATION_TTL_HOURS", { default: 24 });
 const billingReturnBaseUrl = defineString("BILLING_RETURN_BASE_URL", { default: "http://127.0.0.1:55000" });
 const billingWebsiteBaseUrl = defineString("BILLING_WEBSITE_BASE_URL", {
   default: BRAND.websiteUrl
 });
 const stripeCustomersCollection = defineString("STRIPE_CUSTOMERS_COLLECTION", { default: "customers" });
-const stripeCatalogUnitPriceId = defineString("STRIPE_CATALOG_UNIT_PRICE_ID", { default: "not-configured" });
-const stripeCatalogEndingPriceId = defineString("STRIPE_CATALOG_ENDING_PRICE_ID", { default: "not-configured" });
 const stripePortalConfigurationId = defineString("STRIPE_PORTAL_CONFIGURATION_ID", { default: "not-configured" });
-const currentAppVersion = defineString("CURRENT_APP_VERSION", { default: "5.0.4" });
+const currentAppVersion = defineString("CURRENT_APP_VERSION", { default: "5.0.5" });
 const windowsDownloadUrl = defineString("WINDOWS_DOWNLOAD_URL", {
-  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.4/MediTest-Setup-5.0.4-win-x64.msi"
+  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.5/MediTest-Setup-5.0.5-win-x64.msi"
 });
 const macosArm64DownloadUrl = defineString("MACOS_ARM64_DOWNLOAD_URL", {
-  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.4/MediTest-Setup-5.0.4-macos-arm64.dmg"
+  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.5/MediTest-Setup-5.0.5-macos-arm64.dmg"
 });
 const macosX64DownloadUrl = defineString("MACOS_X64_DOWNLOAD_URL", {
-  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.4/MediTest-Setup-5.0.4-macos-x64.dmg"
+  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.5/MediTest-Setup-5.0.5-macos-x64.dmg"
 });
 const db = getFirestore();
 const legacyExpiredTrialDate = "1970-01-01T00:00:00.000Z";
@@ -119,6 +118,9 @@ type LicenseState = {
   baseProductProvider: string;
   baseProductCheckoutSessionId: string;
   baseProductCodeHash: string;
+  installationAuthorizationRequired: boolean;
+  installationAuthorizedDeviceId: string;
+  activeInstallationTokenHash: string;
   trialStartedAt: string | null;
   trialEndsAt: string | null;
   subscriptionActive: boolean;
@@ -464,9 +466,9 @@ export const meditestDownloadAccess = onRequest(
     }
 
     const platform = requestedPlatform ?? "windows-x64";
-    const state = await ensureLicenseState(user.uid);
-    const downloadAllowed = user.admin === true ||
-      user.isAdmin === true ||
+    const isAdmin = user.admin === true || user.isAdmin === true;
+    let state = await ensureLicenseState(user.uid);
+    const downloadAllowed = isAdmin ||
       state.baseProductPurchased ||
       state.premiumActive ||
       state.subscriptionActive;
@@ -478,8 +480,16 @@ export const meditestDownloadAccess = onRequest(
       });
       return;
     }
+    if (!isAdmin && !state.installationAuthorizationRequired) {
+      state = await updateLicenseState(user.uid, (current) => {
+        current.installationAuthorizationRequired = true;
+        current.installationAuthorizedDeviceId = "";
+        current.activeInstallationTokenHash = "";
+        return current;
+      });
+    }
 
-    const version = currentAppVersion.value().trim() || "5.0.4";
+    const version = currentAppVersion.value().trim() || "5.0.5";
     const downloads: Record<DownloadPlatform, { fileName: string; url: string }> = {
       "windows-x64": {
         fileName: `MediTest-Setup-${version}-win-x64.msi`,
@@ -500,11 +510,51 @@ export const meditestDownloadAccess = onRequest(
       return;
     }
 
+    let installationAuthorization: Record<string, unknown> | null = null;
+    if (state.installationAuthorizationRequired && !state.installationAuthorizedDeviceId) {
+      const token = randomBytes(32).toString("base64url");
+      const tokenHash = createHash("sha256").update(token, "utf8").digest("hex");
+      const ttlHours = Math.min(168, Math.max(1, Number(installationAuthorizationTtlHours.value()) || 24));
+      const expiresAt = new Date(Date.now() + ttlHours * 3_600_000);
+      const authorizationRef = db.doc(`installationAuthorizations/${tokenHash}`);
+      await authorizationRef.set({
+        uid: user.uid,
+        platform,
+        version,
+        createdAt: Timestamp.now(),
+        expiresAt: Timestamp.fromDate(expiresAt),
+        consumedAt: null,
+        consumedDeviceId: ""
+      });
+      const updatedState = await updateLicenseState(user.uid, (current) => {
+        if (!current.installationAuthorizedDeviceId)
+          current.activeInstallationTokenHash = tokenHash;
+        return current;
+      });
+      const previousTokenHash = state.activeInstallationTokenHash;
+      if (previousTokenHash && previousTokenHash !== tokenHash) {
+        await db.doc(`installationAuthorizations/${previousTokenHash}`).delete().catch(() => undefined);
+      }
+      if (!updatedState.installationAuthorizedDeviceId &&
+          updatedState.activeInstallationTokenHash === tokenHash) {
+        installationAuthorization = {
+          schemaVersion: 1,
+          token,
+          platform,
+          version,
+          expiresAt: expiresAt.toISOString()
+        };
+      } else {
+        await authorizationRef.delete();
+      }
+    }
+
     res.status(200).json({
       platform,
       version,
       fileName: download.fileName,
-      url: download.url
+      url: download.url,
+      installationAuthorization
     });
   }
 );
@@ -527,6 +577,8 @@ export const meditestLicenseAccess = onRequest(
     const action = stringValue(req.body?.action) || "check";
     const deviceId = stringValue(req.body?.deviceId).toLowerCase();
     const deviceName = stringValue(req.body?.deviceName).slice(0, 200);
+    const platform = normalizeDownloadPlatform(req.body?.platform);
+    const installationToken = stringValue(req.body?.installationToken).slice(0, 200);
     const appVersion = stringValue(req.body?.appVersion).slice(0, 40) || "0.0.0";
     if (!/^[a-f0-9]{64}$/.test(deviceId)) {
       res.status(400).json({ error: { message: "Die Geräte-ID ist ungültig." } });
@@ -535,7 +587,7 @@ export const meditestLicenseAccess = onRequest(
 
     try {
       const appConfig = await ensureGlobalAppConfig();
-      const billingState = await ensureLicenseState(user.uid);
+      let billingState = await ensureLicenseState(user.uid);
       const userStatus = await ensureCommercialUser(user);
       let license = await ensureCommercialLicense(user, billingState, appConfig);
 
@@ -546,7 +598,14 @@ export const meditestLicenseAccess = onRequest(
         }
         await saveTermsAcceptance(user, deviceId, appVersion, appConfig);
       } else if (action === "activateDevice") {
-        await activateDevice(user.uid, deviceId, deviceName, appVersion);
+        await activateLicensedDevice(
+          user.uid,
+          billingState,
+          installationToken,
+          platform,
+          deviceId,
+          deviceName,
+          appVersion);
       } else if (action === "check") {
         const currentDevice = await db.doc(`deviceActivations/${user.uid}/devices/${deviceId}`).get();
         const deviceEligible = (
@@ -557,21 +616,36 @@ export const meditestLicenseAccess = onRequest(
           (!license.licenseEndDate || Date.parse(license.licenseEndDate) > Date.now());
         if (!currentDevice.exists && deviceEligible && !userStatus.isBlocked) {
           try {
-            await activateDevice(user.uid, deviceId, deviceName, appVersion);
+            await activateLicensedDevice(
+              user.uid,
+              billingState,
+              installationToken,
+              platform,
+              deviceId,
+              deviceName,
+              appVersion);
           } catch (error) {
             if (!(error instanceof Error) || error.message !== "device_limit_reached") throw error;
           }
-        } else if (currentDevice.exists) {
+        } else if (
+          currentDevice.exists &&
+          (!billingState.installationAuthorizationRequired ||
+           !billingState.installationAuthorizedDeviceId ||
+           billingState.installationAuthorizedDeviceId === deviceId)
+        ) {
           await currentDevice.ref.set({
             lastUsedAt: Timestamp.now(),
             appVersion
           }, { merge: true });
+        } else if (currentDevice.exists) {
+          throw new Error("installation_device_mismatch");
         }
       } else {
         res.status(400).json({ error: { message: "Unbekannte Lizenzaktion." } });
         return;
       }
 
+      billingState = await ensureLicenseState(user.uid);
       const [deviceSnapshot, termsSnapshot, licenseSnapshot] = await Promise.all([
         db.doc(`deviceActivations/${user.uid}/devices/${deviceId}`).get(),
         db.doc(`termsAcceptances/${user.uid}`).get(),
@@ -581,6 +655,12 @@ export const meditestLicenseAccess = onRequest(
       const terms = termsAcceptanceResponse(termsSnapshot.data());
       const device = deviceActivationResponse(deviceSnapshot.data());
       const result = evaluateCommercialAccess(userStatus, license, !!device, terms, appConfig);
+      if (!device && billingState.installationAuthorizationRequired) {
+        result.canActivateDevice = false;
+        result.message = billingState.installationAuthorizedDeviceId
+          ? "Diese Lizenz ist bereits an das Gerät gebunden, auf dem die Installationsberechtigung verwendet wurde."
+          : "Die Installationsberechtigung fehlt oder ist abgelaufen. Lade den Installer auf diesem Gerät erneut über meduvalo.at herunter.";
+      }
 
       await db.doc(`licenses/${user.uid}`).set({
         lastLicenseCheck: Timestamp.now()
@@ -605,6 +685,18 @@ export const meditestLicenseAccess = onRequest(
       }
       if (code === "license_not_active") {
         res.status(409).json({ error: { message: "Keine gültige Lizenz gefunden." } });
+        return;
+      }
+      if (code === "installation_authorization_missing") {
+        res.status(409).json({ error: { message: "Die Installationsberechtigung fehlt. Lade den Installer auf diesem Gerät erneut über meduvalo.at herunter." } });
+        return;
+      }
+      if (code === "installation_authorization_invalid") {
+        res.status(409).json({ error: { message: "Die Installationsberechtigung ist ungültig, abgelaufen oder wurde bereits verwendet." } });
+        return;
+      }
+      if (code === "installation_device_mismatch") {
+        res.status(409).json({ error: { message: "Diese Lizenz wurde bereits an ein anderes Gerät gebunden." } });
         return;
       }
       logger.error("License access failed", {
@@ -682,6 +774,9 @@ export const meditestRedeemProductCode = onRequest(
       current.baseProductProvider = "product-code";
       current.baseProductCheckoutSessionId = "";
       current.baseProductCodeHash = codeHash;
+      current.installationAuthorizationRequired = true;
+      current.installationAuthorizedDeviceId = "";
+      current.activeInstallationTokenHash = "";
       current.trialStartedAt = purchasedAt;
       current.trialEndsAt = new Date(Date.parse(purchasedAt) + trialDays * 86_400_000).toISOString();
       return current;
@@ -764,10 +859,22 @@ export const meditestCreateCheckout = onRequest(
     const downloadPlatform = requestedPlatform ?? "windows-x64";
     const returnBaseUrl = billingReturnBaseUrl.value().replace(/\/+$/, "");
     const websiteBaseUrl = billingWebsiteBaseUrl.value().replace(/\/+$/, "");
-    const state = await ensureLicenseState(user.uid);
-    const stripe = stripeClient();
-    const customerId = await ensureStripeCustomer(stripe, user.uid, stringValue(user.email));
-    let checkoutData: any;
+    if (websiteBaseUrl === BRAND.websiteUrl && stripeApiMode() !== "live") {
+      logger.error("Production checkout blocked because Stripe is not configured for live mode", {
+        stripeMode: stripeApiMode()
+      });
+      res.status(503).json({
+        error: {
+          message: "Stripe ist serverseitig noch im Testmodus konfiguriert. Der Live-Schlüssel muss in Firebase hinterlegt werden."
+        }
+      });
+      return;
+    }
+    try {
+      const state = await ensureLicenseState(user.uid);
+      const stripe = stripeClient();
+      const customerId = await ensureStripeCustomer(stripe, user.uid, stringValue(user.email));
+      let checkoutData: any;
 
     if (kind === "product") {
       if (state.baseProductPurchased || state.premiumActive || state.subscriptionActive) {
@@ -907,12 +1014,6 @@ export const meditestCreateCheckout = onRequest(
         return;
       }
       const isMedAt = catalog.category.toLowerCase() === "medat";
-      const unitPriceId = stripeCatalogUnitPriceId.value().trim();
-      const endingPriceId = stripeCatalogEndingPriceId.value().trim();
-      if (!isMedAt && (!isStripePriceId(unitPriceId) || !isStripePriceId(endingPriceId))) {
-        res.status(503).json({ error: { message: "Die Stripe-Preise für Katalogtests sind noch nicht konfiguriert." } });
-        return;
-      }
       await expireOpenCheckoutSessions(
         stripe,
         customerId,
@@ -937,22 +1038,19 @@ export const meditestCreateCheckout = onRequest(
       checkoutData = {
         mode: "payment",
         customer: customerId,
-        line_items: isMedAt
-          ? [{
-            price_data: {
-              currency: catalog.currency.toLowerCase(),
-              unit_amount: expectedPriceCents,
-              product_data: {
-                name: catalog.title,
-                description: `${BRAND.productName} MedAT-Katalogtest`
-              }
-            },
-            quantity: 1
-          }]
-          : [
-            { price: unitPriceId, quantity: catalog.questionCount },
-            { price: endingPriceId, quantity: 1 }
-          ],
+        line_items: [{
+          price_data: {
+            currency: catalog.currency.toLowerCase(),
+            unit_amount: expectedPriceCents,
+            product_data: {
+              name: catalog.title,
+              description: isMedAt
+                ? `${BRAND.productName} MedAT-Katalogtest`
+                : `${BRAND.productName} Katalogtest mit ${catalog.questionCount} Fragen`
+            }
+          },
+          quantity: 1
+        }],
         client_reference_id: user.uid,
         success_url: `${returnBaseUrl}/pages/catalog.html?checkout=success&catalogId=${encodeURIComponent(catalogId)}`,
         cancel_url: `${returnBaseUrl}/pages/catalog.html?checkout=cancelled&catalogId=${encodeURIComponent(catalogId)}`,
@@ -964,16 +1062,29 @@ export const meditestCreateCheckout = onRequest(
       return;
     }
 
-    const session = await stripe.checkout.sessions.create(checkoutData);
-    if (!session.url) {
-      res.status(502).json({ error: { message: "Stripe hat keinen Checkout-Link geliefert." } });
-      return;
+      const session = await stripe.checkout.sessions.create(checkoutData);
+      if (!session.url) {
+        res.status(502).json({ error: { message: "Stripe hat keinen Checkout-Link geliefert." } });
+        return;
+      }
+      res.status(200).json({
+        available: true,
+        url: session.url,
+        message: "Weiterleitung zum sicheren Stripe-Checkout."
+      });
+    } catch (error: any) {
+      logger.error("Stripe checkout creation failed", {
+        uid: user.uid,
+        kind,
+        stripeMode: stripeApiMode(),
+        code: stringValue(error?.code),
+        message: stringValue(error?.message)
+      });
+      const message = error?.code === "resource_missing"
+        ? "Stripe-Live-Konfiguration und hinterlegte Preis- oder Kunden-IDs passen nicht zusammen."
+        : "Der Stripe-Checkout konnte momentan nicht erstellt werden.";
+      res.status(502).json({ error: { message } });
     }
-    res.status(200).json({
-      available: true,
-      url: session.url,
-      message: "Weiterleitung zum sicheren Stripe-Checkout."
-    });
   }
 );
 
@@ -991,6 +1102,15 @@ export const meditestStripePortal = onRequest(
     }
     const user = await verifiedUser(req.header("authorization") ?? "", res);
     if (!user) return;
+    if (billingWebsiteBaseUrl.value().replace(/\/+$/, "") === BRAND.websiteUrl &&
+        stripeApiMode() !== "live") {
+      res.status(503).json({
+        error: {
+          message: "Stripe ist serverseitig noch im Testmodus konfiguriert. Der Live-Schlüssel muss in Firebase hinterlegt werden."
+        }
+      });
+      return;
+    }
 
     const stripe = stripeClient();
     const customerId = await ensureStripeCustomer(stripe, user.uid, stringValue(user.email));
@@ -1039,6 +1159,15 @@ export const meditestStripeWebhook = onRequest(
         message: error instanceof Error ? error.message : String(error)
       });
       res.status(400).send("Invalid Stripe signature");
+      return;
+    }
+    if (event.livemode !== (stripeApiMode() === "live")) {
+      logger.warn("Stripe webhook mode does not match configured API key", {
+        eventId: event.id,
+        eventLivemode: event.livemode,
+        stripeMode: stripeApiMode()
+      });
+      res.status(400).send("Stripe mode mismatch");
       return;
     }
 
@@ -1161,9 +1290,19 @@ export const meditestDeleteAccount = onRequest(
       const customerRef = db.collection(stripeCustomersCollection.value()).doc(user.uid);
       const aiUsageRef = db.collection("aiUsage").doc(user.uid);
       const eventsSnapshot = await db.collection("aiGenerationEvents").where("uid", "==", user.uid).get();
+      const installationAuthorizationsSnapshot = await db.collection("installationAuthorizations")
+        .where("uid", "==", user.uid)
+        .get();
       const customerData = (await customerRef.get()).data() ?? {};
-      if (typeof customerData.stripeId === "string" && customerData.stripeId) {
-        await stripeClient().customers.del(customerData.stripeId);
+      const stripeCustomerId = stripeApiMode() === "live"
+        ? stringValue(customerData.stripeLiveId) || stringValue(customerData.stripeId)
+        : stringValue(customerData.stripeTestId) || stringValue(customerData.stripeId);
+      if (stripeCustomerId) {
+        try {
+          await stripeClient().customers.del(stripeCustomerId);
+        } catch (error: any) {
+          if (error?.code !== "resource_missing") throw error;
+        }
       }
 
       await Promise.all([
@@ -1173,7 +1312,8 @@ export const meditestDeleteAccount = onRequest(
         termsRef.delete(),
         db.recursiveDelete(customerRef),
         db.recursiveDelete(aiUsageRef),
-        deleteDocuments(eventsSnapshot.docs.map((doc) => doc.ref))
+        deleteDocuments(eventsSnapshot.docs.map((doc) => doc.ref)),
+        deleteDocuments(installationAuthorizationsSnapshot.docs.map((doc) => doc.ref))
       ]);
       await getAuth().deleteUser(user.uid);
     } catch (error) {
@@ -1201,8 +1341,8 @@ async function ensureGlobalAppConfig(): Promise<GlobalAppConfig> {
   const storedAppVersion = stringValue(source.currentAppVersion);
   const storedTermsVersion = stringValue(source.currentTermsVersion);
   const config: GlobalAppConfig = {
-    currentAppVersion: !storedAppVersion || storedAppVersion === "5.0.2" || storedAppVersion === "5.0.3"
-      ? "5.0.4"
+    currentAppVersion: !storedAppVersion || ["5.0.2", "5.0.3", "5.0.4"].includes(storedAppVersion)
+      ? "5.0.5"
       : storedAppVersion,
     currentTermsVersion: !storedTermsVersion || storedTermsVersion === "5.0" ? "5.1" : storedTermsVersion,
     currentPrivacyVersion: !stringValue(source.currentPrivacyVersion) || stringValue(source.currentPrivacyVersion) === "5.0"
@@ -1214,7 +1354,7 @@ async function ensureGlobalAppConfig(): Promise<GlobalAppConfig> {
     privacyPolicyUrl: safeHttpUrl(source.privacyPolicyUrl),
     impressumUrl: safeHttpUrl(source.impressumUrl),
     licenseAgreementUrl: safeHttpUrl(source.licenseAgreementUrl),
-    defaultMaxDevices: boundedInt(source.defaultMaxDevices, 2, 1, 20),
+    defaultMaxDevices: 1,
     trialDurationDays: boundedInt(source.trialDurationDays, 7, 1, 60)
   };
   if (!snapshot.exists) {
@@ -1225,11 +1365,13 @@ async function ensureGlobalAppConfig(): Promise<GlobalAppConfig> {
     });
   } else if (
     storedAppVersion !== config.currentAppVersion ||
-    storedTermsVersion !== config.currentTermsVersion
+    storedTermsVersion !== config.currentTermsVersion ||
+    source.defaultMaxDevices !== config.defaultMaxDevices
   ) {
     await ref.set({
       currentAppVersion: config.currentAppVersion,
       currentTermsVersion: config.currentTermsVersion,
+      defaultMaxDevices: config.defaultMaxDevices,
       updatedAt: Timestamp.now()
     }, { merge: true });
   }
@@ -1302,7 +1444,9 @@ async function ensureCommercialLicense(
     subscription ? billing.subscriptionRenewsAt :
       trialActive ? billing.trialEndsAt : null;
   const licenseStartDate = billing.baseProductPurchasedAt ?? billing.trialStartedAt;
-  const maxDevices = boundedInt(existing.maxDevices, config.defaultMaxDevices, 1, 20);
+  const maxDevices = billing.installationAuthorizationRequired
+    ? 1
+    : boundedInt(existing.maxDevices, config.defaultMaxDevices, 1, 20);
   const currentDeviceCount = boundedInt(existing.currentDeviceCount, 0, 0, maxDevices);
   const data = {
     userId: user.uid,
@@ -1320,6 +1464,112 @@ async function ensureCommercialLicense(
   };
   await ref.set(data, { merge: true });
   return commercialLicenseFromData(user.uid, stringValue(user.email), data, config);
+}
+
+async function activateLicensedDevice(
+  userId: string,
+  billing: LicenseState,
+  installationToken: string,
+  platform: DownloadPlatform | null,
+  deviceId: string,
+  deviceName: string,
+  appVersion: string
+): Promise<void> {
+  if (!billing.installationAuthorizationRequired) {
+    await activateDevice(userId, deviceId, deviceName, appVersion);
+    return;
+  }
+  if (billing.installationAuthorizedDeviceId) {
+    if (billing.installationAuthorizedDeviceId !== deviceId)
+      throw new Error("installation_device_mismatch");
+    await activateDevice(userId, deviceId, deviceName, appVersion);
+    return;
+  }
+  if (!installationToken || !platform)
+    throw new Error("installation_authorization_missing");
+
+  await consumeInstallationAuthorization(
+    userId,
+    installationToken,
+    platform,
+    deviceId,
+    deviceName,
+    appVersion);
+}
+
+async function consumeInstallationAuthorization(
+  userId: string,
+  token: string,
+  platform: DownloadPlatform,
+  deviceId: string,
+  deviceName: string,
+  appVersion: string
+): Promise<void> {
+  const tokenHash = createHash("sha256").update(token, "utf8").digest("hex");
+  const authorizationRef = db.doc(`installationAuthorizations/${tokenHash}`);
+  const billingRef = db.doc(`users/${userId}/billing/license`);
+  const licenseRef = db.doc(`licenses/${userId}`);
+  const deviceRef = db.doc(`deviceActivations/${userId}/devices/${deviceId}`);
+  const activatedDevices = await db.collection(`deviceActivations/${userId}/devices`).get();
+
+  await db.runTransaction(async (transaction) => {
+    const [authorizationSnapshot, billingSnapshot, licenseSnapshot, deviceSnapshot] = await Promise.all([
+      transaction.get(authorizationRef),
+      transaction.get(billingRef),
+      transaction.get(licenseRef),
+      transaction.get(deviceRef)
+    ]);
+    const authorization = authorizationSnapshot.data() ?? {};
+    const billingData = billingSnapshot.data() ?? {};
+    const billingState = parseJsonObject(billingData.dataJson);
+    const expiresAt = dateValue(authorization.expiresAt);
+    const valid = authorizationSnapshot.exists &&
+      stringValue(authorization.uid) === userId &&
+      stringValue(authorization.platform) === platform &&
+      !authorization.consumedAt &&
+      !!expiresAt &&
+      Date.parse(expiresAt) > Date.now() &&
+      stringValue(billingState.activeInstallationTokenHash) === tokenHash &&
+      !stringValue(billingState.installationAuthorizedDeviceId);
+    if (!valid)
+      throw new Error("installation_authorization_invalid");
+
+    const license = licenseSnapshot.data() ?? {};
+    const status = stringValue(license.licenseStatus).toLowerCase();
+    if (status !== "active" && status !== "trial" && status !== "restricted")
+      throw new Error("license_not_active");
+    if (!deviceSnapshot.exists && boundedInt(license.currentDeviceCount, 0, 0, 1) >= 1)
+      throw new Error("device_limit_reached");
+
+    const now = Timestamp.now();
+    transaction.set(deviceRef, {
+      deviceId,
+      deviceName: deviceName || "Unbenanntes Gerät",
+      firstActivatedAt: deviceSnapshot.data()?.firstActivatedAt ?? now,
+      lastUsedAt: now,
+      appVersion,
+      installationAuthorizationHash: tokenHash
+    }, { merge: true });
+    transaction.set(licenseRef, {
+      maxDevices: 1,
+      currentDeviceCount: 1,
+      updatedAt: now
+    }, { merge: true });
+    billingState.installationAuthorizationRequired = true;
+    billingState.installationAuthorizedDeviceId = deviceId;
+    billingState.activeInstallationTokenHash = "";
+    billingState.updatedAt = new Date().toISOString();
+    transaction.set(billingRef, {
+      dataJson: JSON.stringify(billingState)
+    }, { merge: true });
+    transaction.set(authorizationRef, {
+      consumedAt: now,
+      consumedDeviceId: deviceId
+    }, { merge: true });
+    activatedDevices.docs
+      .filter((document) => document.id !== deviceId)
+      .forEach((document) => transaction.delete(document.ref));
+  });
 }
 
 async function activateDevice(
@@ -1562,6 +1812,13 @@ function stripeClient(): InstanceType<typeof Stripe> {
   return new Stripe(stripeApiKey.value());
 }
 
+function stripeApiMode(): "live" | "test" | "unknown" {
+  const key = stripeApiKey.value().trim();
+  if (/^(sk|rk)_live_/.test(key)) return "live";
+  if (/^(sk|rk)_test_/.test(key)) return "test";
+  return "unknown";
+}
+
 async function ensureStripeCustomer(
   stripe: InstanceType<typeof Stripe>,
   uid: string,
@@ -1569,7 +1826,18 @@ async function ensureStripeCustomer(
 ): Promise<string> {
   const customerRef = db.collection(stripeCustomersCollection.value()).doc(uid);
   const existing = (await customerRef.get()).data() ?? {};
-  if (typeof existing.stripeId === "string" && existing.stripeId) return existing.stripeId;
+  const mode = stripeApiMode();
+  const modeField = mode === "live" ? "stripeLiveId" : "stripeTestId";
+  const modeCustomerId = stringValue(existing[modeField]);
+  if (modeCustomerId) return modeCustomerId;
+  if (mode === "test" && stringValue(existing.stripeId)) {
+    const legacyCustomerId = stringValue(existing.stripeId);
+    await customerRef.set({
+      stripeTestId: legacyCustomerId,
+      updatedAt: Timestamp.now()
+    }, { merge: true });
+    return legacyCustomerId;
+  }
 
   const customer = await stripe.customers.create(
     {
@@ -1580,6 +1848,8 @@ async function ensureStripeCustomer(
   );
   await customerRef.set({
     stripeId: customer.id,
+    [modeField]: customer.id,
+    stripeMode: mode,
     email,
     updatedAt: Timestamp.now()
   }, { merge: true });
@@ -1619,6 +1889,9 @@ async function processStripeEvent(event: any): Promise<void> {
           state.baseProductPurchasedAt = purchasedAt;
           state.baseProductProvider = "stripe";
           state.baseProductCheckoutSessionId = stringValue(session.id);
+          state.installationAuthorizationRequired = true;
+          state.installationAuthorizedDeviceId = "";
+          state.activeInstallationTokenHash = "";
           state.trialStartedAt = purchasedAt;
           state.trialEndsAt = new Date(Date.parse(purchasedAt) + trialDays * 86_400_000).toISOString();
           return state;
@@ -1657,6 +1930,9 @@ async function processStripeEvent(event: any): Promise<void> {
           state.baseProductPurchased = true;
           state.baseProductPurchasedAt = purchasedAt;
           state.baseProductProvider = "legacy-subscription";
+          state.installationAuthorizationRequired = true;
+          state.installationAuthorizedDeviceId = "";
+          state.activeInstallationTokenHash = "";
           state.trialStartedAt = purchasedAt;
           state.trialEndsAt = new Date(Date.parse(purchasedAt) + trialDays * 86_400_000).toISOString();
         }
@@ -1674,11 +1950,14 @@ async function processStripeEvent(event: any): Promise<void> {
 
 async function firebaseUidForStripeCustomer(customerId: string): Promise<string> {
   if (!customerId) return "";
-  const snapshot = await db.collection(stripeCustomersCollection.value())
-    .where("stripeId", "==", customerId)
-    .limit(1)
-    .get();
-  return snapshot.empty ? "" : snapshot.docs[0].id;
+  for (const field of ["stripeId", "stripeLiveId", "stripeTestId"]) {
+    const snapshot = await db.collection(stripeCustomersCollection.value())
+      .where(field, "==", customerId)
+      .limit(1)
+      .get();
+    if (!snapshot.empty) return snapshot.docs[0].id;
+  }
+  return "";
 }
 
 function normalizeLicenseState(source: Record<string, any>, createdAt: string): LicenseState {
@@ -1704,6 +1983,9 @@ function normalizeLicenseState(source: Record<string, any>, createdAt: string): 
     baseProductProvider: stringValue(source.baseProductProvider) || (legacyPaidAccess ? "legacy-access" : ""),
     baseProductCheckoutSessionId: stringValue(source.baseProductCheckoutSessionId),
     baseProductCodeHash: stringValue(source.baseProductCodeHash),
+    installationAuthorizationRequired: source.installationAuthorizationRequired === true,
+    installationAuthorizedDeviceId: stringValue(source.installationAuthorizedDeviceId).toLowerCase(),
+    activeInstallationTokenHash: stringValue(source.activeInstallationTokenHash).toLowerCase(),
     trialStartedAt,
     trialEndsAt,
     subscriptionActive: source.subscriptionActive === true,
@@ -1784,10 +2066,6 @@ function validIsoString(value: unknown): string | null {
 
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function isStripePriceId(value: string): boolean {
-  return /^price_[A-Za-z0-9]+$/.test(value);
 }
 
 async function reserveUsage(

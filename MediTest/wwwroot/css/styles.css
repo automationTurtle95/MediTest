@@ -406,6 +406,44 @@ button:disabled,.button:disabled{cursor:not-allowed;opacity:.55;transform:none}
 .modal-panel h2{margin-top:2px}
 .modal-panel p{margin:10px 0}
 .modal-panel .actions{margin-top:22px}
+.action-progress-backdrop{z-index:150}
+.action-progress-modal{
+  width:min(520px,100%);
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr);
+  align-items:center;
+  gap:20px;
+}
+.action-progress-modal .eyebrow{margin:0 0 4px}
+.action-progress-modal h2,.action-progress-modal p{margin:0}
+.action-progress-spinner{
+  width:48px;
+  height:48px;
+  border:4px solid color-mix(in srgb,var(--primary) 18%,var(--border));
+  border-top-color:var(--primary);
+  border-radius:50%;
+  animation:action-progress-spin .8s linear infinite;
+}
+.action-progress-check,.action-progress-failed{
+  display:grid;
+  border:0;
+  background:var(--ok);
+  color:#fff;
+  place-items:center;
+  animation:none;
+}
+.action-progress-check::after{content:"✓";font-size:28px;font-weight:900}
+.action-progress-failed{background:var(--danger)}
+.action-progress-failed::after{content:"!";font-size:28px;font-weight:900}
+.move-document-modal{width:min(620px,100%)}
+.move-document-choice{
+  margin:18px 0;
+  padding:16px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:var(--field-alt);
+}
+@keyframes action-progress-spin{to{transform:rotate(360deg)}}
 .profile-onboarding-modal{width:min(100%,680px)}
 .profile-onboarding-modal form{margin-top:18px}
 .catalog-price{

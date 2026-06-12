@@ -79,9 +79,8 @@ AI_USAGE_RETENTION_DAYS=90
 AI_MAX_PROMPT_CHARS=50000
 FREE_CATALOG_CODE_HASHES=<SHA-256-HASH>
 PREMIUM_CODE_HASHES=<SHA-256-HASH>
-STRIPE_CATALOG_UNIT_PRICE_ID=price_...
-STRIPE_CATALOG_ENDING_PRICE_ID=price_...
 STRIPE_PORTAL_CONFIGURATION_ID=bpc_...
+INSTALLATION_AUTHORIZATION_TTL_HOURS=24
 ```
 
 Anschließend die Functions erneut bereitstellen:
@@ -171,7 +170,7 @@ Meduvalo integriert folgendes Lizenzmodell:
 
 Die geschützte Function `meditestLicenseAccess` legt Nutzer-, Lizenz-, Geräte- und Zustimmungsdaten ausschließlich mit dem verifizierten Firebase-Token an. Der Client kann diese sicherheitsrelevanten Dokumente nicht direkt schreiben.
 
-Die geschützte Function `meditestCreateCheckout` erstellt getrennte Stripe-Checkouts für den Basiskauf (`BILLING_PRODUCT_PRICE_CENTS`), das Monatsabo (`BILLING_MONTHLY_PRICE_CENTS`) und Katalogtests. Bestehende Katalogpreise verwenden `STRIPE_CATALOG_UNIT_PRICE_ID` und `STRIPE_CATALOG_ENDING_PRICE_ID`; MedAT verwendet einen serverseitigen Festpreis von 49,99 EUR. `meditestStripeWebhook` prüft jedes Ereignis mit `MEDITEST_STRIPE_WEBHOOK_SECRET` und startet die Testphase erst nach bestätigtem Basiskauf. `meditestDownloadAccess` liefert nach diesem Kauf oder einer administrativen Freischaltung den ausgewählten Windows-, Apple-Silicon- oder Intel-Mac-Download. Die URLs werden über `WINDOWS_DOWNLOAD_URL`, `MACOS_ARM64_DOWNLOAD_URL`, `MACOS_X64_DOWNLOAD_URL` und `CURRENT_APP_VERSION` konfiguriert. `meditestStripePortal` verwendet `STRIPE_PORTAL_CONFIGURATION_ID`.
+Die geschützte Function `meditestCreateCheckout` erstellt getrennte Stripe-Checkouts für den Basiskauf (`BILLING_PRODUCT_PRICE_CENTS`), das Monatsabo (`BILLING_MONTHLY_PRICE_CENTS`) und Katalogtests. Katalogpreise werden serverseitig als Inline-Preise erzeugt; MedAT verwendet einen Festpreis von 49,99 EUR. `meditestStripeWebhook` prüft jedes Ereignis mit `MEDITEST_STRIPE_WEBHOOK_SECRET` und startet die Testphase erst nach bestätigtem Basiskauf. `meditestDownloadAccess` liefert nach diesem Kauf oder einer administrativen Freischaltung den ausgewählten Windows-, Apple-Silicon- oder Intel-Mac-Download sowie eine einmalige Installationsberechtigung. Die URLs werden über `WINDOWS_DOWNLOAD_URL`, `MACOS_ARM64_DOWNLOAD_URL`, `MACOS_X64_DOWNLOAD_URL` und `CURRENT_APP_VERSION` konfiguriert. `meditestStripePortal` verwendet `STRIPE_PORTAL_CONFIGURATION_ID`.
 
 Die Payments-Extension kann für diese Datenbank nicht verwendet werden, weil ihre Gen-1-Firestore-Trigger mit dem Firestore-Multiregionsstandort `eur3` nicht bereitgestellt werden können. Die direkten Functions liefern denselben Checkout-, Webhook- und Portalablauf ohne diese Standortbeschränkung.
 

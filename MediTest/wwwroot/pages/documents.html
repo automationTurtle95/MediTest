@@ -38,6 +38,11 @@
         <input type="text" id="importName" placeholder="z. B. Innere Medizin Altfragen">
         <label for="importFolder">Ordner (optional)</label>
         <input type="text" id="importFolder" placeholder="z. B. Altfragen/Innere Medizin">
+        <label for="importAiGenerated">Wurden diese Fragen mit KI erstellt?</label>
+        <select id="importAiGenerated">
+          <option value="false" selected>Nein, ohne KI-Badge importieren</option>
+          <option value="true">Ja, KI-Badge bei allen Fragen anzeigen</option>
+        </select>
         <div class="actions"><button type="submit" id="importBtn">Importieren</button></div>
       </form>
     </article>
@@ -64,6 +69,18 @@ function documentTypeLabel(doc){
 function documentFolderSegments(doc){
   const source=String(doc?.folderPath||'').trim()||'Unsortiert';
   return source.split(/[\\/]+/).map(value=>value.trim()).filter(Boolean);
+}
+function existingDocumentFolders(){
+  const folders=new Set();
+  pageDocuments.forEach(doc=>{
+    const segments=documentFolderSegments(doc);
+    let path='';
+    segments.forEach(segment=>{
+      path=path?`${path}/${segment}`:segment;
+      if(path!=='Unsortiert')folders.add(path);
+    });
+  });
+  return [...folders].sort((a,b)=>a.localeCompare(b,'de'));
 }
 function createDocumentFolderNode(name,path){
   return {name,path,folders:new Map(),documents:[],documentCount:0};
@@ -369,14 +386,11 @@ async function startAiGeneration(){
   countSelect.disabled=true;
   progress.classList.remove('hidden');
   warning.classList.add('hidden');
-  const msg=document.getElementById('msg');
-  status(msg,`Generiere ${count} Fragen... Das kann mehrere Minuten dauern.`);
   try{
     const result=await api(`/api/documents/${context.id}/generate-questions`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({count})});
     context.running=false;
     progress.classList.add('hidden');
     await loadDocs();
-    showGeneratedLink(msg,context.id,result);
     const ids=Array.isArray(result.questionIds)?result.questionIds:[];
     resultBox.className='status success';
     resultBox.innerHTML=`<strong>Generierung abgeschlossen</strong><p>${Number(result.added)||0} neue Fragen wurden gespeichert. Der Fragenpool enthält jetzt ${Number(result.total)||0} Fragen.</p>${ids.length?`<div class="actions"><a class="button primary" href="${newQuestionsHref(context.id,ids)}">Neue Fragen ansehen</a></div>`:''}`;
@@ -398,50 +412,130 @@ async function startAiGeneration(){
     document.getElementById('aiGenerationTitle').textContent='Generierung fehlgeschlagen';
     startButton.disabled=false;
     startButton.textContent='Erneut versuchen';
-    status(msg,context.generationError,'status error');
     await loadAiGenerationQuota();
     warning.classList.add('hidden');
   }
 }
-async function startTest(id){ const msg=document.getElementById('msg'); status(msg,'Starte Test...'); const testName=document.getElementById(`testname-${id}`)?.value?.trim()||null; const questionCount=Number(document.getElementById(`testcount-${id}`)?.value)||pageSettings.defaultTestQuestionCount||25; try{const t=await api('/api/tests/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({documentId:id,questionCount,testName})}); sessionStorage.setItem('currentTest',JSON.stringify(t)); location.href=`/pages/test.html?id=${t.testSessionId}`;}catch(e){status(msg,e.message,'status error');}}
-async function exportTxt(id){ try{await downloadApiFile(`/api/documents/${id}/export-txt`,`${APP_BRAND.productName}-Fragenexport.txt`);}catch(e){status(document.getElementById('msg'),e.message,'status error');} }
-async function moveDocument(id){
+async function startTest(id){
+  const popup=openActionPopup('Der Test wird aus dem gewählten Fragenpool zusammengestellt.','Test wird gestartet');
+  const testName=document.getElementById(`testname-${id}`)?.value?.trim()||null;
+  const questionCount=Number(document.getElementById(`testcount-${id}`)?.value)||pageSettings.defaultTestQuestionCount||25;
+  try{
+    const t=await api('/api/tests/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({documentId:id,questionCount,testName})});
+    sessionStorage.setItem('currentTest',JSON.stringify(t));
+    location.href=`/pages/test.html?id=${t.testSessionId}`;
+  }catch(e){popup.fail(e.message);}
+}
+async function exportTxt(id){
+  const popup=openActionPopup('Die TXT-Datei wird vorbereitet.','Fragenpool wird exportiert');
+  try{
+    await downloadApiFile(`/api/documents/${id}/export-txt`,`${APP_BRAND.productName}-Fragenexport.txt`);
+    popup.success('Der Export wurde heruntergeladen.');
+  }catch(e){popup.fail(e.message);}
+}
+function closeMoveDocumentModal(){document.getElementById('moveDocumentModal')?.remove();}
+function updateMoveDocumentChoice(){
+  const select=document.getElementById('moveExistingFolder');
+  const input=document.getElementById('moveNewFolder');
+  if(!select||!input)return;
+  select.disabled=Boolean(input.value.trim());
+}
+function moveDocument(id){
   const doc=pageDocuments.find(item=>Number(item.id)===Number(id));
   if(!doc)return;
-  const folderPath=prompt('Neuer Ordnerpfad, z. B. Studium/Innere Medizin:',doc.folderPath||'');
-  if(folderPath===null)return;
-  const msg=document.getElementById('msg');
-  status(msg,'Verschiebe Dokument...');
+  closeMoveDocumentModal();
+  const folders=existingDocumentFolders();
+  const current=String(doc.folderPath||'').trim();
+  const options=[
+    `<option value="" ${current?'':'selected'}>Unsortiert</option>`,
+    ...folders.map(folder=>`<option value="${esc(folder)}" ${folder===current?'selected':''}>${esc(folder)}</option>`)
+  ].join('');
+  const modal=document.createElement('div');
+  modal.id='moveDocumentModal';
+  modal.className='modal-backdrop';
+  modal.addEventListener('click',event=>{if(event.target===modal)closeMoveDocumentModal();});
+  modal.innerHTML=`
+    <section class="modal-panel move-document-modal" role="dialog" aria-modal="true" aria-labelledby="moveDocumentTitle">
+      <p class="eyebrow">Fragenkatalog verschieben</p>
+      <h2 id="moveDocumentTitle">${esc(doc.fileName)}</h2>
+      <p class="muted">Wähle einen vorhandenen Ordner oder lege mit einem neuen Pfad direkt einen Ordner an.</p>
+      <div class="move-document-choice">
+        <label for="moveExistingFolder">Bestehender Ordner</label>
+        <select id="moveExistingFolder">${options}</select>
+        <label for="moveNewFolder">Neuen Ordner anlegen</label>
+        <input id="moveNewFolder" type="text" placeholder="z. B. Studium/Innere Medizin" oninput="updateMoveDocumentChoice()">
+      </div>
+      <div class="actions">
+        <button class="primary" type="button" onclick="confirmMoveDocument(${Number(id)})">Verschieben</button>
+        <button type="button" onclick="closeMoveDocumentModal()">Abbrechen</button>
+      </div>
+    </section>`;
+  document.body.appendChild(modal);
+  document.getElementById('moveExistingFolder')?.focus();
+}
+async function confirmMoveDocument(id){
+  const newFolder=document.getElementById('moveNewFolder')?.value?.trim()||'';
+  const existingFolder=document.getElementById('moveExistingFolder')?.value||'';
+  const folderPath=newFolder||existingFolder;
+  closeMoveDocumentModal();
+  const popup=openActionPopup('Der Fragenkatalog wird in den gewählten Ordner verschoben.','Fragenkatalog wird verschoben');
   try{
     await api(`/api/documents/${id}/folder`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({folderPath})});
-    status(msg,'Dokument wurde verschoben.','status success');
     await loadDocs();
-  }catch(e){status(msg,e.message,'status error');}
+    popup.success('Der Fragenkatalog wurde verschoben.');
+  }catch(e){popup.fail(e.message);}
 }
-async function deleteDocument(id){ const doc=pageDocuments.find(item=>Number(item.id)===Number(id)); const name=doc?.fileName||'Dokument'; const msg=document.getElementById('msg'); if(!confirm(`Dokument wirklich löschen?\n\n${name}\n\nAlle Fragen und Tests dazu werden ebenfalls gelöscht.`)) return; status(msg,'Lösche Dokument...'); try{await api(`/api/documents/${id}`,{method:'DELETE'}); status(msg,'Dokument gelöscht.','status success'); await loadDocs();}catch(e){status(msg,e.message,'status error');}}
+async function deleteDocument(id){
+  const doc=pageDocuments.find(item=>Number(item.id)===Number(id));
+  const name=doc?.fileName||'Dokument';
+  if(!confirm(`Dokument wirklich löschen?\n\n${name}\n\nAlle Fragen und Tests dazu werden ebenfalls gelöscht.`))return;
+  const popup=openActionPopup('Dokument, Fragen und zugehörige Tests werden gelöscht.','Dokument wird gelöscht');
+  try{
+    await api(`/api/documents/${id}`,{method:'DELETE'});
+    await loadDocs();
+    popup.success('Das Dokument wurde gelöscht.');
+  }catch(e){popup.fail(e.message);}
+}
 
 document.getElementById('uploadForm').addEventListener('submit', async e=>{
-  e.preventDefault(); const msg=document.getElementById('msg'); status(msg,'Hochladen läuft...');
+  e.preventDefault();
+  const popup=openActionPopup('Die Datei wird hochgeladen und der Text wird extrahiert.','Dokument wird hochgeladen');
   try{
     const fd=new FormData(e.target);
     const r=await api('/api/documents/upload',{method:'POST',body:fd});
-    status(msg,`Gespeichert: ${r.fileName} (${r.textLength} Zeichen extrahiert)`, 'status success');
     e.target.reset();
     await loadDocs();
-    const actions=document.createElement('div');
-    actions.className='actions';
-    actions.innerHTML=`<button class="primary" type="button" onclick="openDocumentPreview(${Number(r.id)})">Dokument ansehen</button>`;
-    msg.appendChild(actions);
+    popup.success(`${r.fileName} wurde gespeichert.`);
   }
-  catch(err){status(msg,err.message,'status error');}
+  catch(err){popup.fail(err.message);}
 });
 document.getElementById('importForm').addEventListener('submit', async e=>{
-  e.preventDefault(); const msg=document.getElementById('msg'); status(msg,'Import läuft...');
-  const file=document.getElementById('importFile').files[0]; if(!file){status(msg,'Bitte eine TXT-Datei auswählen.','status error'); return;}
+  e.preventDefault();
+  const file=document.getElementById('importFile').files[0];
+  if(!file){
+    const popup=openActionPopup('Bitte wähle zuerst eine TXT-Datei aus.','Keine Datei ausgewählt');
+    popup.fail('Bitte wähle zuerst eine TXT-Datei aus.');
+    return;
+  }
+  const popup=openActionPopup('Die Fragen werden geprüft und als Fragenpool gespeichert.','TXT-Fragen werden importiert');
   const importButton=document.getElementById('importBtn');
-  const fd=new FormData(); fd.append('file',file); const name=document.getElementById('importName').value.trim(); if(name) fd.append('documentName',name); const folder=document.getElementById('importFolder').value.trim(); if(folder) fd.append('folderPath',folder);
-  try{importButton.disabled=true; importButton.setAttribute('aria-busy','true'); importButton.textContent='Import wird verarbeitet...'; const r=await api('/api/documents/import-txt',{method:'POST',body:fd}); status(msg,`Import fertig: ${r.importedQuestions} Fragen in „${r.documentName}“.`, 'status success'); document.getElementById('importForm').reset(); await loadDocs();}
-  catch(err){status(msg,err.message,'status error');}
+  const fd=new FormData();
+  fd.append('file',file);
+  const name=document.getElementById('importName').value.trim();
+  if(name)fd.append('documentName',name);
+  const folder=document.getElementById('importFolder').value.trim();
+  if(folder)fd.append('folderPath',folder);
+  fd.append('isAiGenerated',document.getElementById('importAiGenerated').value);
+  try{
+    importButton.disabled=true;
+    importButton.setAttribute('aria-busy','true');
+    importButton.textContent='Import wird verarbeitet...';
+    const r=await api('/api/documents/import-txt',{method:'POST',body:fd});
+    document.getElementById('importForm').reset();
+    await loadDocs();
+    popup.success(`${r.importedQuestions} Fragen wurden in „${r.documentName}“ importiert.`);
+  }
+  catch(err){popup.fail(err.message);}
   finally{importButton.disabled=false; importButton.setAttribute('aria-busy','false'); importButton.textContent='Importieren';}
 });
 loadDocs().catch(e=>status(document.getElementById('msg'),e.message,'status error'));

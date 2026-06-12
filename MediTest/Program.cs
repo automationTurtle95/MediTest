@@ -59,6 +59,7 @@ builder.Services.AddScoped<ITextExtractionService, TextExtractionService>();
 builder.Services.AddScoped<FirestoreUserDataStore>();
 builder.Services.AddSingleton<ProductInfoService>();
 builder.Services.AddSingleton<DeviceIdentityService>();
+builder.Services.AddSingleton<InstallationAuthorizationService>();
 builder.Services.AddSingleton<LicenseCacheStore>();
 builder.Services.AddScoped<LicenseAccessService>();
 builder.Services.AddDataProtection().SetApplicationName("MediTest");
@@ -223,7 +224,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     var url = app.Urls.FirstOrDefault(u => u.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase))
         ?? app.Urls.FirstOrDefault()
         ?? "http://127.0.0.1:55000";
-    managedBrowserProcess = OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=5004");
+    managedBrowserProcess = OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=5005");
 });
 
 app.Lifetime.ApplicationStopping.Register(() =>
@@ -1543,6 +1544,7 @@ app.MapGet("/api/documents/{id:int}/export-txt", async (int id, FirestoreUserDat
         sb.AppendLine($"Richtig: {correctLetter}");
         sb.AppendLine($"Thema: {q.Topic}");
         sb.AppendLine($"Schwierigkeit: {q.Difficulty}");
+        sb.AppendLine($"KI-generiert: {(q.IsAiGenerated ? "Ja" : "Nein")}");
         sb.AppendLine($"Erklärung: {q.Explanation}");
         sb.AppendLine();
     }
@@ -1563,6 +1565,8 @@ app.MapPost("/api/documents/import-txt", async (HttpRequest request, FirestoreUs
     var documentName = form["documentName"].ToString();
     if (string.IsNullOrWhiteSpace(documentName)) documentName = Path.GetFileNameWithoutExtension(file.FileName);
     var folderPath = DocumentFolderPath(form["folderPath"].ToString());
+    var isAiGenerated = bool.TryParse(form["isAiGenerated"].ToString(), out var parsedAiGenerated) &&
+        parsedAiGenerated;
 
     using var reader = new StreamReader(file.OpenReadStream(), Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
     var content = await reader.ReadToEndAsync(ct);
@@ -1587,13 +1591,19 @@ app.MapPost("/api/documents/import-txt", async (HttpRequest request, FirestoreUs
         Explanation = p.Explanation,
         Topic = p.Topic,
         Difficulty = p.Difficulty,
-        IsAiGenerated = false,
+        IsAiGenerated = isAiGenerated,
         CreatedAt = DateTime.UtcNow,
         Options = p.Options.Select((o, i) => new AnswerOption { Text = o, OptionIndex = i }).ToList()
     }).ToList();
     await store.SaveQuestionsAsync(doc.Id, importedQuestions, ct, finalQuestionCount: importedQuestions.Count);
 
-    return Results.Ok(new { documentId = doc.Id, documentName = doc.FileName, importedQuestions = parsed.Count });
+    return Results.Ok(new
+    {
+        documentId = doc.Id,
+        documentName = doc.FileName,
+        importedQuestions = parsed.Count,
+        isAiGenerated
+    });
 });
 
 app.MapPost("/api/documents/{id:int}/generate-questions", async (int id, GenerateQuestionsRequest req, IConfiguration cfg, FirestoreUserDataStore store, IQuestionGenerationService generator, CancellationToken ct) =>
