@@ -17,5 +17,11 @@ public sealed class ProgramSettings
     public string AiProvider { get; set; } = "firebase";
     public string AiApiBaseUrl { get; set; } = "https://europe-west3-meditest-12354.cloudfunctions.net/meditestAi";
     public bool AllowLocalFallback { get; set; }
+    public DateTime? ProfileCompletedAt { get; set; }
+    public DateTime? TrialFeedbackPromptedAt { get; set; }
+    public DateTime? TrialFeedbackNextPromptAt { get; set; }
+    public DateTime? TrialFeedbackSubmittedAt { get; set; }
+    public int? TrialFeedbackRating { get; set; }
+    public string TrialFeedbackComment { get; set; } = string.Empty;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

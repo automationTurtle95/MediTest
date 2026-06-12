@@ -153,4 +153,4 @@ Der GitHub-Workflow erzeugt aus den erfolgreich gebauten Windows- und macOS-Arte
 
 Fehlen Apple-Secrets oder lehnt Apple eine Notarisierung ab, wird kein produktiver Release veröffentlicht.
 
-Weitere Details stehen in [docs/INSTALLATION.md](docs/INSTALLATION.md), [docs/MACOS_SIGNING.md](docs/MACOS_SIGNING.md), [docs/API.md](docs/API.md), [docs/RELEASE.md](docs/RELEASE.md) und [docs/WEBSITE_DISTRIBUTION.md](docs/WEBSITE_DISTRIBUTION.md).
+Weitere Details stehen in [docs/INSTALLATION.md](docs/INSTALLATION.md), [docs/MACOS_SIGNING.md](docs/MACOS_SIGNING.md), [docs/API.md](docs/API.md), [docs/RELEASE.md](docs/RELEASE.md), [docs/FIREBASE_COST_OPTIMIZATION.md](docs/FIREBASE_COST_OPTIMIZATION.md) und [docs/WEBSITE_DISTRIBUTION.md](docs/WEBSITE_DISTRIBUTION.md).

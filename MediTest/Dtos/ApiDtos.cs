@@ -308,6 +308,11 @@ public sealed record ProgramSettingsDto(
     string AiApiBaseUrl,
     List<AiProviderOptionDto> AiProviders,
     bool AllowLocalFallback,
+    bool ProfileCompleted,
+    DateTime? ProfileCompletedAt,
+    DateTime? TrialFeedbackPromptedAt,
+    DateTime? TrialFeedbackNextPromptAt,
+    DateTime? TrialFeedbackSubmittedAt,
     DateTime UpdatedAt);
 
 public sealed record UpdateProgramSettingsRequest(
@@ -327,6 +332,18 @@ public sealed record UpdateProgramSettingsRequest(
     string? AiModel,
     string? AiApiBaseUrl,
     bool AllowLocalFallback);
+
+public sealed record CompleteProfileRequest(
+    string? DisplayName,
+    string? MatriculationNumber,
+    string? StudyProgram,
+    string? University,
+    string? Semester);
+
+public sealed record TrialFeedbackRequest(
+    string? Action,
+    int? Rating,
+    string? Comment);
 
 public sealed record AuthConfigDto(
     string Mode,

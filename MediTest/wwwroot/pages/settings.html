@@ -18,13 +18,13 @@
   <form id="settingsForm" class="settings-grid">
     <section class="card">
       <h2>Profil</h2>
-      <label for="displayName">Name</label><input type="text" id="displayName" autocomplete="name" placeholder="Vor- und Nachname">
+      <label for="displayName">Name</label><input type="text" id="displayName" autocomplete="name" placeholder="Vor- und Nachname" required>
       <div class="field-row">
         <div><label for="matriculationNumber">Matrikelnummer</label><input type="text" id="matriculationNumber" autocomplete="off"></div>
-        <div><label for="semester">Semester</label><input type="text" id="semester" placeholder="z. B. 6. Semester"></div>
+        <div><label for="semester">Semester</label><input type="text" id="semester" placeholder="z. B. 6. Semester" required></div>
       </div>
-      <label for="studyProgram">Studiengang</label><input type="text" id="studyProgram" placeholder="z. B. Humanmedizin">
-      <label for="university">Hochschule / Universität</label><input type="text" id="university" autocomplete="organization">
+      <label for="studyProgram">Studiengang</label><input type="text" id="studyProgram" placeholder="z. B. Humanmedizin" required>
+      <label for="university">Hochschule / Universität</label><input type="text" id="university" autocomplete="organization" required>
       <label for="email">Bestätigte Konto-E-Mail</label><input id="email" type="email" autocomplete="email" readonly>
     </section>
 

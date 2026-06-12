@@ -24,6 +24,7 @@ function writeAuthSession(session) {
 function clearAuthSession() {
   sessionStorage.removeItem(AUTH_SESSION_KEY);
   sessionStorage.removeItem(SETTINGS_CACHE_KEY);
+  sessionStorage.removeItem('meditest-trial-feedback-checked');
 }
 
 function redirectToLogin() {
@@ -689,6 +690,7 @@ window.enhanceTooltips = enhanceTooltips;
 window.enhanceHelp = enhanceHelp;
 
 const SETTINGS_CACHE_KEY = 'meditest-settings';
+const TRIAL_FEEDBACK_SESSION_KEY = 'meditest-trial-feedback-checked';
 let appSettingsPromise = null;
 
 function applyTheme(theme = 'system') {
@@ -722,6 +724,14 @@ async function getAppSettings(force = false) {
       throw err;
     });
   return appSettingsPromise;
+}
+
+function cacheAppSettings(settings) {
+  sessionStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(settings));
+  applyTheme(settings.theme);
+  window.mediTestSettings = settings;
+  appSettingsPromise = Promise.resolve(settings);
+  return settings;
 }
 
 const initialSettings = cachedSettings();
@@ -915,6 +925,173 @@ async function ensureLegalLicenseCompliance() {
   return state;
 }
 
+function showProfileCompletionModal(settings, user) {
+  return new Promise(resolve => {
+    if (document.getElementById('profileCompletionModal')) return;
+    const modal = document.createElement('div');
+    modal.id = 'profileCompletionModal';
+    modal.className = 'modal-backdrop';
+    modal.innerHTML = `
+      <section class="modal-panel profile-onboarding-modal" role="dialog" aria-modal="true" aria-labelledby="profileCompletionTitle">
+        <p class="eyebrow">Erster Login</p>
+        <h2 id="profileCompletionTitle">Vervollständige bitte dein Profil</h2>
+        <p>Diese Angaben helfen dabei, deinen Lernbereich sinnvoll zuzuordnen. Die Matrikelnummer ist optional.</p>
+        <form id="profileCompletionForm">
+          <label for="profileDisplayName">Vor- und Nachname</label>
+          <input id="profileDisplayName" type="text" autocomplete="name" maxlength="200" required value="${esc(settings.displayName || user.displayName || '')}">
+          <label for="profileStudyProgram">Studiengang</label>
+          <input id="profileStudyProgram" type="text" maxlength="200" required placeholder="z. B. Humanmedizin" value="${esc(settings.studyProgram || '')}">
+          <label for="profileUniversity">Hochschule / Universität</label>
+          <input id="profileUniversity" type="text" autocomplete="organization" maxlength="200" required value="${esc(settings.university || '')}">
+          <div class="field-row">
+            <div>
+              <label for="profileSemester">Semester</label>
+              <input id="profileSemester" type="text" maxlength="80" required placeholder="z. B. 6. Semester" value="${esc(settings.semester || '')}">
+            </div>
+            <div>
+              <label for="profileMatriculationNumber">Matrikelnummer <span class="muted">(optional)</span></label>
+              <input id="profileMatriculationNumber" type="text" maxlength="80" autocomplete="off" value="${esc(settings.matriculationNumber || '')}">
+            </div>
+          </div>
+          <p class="muted">Konto-E-Mail: ${esc(user.email || settings.email || '-')}</p>
+          <div class="actions">
+            <button class="primary" type="submit" id="completeProfileButton">Profil speichern</button>
+            <button type="button" onclick="logoutApp()">Abmelden</button>
+          </div>
+          <div id="profileCompletionStatus" class="hidden"></div>
+        </form>
+      </section>`;
+    document.body.appendChild(modal);
+    const form = document.getElementById('profileCompletionForm');
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const button = document.getElementById('completeProfileButton');
+      const msg = document.getElementById('profileCompletionStatus');
+      button.disabled = true;
+      status(msg, 'Profil wird gespeichert...');
+      try {
+        const saved = await api('/api/profile/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            displayName: document.getElementById('profileDisplayName').value.trim(),
+            studyProgram: document.getElementById('profileStudyProgram').value.trim(),
+            university: document.getElementById('profileUniversity').value.trim(),
+            semester: document.getElementById('profileSemester').value.trim(),
+            matriculationNumber: document.getElementById('profileMatriculationNumber').value.trim()
+          })
+        });
+        cacheAppSettings(saved);
+        modal.remove();
+        resolve(saved);
+      } catch (error) {
+        status(msg, error.message, 'status error');
+        button.disabled = false;
+      }
+    });
+    enhanceTooltips(modal);
+    document.getElementById('profileDisplayName')?.focus();
+  });
+}
+
+async function ensureProfileCompletion(user) {
+  const settings = await getAppSettings();
+  if (settings.profileCompleted) return settings;
+  return showProfileCompletionModal(settings, user);
+}
+
+function showTrialFeedbackModal(settings) {
+  if (document.getElementById('trialFeedbackModal')) return;
+  const modal = document.createElement('div');
+  modal.id = 'trialFeedbackModal';
+  modal.className = 'modal-backdrop';
+  modal.innerHTML = `
+    <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="trialFeedbackTitle">
+      <p class="eyebrow">7-tägige Testphase beendet</p>
+      <h2 id="trialFeedbackTitle">Wie war deine Erfahrung mit ${APP_BRAND.productName}?</h2>
+      <p>Dein kurzes Feedback hilft uns, Lernabläufe und Funktionen gezielt zu verbessern.</p>
+      <form id="trialFeedbackForm">
+        <label for="trialFeedbackRating">Gesamtbewertung</label>
+        <select id="trialFeedbackRating" required>
+          <option value="">Bitte auswählen</option>
+          <option value="5">5 – Sehr gut</option>
+          <option value="4">4 – Gut</option>
+          <option value="3">3 – In Ordnung</option>
+          <option value="2">2 – Verbesserungswürdig</option>
+          <option value="1">1 – Nicht überzeugend</option>
+        </select>
+        <label for="trialFeedbackComment">Was hat dir gefallen oder gefehlt? <span class="muted">(optional)</span></label>
+        <textarea id="trialFeedbackComment" maxlength="2000" rows="5" placeholder="Dein Feedback"></textarea>
+        <div class="actions">
+          <button class="primary" type="submit" id="submitTrialFeedbackButton">Feedback senden</button>
+          <button type="button" id="deferTrialFeedbackButton">In 7 Tagen erinnern</button>
+        </div>
+        <div id="trialFeedbackStatus" class="hidden"></div>
+      </form>
+    </section>`;
+  document.body.appendChild(modal);
+
+  const submit = async action => {
+    const submitButton = document.getElementById('submitTrialFeedbackButton');
+    const deferButton = document.getElementById('deferTrialFeedbackButton');
+    const msg = document.getElementById('trialFeedbackStatus');
+    submitButton.disabled = true;
+    deferButton.disabled = true;
+    status(msg, action === 'submit' ? 'Feedback wird gespeichert...' : 'Erinnerung wird gespeichert...');
+    try {
+      const result = await api('/api/trial-feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          rating: action === 'submit' ? Number(document.getElementById('trialFeedbackRating').value) : null,
+          comment: action === 'submit' ? document.getElementById('trialFeedbackComment').value.trim() : ''
+        })
+      });
+      if (action === 'submit') {
+        cacheAppSettings({ ...settings, trialFeedbackSubmittedAt: new Date().toISOString() });
+        status(msg, result.message || 'Vielen Dank für dein Feedback.', 'status success');
+        setTimeout(() => modal.remove(), 700);
+      } else {
+        modal.remove();
+      }
+    } catch (error) {
+      status(msg, error.message, 'status error');
+      submitButton.disabled = false;
+      deferButton.disabled = false;
+    }
+  };
+
+  document.getElementById('trialFeedbackForm').addEventListener('submit', event => {
+    event.preventDefault();
+    submit('submit');
+  });
+  document.getElementById('deferTrialFeedbackButton').addEventListener('click', () => submit('later'));
+  enhanceTooltips(modal);
+}
+
+async function ensureTrialFeedback(settings) {
+  if (document.getElementById('termsAcceptanceModal') || document.getElementById('licenseAccessModal')) return;
+  if (sessionStorage.getItem(TRIAL_FEEDBACK_SESSION_KEY) === '1') return;
+  sessionStorage.setItem(TRIAL_FEEDBACK_SESSION_KEY, '1');
+  if (settings.trialFeedbackSubmittedAt) return;
+
+  const license = await api('/api/license/status');
+  const trialEnd = license.trialEndsAt ? new Date(license.trialEndsAt).getTime() : 0;
+  const nextPrompt = settings.trialFeedbackNextPromptAt ? new Date(settings.trialFeedbackNextPromptAt).getTime() : 0;
+  if (!license.baseProductPurchased || !trialEnd || trialEnd > Date.now() || nextPrompt > Date.now()) return;
+  showTrialFeedbackModal(settings);
+}
+
+async function ensureUserOnboarding() {
+  if (location.pathname.endsWith('/pages/login.html')) return;
+  const user = await currentAuthUser(false);
+  if (!user) return;
+  const settings = await ensureProfileCompletion(user);
+  await ensureLegalLicenseCompliance();
+  await ensureTrialFeedback(settings);
+}
+
 function renderAccountDock(user) {
   if (!user || document.getElementById('accountDock')) return;
 
@@ -1016,9 +1193,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 document.addEventListener('DOMContentLoaded', () => {
   if (location.pathname.endsWith('/pages/login.html')) return;
-  getAppSettings().catch(() => {});
-  ensureLegalLicenseCompliance().catch(error => {
-    console.warn('Lizenzprüfung nicht verfügbar:', error?.message || 'Unbekannter Fehler');
+  ensureUserOnboarding().catch(error => {
+    console.warn('Onboarding-Prüfung nicht verfügbar:', error?.message || 'Unbekannter Fehler');
   });
 });
 

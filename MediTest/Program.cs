@@ -783,10 +783,73 @@ app.MapPut("/api/settings", async (UpdateProgramSettingsRequest req, FirestoreUs
     settings.DefaultGenerateQuestionCount = NormalizeQuestionCount(req.DefaultGenerateQuestionCount, 25);
     settings.DefaultTestQuestionCount = NormalizeQuestionCount(req.DefaultTestQuestionCount, 25);
     ApplyFixedAiSettings(settings);
+    if (UserOnboardingPolicy.IsProfileComplete(settings))
+        settings.ProfileCompletedAt ??= DateTime.UtcNow;
     settings.UpdatedAt = DateTime.UtcNow;
 
     await store.SaveSettingsAsync(settings, ct);
     return Results.Ok(ToProgramSettingsDto(settings));
+});
+
+app.MapPost("/api/profile/complete", async (
+    CompleteProfileRequest req,
+    HttpContext context,
+    FirestoreUserDataStore store,
+    CancellationToken ct) =>
+{
+    var settings = await store.GetSettingsAsync(ct);
+    settings.DisplayName = TrimTo(req.DisplayName, 200);
+    settings.MatriculationNumber = TrimTo(req.MatriculationNumber, 80);
+    settings.StudyProgram = TrimTo(req.StudyProgram, 200);
+    settings.University = TrimTo(req.University, 200);
+    settings.Semester = TrimTo(req.Semester, 80);
+    settings.Email = TrimTo(FirstClaim(context.User, "email", ClaimTypes.Email), 240);
+
+    if (!UserOnboardingPolicy.IsProfileComplete(settings))
+    {
+        return Results.BadRequest(new
+        {
+            error = "Bitte fülle Name, Studiengang, Hochschule beziehungsweise Universität und Semester vollständig aus."
+        });
+    }
+
+    settings.ProfileCompletedAt ??= DateTime.UtcNow;
+    await store.SaveSettingsAsync(settings, ct);
+    return Results.Ok(ToProgramSettingsDto(settings));
+});
+
+app.MapPost("/api/trial-feedback", async (
+    TrialFeedbackRequest req,
+    IConfiguration cfg,
+    FirestoreUserDataStore store,
+    CancellationToken ct) =>
+{
+    var now = DateTime.UtcNow;
+    var settings = await store.GetSettingsAsync(ct);
+    var license = await store.GetLicenseStateAsync(BillingTrialDays(cfg), ct);
+    if (!UserOnboardingPolicy.ShouldRequestTrialFeedback(license, settings, now))
+        return Results.BadRequest(new { error = "Für dieses Konto ist derzeit keine Feedbackanfrage offen." });
+
+    var action = (req.Action ?? string.Empty).Trim().ToLowerInvariant();
+    settings.TrialFeedbackPromptedAt = now;
+    if (action == "later")
+    {
+        settings.TrialFeedbackNextPromptAt = now.AddDays(7);
+        await store.SaveSettingsAsync(settings, ct);
+        return Results.Ok(new { submitted = false, nextPromptAt = settings.TrialFeedbackNextPromptAt });
+    }
+
+    if (action != "submit")
+        return Results.BadRequest(new { error = "Ungültige Feedbackaktion." });
+    if (req.Rating is null or < 1 or > 5)
+        return Results.BadRequest(new { error = "Bitte wähle eine Bewertung zwischen 1 und 5." });
+
+    settings.TrialFeedbackRating = req.Rating;
+    settings.TrialFeedbackComment = TrimTo(req.Comment, 2000);
+    settings.TrialFeedbackSubmittedAt = now;
+    settings.TrialFeedbackNextPromptAt = null;
+    await store.SaveSettingsAsync(settings, ct);
+    return Results.Ok(new { submitted = true, message = "Vielen Dank für dein Feedback." });
 });
 
 app.MapGet("/api/license/status", async (HttpContext context, IConfiguration cfg, FirestoreUserDataStore store, CancellationToken ct) =>
@@ -1823,6 +1886,11 @@ static ProgramSettingsDto ToProgramSettingsDto(ProgramSettings settings)
         settings.AiApiBaseUrl,
         providers,
         settings.AllowLocalFallback,
+        UserOnboardingPolicy.IsProfileComplete(settings),
+        settings.ProfileCompletedAt,
+        settings.TrialFeedbackPromptedAt,
+        settings.TrialFeedbackNextPromptAt,
+        settings.TrialFeedbackSubmittedAt,
         settings.UpdatedAt);
 }
 

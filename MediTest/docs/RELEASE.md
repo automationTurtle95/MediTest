@@ -51,7 +51,7 @@ Der macOS-Job:
 4. baut beide Architekturen,
 5. signiert alle Mach-O-Dateien mit Hardened Runtime,
 6. erstellt und signiert PKGs direkt mit `pkgbuild`,
-7. reicht beide Pakete parallel ein und fragt Apples Notarisierungsstatus anhand der Submission-ID ab,
+7. reicht beide Pakete parallel mit einem initialen 45-Minuten-Wartefenster ein und fragt bei längerer Apple-Bearbeitung den Status anhand der Submission-ID weiter ab,
 8. heftet die Tickets an und führt Gatekeeper-Prüfungen aus.
 
 Ausstehende Apple-Submissions werden bis zu vier Stunden lang in kurzen Intervallen geprüft.

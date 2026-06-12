@@ -10,6 +10,10 @@ ENTITLEMENTS="$PROJECT_ROOT/assets/macos.entitlements"
 LAUNCHER_SOURCE="$SCRIPT_DIR/macos-launcher.c"
 ICON_SOURCE="$PROJECT_ROOT/assets/MediTest.png"
 
+log_step() {
+  echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] $*"
+}
+
 VERSION="${VERSION:-$(sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' "$PROJECT_FILE" | head -n 1)}"
 if [[ -z "$VERSION" ]]; then
   echo "Keine <Version> in $PROJECT_FILE gefunden." >&2
@@ -43,6 +47,7 @@ RELEASE_ROOT="$DIST_ROOT/MediTest-$VERSION"
 MAC_ROOT="$RELEASE_ROOT/macos"
 rm -rf "$MAC_ROOT"
 mkdir -p "$MAC_ROOT"
+log_step "macOS-Release $VERSION gestartet. Ziel: $MAC_ROOT"
 
 write_info_plist() {
   local output_file="$1"
@@ -88,6 +93,7 @@ create_app_icon() {
   local output_file="$1"
   local iconset_dir
   iconset_dir="$(dirname "$output_file")/MediTest.iconset"
+  log_step "App-Icon wird erstellt: $output_file"
   rm -rf "$iconset_dir"
   mkdir -p "$iconset_dir"
 
@@ -103,6 +109,7 @@ create_app_icon() {
   sips -z 1024 1024 "$ICON_SOURCE" --out "$iconset_dir/icon_512x512@2x.png" >/dev/null
   iconutil -c icns "$iconset_dir" -o "$output_file"
   rm -rf "$iconset_dir"
+  log_step "App-Icon wurde erstellt: $output_file"
 }
 
 sign_app_bundle() {
@@ -110,6 +117,7 @@ sign_app_bundle() {
   local app_host="$app_bundle/Contents/Resources/app/MediTest"
   local launcher="$app_bundle/Contents/MacOS/MediTest"
 
+  log_step "Codesign startet für App-Bundle: $app_bundle"
   while IFS= read -r -d '' file_path; do
     if file "$file_path" | grep -q "Mach-O"; then
       if [[ "$file_path" == "$app_host" ]]; then
@@ -126,7 +134,9 @@ sign_app_bundle() {
     --sign "$APP_SIGNING_IDENTITY" "$launcher"
   codesign --force --timestamp --options runtime "${CODESIGN_KEYCHAIN_ARGS[@]}" \
     --sign "$APP_SIGNING_IDENTITY" "$app_bundle"
+  log_step "Codesign abgeschlossen; Signaturprüfung startet: $app_bundle"
   codesign --verify --deep --strict --verbose=2 "$app_bundle"
+  log_step "codesign verify erfolgreich: $app_bundle"
 }
 
 build_package() {
@@ -141,6 +151,7 @@ build_package() {
   rm -rf "$work_dir" "$package_file"
   mkdir -p "$app_bundle/Contents/MacOS" "$app_bundle/Contents/Resources"
 
+  log_step "dotnet publish startet für $architecture ($runtime)"
   dotnet publish "$PROJECT_FILE" \
     --configuration Release \
     --runtime "$runtime" \
@@ -153,12 +164,15 @@ build_package() {
     -p:DebugType=none \
     -p:DebugSymbols=false \
     -p:PublishReadyToRun=false
+  log_step "dotnet publish abgeschlossen für $architecture"
 
+  log_step "Release-Ausgabe wird für $architecture bereinigt"
   find "$publish_dir" -type f \( -name "*.pdb" -o -name "*.xml" -o -name "*.dbg" \) -delete
   rm -f "$publish_dir/start-name.json" "$publish_dir/meditest.db" \
     "$publish_dir/OPENAI_API_KEY.txt" "$publish_dir/GEMINI_API_KEY.txt" "$publish_dir/web.config"
 
   mv "$publish_dir" "$app_bundle/Contents/Resources/app"
+  log_step "Nativer Launcher wird für $architecture erstellt"
   clang -arch "$clang_arch" -mmacosx-version-min=11.0 -O2 \
     "$LAUNCHER_SOURCE" -o "$app_bundle/Contents/MacOS/MediTest"
   chmod +x "$app_bundle/Contents/MacOS/MediTest" "$app_bundle/Contents/Resources/app/MediTest"
@@ -167,6 +181,7 @@ build_package() {
 
   sign_app_bundle "$app_bundle"
 
+  log_step "PKG-Erstellung startet für $architecture: $package_file"
   pkgbuild \
     "${PKGBUILD_KEYCHAIN_ARGS[@]}" \
     --sign "$INSTALLER_SIGNING_IDENTITY" \
@@ -176,8 +191,11 @@ build_package() {
     --identifier "$BUNDLE_ID" \
     --version "$VERSION" \
     "$package_file"
+  log_step "PKG-Erstellung abgeschlossen für $architecture"
 
+  log_step "PKG-Signaturprüfung startet für $architecture"
   pkgutil --check-signature "$package_file"
+  log_step "PKG-Signaturprüfung erfolgreich für $architecture"
 }
 
 notarize_package() {
@@ -187,49 +205,69 @@ notarize_package() {
   local notary_submission_file="$work_dir/notary-submission.json"
   local notary_result_file="$work_dir/notary-result.json"
 
-  if ! xcrun notarytool submit "$package_file" \
+  log_step "Zu notarisierende Datei für $architecture:"
+  ls -lh "$package_file"
+  log_step "xcrun notarytool submit startet für $architecture mit --wait --timeout 45m"
+  set +e
+  xcrun notarytool submit "$package_file" \
     --key "$NOTARY_KEY_FILE" \
     --key-id "$NOTARY_KEY_ID" \
     --issuer "$NOTARY_ISSUER_ID" \
-    --output-format json > "$notary_submission_file"; then
-    cat "$notary_submission_file" >&2
-    exit 1
-  fi
-
-  printf 'Notarisierung %s eingereicht:\n' "$architecture"
+    --wait \
+    --timeout 45m \
+    --output-format json > "$notary_submission_file"
+  local submit_status=$?
+  set -e
+  log_step "xcrun notarytool submit beendet für $architecture mit Exit-Code $submit_status"
   cat "$notary_submission_file"
+
   local submission_id
-  submission_id="$(plutil -extract id raw -o - "$notary_submission_file")"
+  submission_id="$(plutil -extract id raw -o - "$notary_submission_file" 2>/dev/null || true)"
   if [[ -z "$submission_id" ]]; then
+    cat "$notary_submission_file" >&2
     echo "Apple-Notarisierung lieferte keine Submission-ID." >&2
     exit 1
   fi
 
-  local notary_status=""
-  local poll_attempt
-  for poll_attempt in $(seq 1 480); do
-    xcrun notarytool info "$submission_id" \
+  local notary_status
+  notary_status="$(plutil -extract status raw -o - "$notary_submission_file" 2>/dev/null || true)"
+  if [[ "$notary_status" == "Invalid" || "$notary_status" == "Rejected" ]]; then
+    xcrun notarytool log "$submission_id" \
       --key "$NOTARY_KEY_FILE" \
       --key-id "$NOTARY_KEY_ID" \
-      --issuer "$NOTARY_ISSUER_ID" \
-      --output-format json > "$notary_result_file"
-    notary_status="$(plutil -extract status raw -o - "$notary_result_file")"
-    printf 'Notarisierung %s (%s): Status %s (Pruefung %s/480)\n' \
-      "$architecture" "$submission_id" "$notary_status" "$poll_attempt"
+      --issuer "$NOTARY_ISSUER_ID" || true
+    echo "Apple-Notarisierung wurde mit Status '$notary_status' beendet." >&2
+    exit 1
+  fi
 
-    if [[ "$notary_status" == "Accepted" ]]; then
-      break
-    fi
-    if [[ "$notary_status" == "Invalid" || "$notary_status" == "Rejected" ]]; then
-      xcrun notarytool log "$submission_id" \
+  if [[ "$notary_status" == "Accepted" ]]; then
+    cp "$notary_submission_file" "$notary_result_file"
+  else
+    log_step "Apple verarbeitet $architecture weiter; Submission-ID-Polling startet: $submission_id"
+    local poll_attempt
+    for poll_attempt in $(seq 1 390); do
+      xcrun notarytool info "$submission_id" \
         --key "$NOTARY_KEY_FILE" \
         --key-id "$NOTARY_KEY_ID" \
-        --issuer "$NOTARY_ISSUER_ID" || true
-      echo "Apple-Notarisierung wurde mit Status '$notary_status' beendet." >&2
-      exit 1
-    fi
-    sleep 30
-  done
+        --issuer "$NOTARY_ISSUER_ID" \
+        --output-format json > "$notary_result_file"
+      notary_status="$(plutil -extract status raw -o - "$notary_result_file")"
+      log_step "Notarisierung $architecture ($submission_id): Status $notary_status (Prüfung $poll_attempt/390)"
+
+      if [[ "$notary_status" == "Accepted" ]]; then
+        break
+      fi
+      if [[ "$notary_status" == "Invalid" || "$notary_status" == "Rejected" ]]; then
+        xcrun notarytool log "$submission_id" \
+          --key "$NOTARY_KEY_FILE" \
+          --key-id "$NOTARY_KEY_ID" \
+          --issuer "$NOTARY_ISSUER_ID" || true
+        echo "Apple-Notarisierung wurde mit Status '$notary_status' beendet." >&2
+        exit 1
+      fi
+      sleep 30
+    done
+  fi
 
   if [[ "$notary_status" != "Accepted" ]]; then
     echo "Apple-Notarisierung ist nach 240 Minuten noch nicht abgeschlossen. Submission-ID: $submission_id" >&2
@@ -237,16 +275,23 @@ notarize_package() {
   fi
 
   cat "$notary_result_file"
+  log_step "Apple-Notarisierung akzeptiert für $architecture; Stapling startet"
   xcrun stapler staple "$package_file"
   xcrun stapler validate "$package_file"
+  log_step "Stapling erfolgreich für $architecture; Gatekeeper-Prüfung startet"
   spctl --assess --type install --verbose=4 "$package_file"
+  log_step "Gatekeeper-Prüfung erfolgreich für $architecture"
 
   rm -rf "$work_dir"
+  log_step "Notarisierung und Bereinigung abgeschlossen für $architecture"
 }
 
+log_step "Build und Signierung für Intel x64 startet"
 build_package "osx-x64" "x64" "x86_64"
+log_step "Build und Signierung für Apple Silicon ARM64 startet"
 build_package "osx-arm64" "arm64" "arm64"
 
+log_step "Parallele Apple-Notarisierung für x64 und ARM64 startet"
 notarize_package "x64" &
 x64_notary_pid=$!
 notarize_package "arm64" &
@@ -262,5 +307,5 @@ if (( x64_notary_status != 0 || arm64_notary_status != 0 )); then
   exit 1
 fi
 
-echo "Signierte und notarisierte macOS-Pakete:"
+log_step "Signierte und notarisierte macOS-Pakete sind fertig:"
 ls -lh "$MAC_ROOT"/*.pkg
