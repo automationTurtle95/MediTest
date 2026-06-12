@@ -1205,7 +1205,9 @@ async function ensureGlobalAppConfig(): Promise<GlobalAppConfig> {
       ? "5.0.4"
       : storedAppVersion,
     currentTermsVersion: !storedTermsVersion || storedTermsVersion === "5.0" ? "5.1" : storedTermsVersion,
-    currentPrivacyVersion: stringValue(source.currentPrivacyVersion) || "5.0",
+    currentPrivacyVersion: !stringValue(source.currentPrivacyVersion) || stringValue(source.currentPrivacyVersion) === "5.0"
+      ? "5.1"
+      : stringValue(source.currentPrivacyVersion),
     allowedOfflineDays: boundedInt(source.allowedOfflineDays, 7, 0, 30),
     supportEmail: stringValue(source.supportEmail),
     termsOfUseUrl: safeHttpUrl(source.termsOfUseUrl),

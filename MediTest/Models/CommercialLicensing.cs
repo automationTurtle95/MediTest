@@ -31,7 +31,7 @@ public sealed class AppConfig
 {
     public string CurrentAppVersion { get; set; } = string.Empty;
     public string CurrentTermsVersion { get; set; } = "5.1";
-    public string CurrentPrivacyVersion { get; set; } = "5.0";
+    public string CurrentPrivacyVersion { get; set; } = "5.1";
     public int AllowedOfflineDays { get; set; } = 7;
     public string SupportEmail { get; set; } = string.Empty;
     public string TermsOfUseUrl { get; set; } = string.Empty;
