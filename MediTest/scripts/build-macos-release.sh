@@ -96,10 +96,8 @@ NOTARY_KEY_FILE="${APPLE_API_KEY_FILE:-}"
 SIGNING_KEYCHAIN="${APPLE_SIGNING_KEYCHAIN:-}"
 
 CODESIGN_KEYCHAIN_ARGS=()
-PRODUCTSIGN_KEYCHAIN_ARGS=()
 if [[ -n "$SIGNING_KEYCHAIN" ]]; then
   CODESIGN_KEYCHAIN_ARGS=(--keychain "$SIGNING_KEYCHAIN")
-  PRODUCTSIGN_KEYCHAIN_ARGS=(--keychain "$SIGNING_KEYCHAIN")
 fi
 
 if [[ -z "$APP_SIGNING_IDENTITY" || -z "$INSTALLER_SIGNING_IDENTITY" ]]; then
@@ -274,7 +272,6 @@ build_package() {
   ls -lh "$unsigned_package_file"
 
   run_logged_phase "productsign-$architecture" 180 productsign \
-    "${PRODUCTSIGN_KEYCHAIN_ARGS[@]}" \
     --sign "$INSTALLER_SIGNING_IDENTITY" \
     --timestamp \
     "$unsigned_package_file" \
