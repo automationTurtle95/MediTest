@@ -50,8 +50,8 @@ Der macOS-Job:
 3. validiert die Notarisierungs-Zugangsdaten,
 4. baut beide Architekturen,
 5. signiert alle Mach-O-Dateien mit Hardened Runtime,
-6. erstellt signierte PKGs,
-7. wartet auf Apples Notarisierung,
+6. erstellt und signiert PKGs direkt mit `pkgbuild`,
+7. fragt Apples Notarisierungsstatus anhand der Submission-ID ab,
 8. heftet die Tickets an und führt Gatekeeper-Prüfungen aus.
 
 Fehlt ein Secret oder schlägt eine Apple-Prüfung fehl, wird der gesamte Release abgebrochen. Es gibt keinen unsignierten macOS-Fallback.

@@ -24,10 +24,10 @@ NOTARY_KEY_FILE="${APPLE_API_KEY_FILE:-}"
 SIGNING_KEYCHAIN="${APPLE_SIGNING_KEYCHAIN:-}"
 
 CODESIGN_KEYCHAIN_ARGS=()
-PRODUCTBUILD_KEYCHAIN_ARGS=()
+PKGBUILD_KEYCHAIN_ARGS=()
 if [[ -n "$SIGNING_KEYCHAIN" ]]; then
   CODESIGN_KEYCHAIN_ARGS=(--keychain "$SIGNING_KEYCHAIN")
-  PRODUCTBUILD_KEYCHAIN_ARGS=(--keychain "$SIGNING_KEYCHAIN")
+  PKGBUILD_KEYCHAIN_ARGS=(--keychain "$SIGNING_KEYCHAIN")
 fi
 
 if [[ -z "$APP_SIGNING_IDENTITY" || -z "$INSTALLER_SIGNING_IDENTITY" ]]; then
@@ -137,6 +137,7 @@ build_package() {
   local publish_dir="$work_dir/publish"
   local app_bundle="$work_dir/Meduvalo.app"
   local package_file="$MAC_ROOT/MediTest-Setup-$VERSION-macos-$architecture.pkg"
+  local notary_submission_file="$work_dir/notary-submission.json"
   local notary_result_file="$work_dir/notary-result.json"
 
   rm -rf "$work_dir" "$package_file"
@@ -168,10 +169,14 @@ build_package() {
 
   sign_app_bundle "$app_bundle"
 
-  productbuild \
-    "${PRODUCTBUILD_KEYCHAIN_ARGS[@]}" \
+  pkgbuild \
+    "${PKGBUILD_KEYCHAIN_ARGS[@]}" \
     --sign "$INSTALLER_SIGNING_IDENTITY" \
-    --component "$app_bundle" /Applications \
+    --timestamp \
+    --component "$app_bundle" \
+    --install-location /Applications \
+    --identifier "$BUNDLE_ID" \
+    --version "$VERSION" \
     "$package_file"
 
   pkgutil --check-signature "$package_file"
@@ -179,26 +184,51 @@ build_package() {
     --key "$NOTARY_KEY_FILE" \
     --key-id "$NOTARY_KEY_ID" \
     --issuer "$NOTARY_ISSUER_ID" \
-    --wait \
-    --output-format json > "$notary_result_file"; then
-    cat "$notary_result_file" >&2
+    --output-format json > "$notary_submission_file"; then
+    cat "$notary_submission_file" >&2
+    exit 1
+  fi
+
+  cat "$notary_submission_file"
+  local submission_id
+  submission_id="$(plutil -extract id raw -o - "$notary_submission_file")"
+  if [[ -z "$submission_id" ]]; then
+    echo "Apple-Notarisierung lieferte keine Submission-ID." >&2
+    exit 1
+  fi
+
+  local notary_status=""
+  local poll_attempt
+  for poll_attempt in $(seq 1 240); do
+    xcrun notarytool info "$submission_id" \
+      --key "$NOTARY_KEY_FILE" \
+      --key-id "$NOTARY_KEY_ID" \
+      --issuer "$NOTARY_ISSUER_ID" \
+      --output-format json > "$notary_result_file"
+    notary_status="$(plutil -extract status raw -o - "$notary_result_file")"
+    printf 'Notarisierung %s: Status %s (Pruefung %s/240)\n' \
+      "$submission_id" "$notary_status" "$poll_attempt"
+
+    if [[ "$notary_status" == "Accepted" ]]; then
+      break
+    fi
+    if [[ "$notary_status" == "Invalid" || "$notary_status" == "Rejected" ]]; then
+      xcrun notarytool log "$submission_id" \
+        --key "$NOTARY_KEY_FILE" \
+        --key-id "$NOTARY_KEY_ID" \
+        --issuer "$NOTARY_ISSUER_ID" || true
+      echo "Apple-Notarisierung wurde mit Status '$notary_status' beendet." >&2
+      exit 1
+    fi
+    sleep 30
+  done
+
+  if [[ "$notary_status" != "Accepted" ]]; then
+    echo "Apple-Notarisierung ist nach 120 Minuten noch nicht abgeschlossen. Submission-ID: $submission_id" >&2
     exit 1
   fi
 
   cat "$notary_result_file"
-  local notary_status
-  local submission_id
-  notary_status="$(plutil -extract status raw -o - "$notary_result_file")"
-  submission_id="$(plutil -extract id raw -o - "$notary_result_file")"
-  if [[ "$notary_status" != "Accepted" ]]; then
-    xcrun notarytool log "$submission_id" \
-      --key "$NOTARY_KEY_FILE" \
-      --key-id "$NOTARY_KEY_ID" \
-      --issuer "$NOTARY_ISSUER_ID" || true
-    echo "Apple-Notarisierung wurde mit Status '$notary_status' beendet." >&2
-    exit 1
-  fi
-
   xcrun stapler staple "$package_file"
   xcrun stapler validate "$package_file"
   spctl --assess --type install --verbose=4 "$package_file"

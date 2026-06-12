@@ -92,8 +92,8 @@ Der Workflow:
 2. validiert die Notarisierungs-Zugangsdaten,
 3. baut Intel- und Apple-Silicon-App,
 4. signiert alle Mach-O-Komponenten mit Hardened Runtime,
-5. erstellt signierte PKG-Installer,
-6. reicht beide Pakete über `notarytool` bei Apple ein,
+5. erstellt und signiert die PKG-Installer direkt mit `pkgbuild`,
+6. reicht beide Pakete über `notarytool` bei Apple ein und fragt den Status anhand der Submission-ID ab,
 7. hängt das Notarisierungsticket mit `stapler` an,
 8. prüft Signatur und Gatekeeper-Freigabe,
 9. veröffentlicht erst danach den GitHub Release.
