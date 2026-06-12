@@ -614,6 +614,6 @@ Remove-IfExists (Join-Path $ProjectRoot ".wix")
 Write-Host ""
 Write-Host "Release fertig: $ReleaseRoot" -ForegroundColor Green
 Get-ChildItem -LiteralPath $ReleaseRoot -Recurse -File |
-    Where-Object { $_.Extension -in ".msi", ".zip", ".pkg", ".txt", ".json" } |
+    Where-Object { $_.Extension -in ".msi", ".zip", ".pkg", ".dmg", ".txt", ".json" } |
     Select-Object FullName, @{ Name = "SizeMB"; Expression = { [math]::Round($_.Length / 1MB, 2) } } |
     Format-Table -AutoSize

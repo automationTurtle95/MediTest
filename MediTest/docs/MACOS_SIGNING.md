@@ -92,24 +92,24 @@ Der Workflow:
 2. validiert die Notarisierungs-Zugangsdaten,
 3. baut Intel- und Apple-Silicon-App,
 4. signiert alle Mach-O-Komponenten mit Hardened Runtime,
-5. erstellt und signiert die PKG-Installer direkt mit `pkgbuild`,
-6. bündelt beide PKGs in einer ZIP-Datei und reicht sie mit einem einzigen `notarytool submit --wait --timeout 45m` bei Apple ein; bei längerer Bearbeitung wird derselbe Auftrag anhand der Submission-ID weiter abgefragt,
+5. erstellt DMGs mit `Meduvalo.app` und einer Verknüpfung nach `/Applications` und signiert sie mit `Developer ID Application`,
+6. bündelt beide DMGs in einer ZIP-Datei und reicht sie mit einem einzigen `notarytool submit --wait --timeout 45m` bei Apple ein; bei längerer Bearbeitung wird derselbe Auftrag anhand der Submission-ID weiter abgefragt,
 7. hängt das Notarisierungsticket mit `stapler` an,
 8. prüft Signatur und Gatekeeper-Freigabe,
 9. veröffentlicht erst danach den GitHub Release.
 
 Der Workflow prüft ausstehende Apple-Submissions bis zu vier Stunden lang in kurzen Intervallen.
 
-Fehlt ein Secret oder lehnt Apple ein Paket ab, schlägt der Release fehl. Der Workflow veröffentlicht dann keine unsignierte Ersatzdatei.
+Fehlt ein Secret oder lehnt Apple ein Disk-Image ab, schlägt der Release fehl. Der Workflow veröffentlicht dann keine unsignierte Ersatzdatei.
 
 ## Manuelle Kontrolle
 
 Auf einem Mac:
 
 ```bash
-pkgutil --check-signature MediTest-Setup-5.0.4-macos-arm64.pkg
-xcrun stapler validate MediTest-Setup-5.0.4-macos-arm64.pkg
-spctl --assess --type install --verbose=4 MediTest-Setup-5.0.4-macos-arm64.pkg
+codesign --verify --strict --verbose=2 MediTest-Setup-5.0.4-macos-arm64.dmg
+xcrun stapler validate MediTest-Setup-5.0.4-macos-arm64.dmg
+spctl --assess --type open --context context:primary-signature --verbose=4 MediTest-Setup-5.0.4-macos-arm64.dmg
 ```
 
-Zusätzlich sollte das Paket auf einem Mac getestet werden, auf dem Meduvalo zuvor weder installiert noch manuell freigegeben wurde.
+Zusätzlich sollte das Disk-Image auf einem Mac getestet werden, auf dem Meduvalo zuvor weder installiert noch manuell freigegeben wurde.

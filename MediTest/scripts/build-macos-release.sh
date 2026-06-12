@@ -100,8 +100,8 @@ if [[ -n "$SIGNING_KEYCHAIN" ]]; then
   CODESIGN_KEYCHAIN_ARGS=(--keychain "$SIGNING_KEYCHAIN")
 fi
 
-if [[ -z "$APP_SIGNING_IDENTITY" || -z "$INSTALLER_SIGNING_IDENTITY" ]]; then
-  echo "Developer-ID-Signatur fehlt. APPLE_DEVELOPER_ID_APPLICATION und APPLE_DEVELOPER_ID_INSTALLER muessen gesetzt sein." >&2
+if [[ -z "$APP_SIGNING_IDENTITY" ]]; then
+  echo "Developer-ID-Signatur fehlt. APPLE_DEVELOPER_ID_APPLICATION muss gesetzt sein." >&2
   exit 1
 fi
 if [[ -z "$NOTARY_KEY_ID" || -z "$NOTARY_ISSUER_ID" || -z "$NOTARY_KEY_FILE" || ! -f "$NOTARY_KEY_FILE" ]]; then
@@ -114,7 +114,7 @@ MAC_ROOT="$RELEASE_ROOT/macos"
 rm -rf "$MAC_ROOT"
 mkdir -p "$MAC_ROOT"
 log_step "macOS-Release $VERSION gestartet. Ziel: $MAC_ROOT"
-log_step "Artefaktformat: signierte PKG-Installer; dieses Skript erstellt kein DMG."
+log_step "Artefaktformat: signierte und notarisierte DMGs; PKGs sind optional über BUILD_SIGNED_PKG=true."
 
 write_info_plist() {
   local output_file="$1"
@@ -206,19 +206,21 @@ sign_app_bundle() {
   log_step "codesign verify erfolgreich: $app_bundle"
 }
 
-build_package() {
+build_macos_artifact() {
   local runtime="$1"
   local architecture="$2"
   local clang_arch="$3"
   local work_dir="$MAC_ROOT/work-$architecture"
   local publish_dir="$work_dir/publish"
   local app_bundle="$work_dir/Meduvalo.app"
+  local dmg_root="$work_dir/dmg-root"
+  local dmg_file="$MAC_ROOT/MediTest-Setup-$VERSION-macos-$architecture.dmg"
   local payload_root="$work_dir/payload-root"
   local package_file="$MAC_ROOT/MediTest-Setup-$VERSION-macos-$architecture.pkg"
   local unsigned_package_file="$work_dir/MediTest-Setup-$VERSION-macos-$architecture-unsigned.pkg"
   local diagnostic_package_file="$work_dir/MediTest-Setup-$VERSION-macos-$architecture-no-timestamp.pkg"
 
-  rm -rf "$work_dir" "$package_file"
+  rm -rf "$work_dir" "$dmg_file" "$package_file"
   mkdir -p "$app_bundle/Contents/MacOS" "$app_bundle/Contents/Resources"
 
   log_step "dotnet publish startet für $architecture ($runtime)"
@@ -251,6 +253,38 @@ build_package() {
 
   sign_app_bundle "$app_bundle"
 
+  log_step "DMG-Erstellung startet für $architecture: $dmg_file"
+  mkdir -p "$dmg_root"
+  ditto "$app_bundle" "$dmg_root/Meduvalo.app"
+  ln -s /Applications "$dmg_root/Applications"
+  du -sh "$dmg_root"
+  run_logged_phase "hdiutil-create-$architecture" 180 hdiutil create \
+    -volname "Meduvalo $VERSION" \
+    -srcfolder "$dmg_root" \
+    -ov \
+    -format UDZO \
+    "$dmg_file"
+  ls -lh "$dmg_file"
+
+  log_step "DMG-Signierung startet für $architecture"
+  run_logged_phase "codesign-dmg-$architecture" 180 codesign \
+    --force \
+    --timestamp \
+    "${CODESIGN_KEYCHAIN_ARGS[@]}" \
+    --sign "$APP_SIGNING_IDENTITY" \
+    "$dmg_file"
+  codesign --verify --strict --verbose=2 "$dmg_file"
+  log_step "DMG-Signaturprüfung erfolgreich für $architecture"
+
+  if [[ "${BUILD_SIGNED_PKG:-false}" != "true" ]]; then
+    log_step "Optionaler PKG-Build ist deaktiviert; BUILD_SIGNED_PKG=true aktiviert die Installer-Zertifikat-Diagnose."
+    return
+  fi
+  if [[ -z "$INSTALLER_SIGNING_IDENTITY" ]]; then
+    echo "BUILD_SIGNED_PKG=true erfordert APPLE_DEVELOPER_ID_INSTALLER." >&2
+    exit 1
+  fi
+
   log_step "pkgbuild Eingaben für $architecture:"
   log_step "APP_BUNDLE=$app_bundle"
   log_step "PACKAGE_FILE=$package_file"
@@ -259,7 +293,7 @@ build_package() {
   du -sh "$app_bundle"
 
   mkdir -p "$payload_root/Applications"
-  mv "$app_bundle" "$payload_root/Applications/Meduvalo.app"
+  ditto "$app_bundle" "$payload_root/Applications/Meduvalo.app"
   log_step "PKG_PAYLOAD_ROOT=$payload_root"
   du -sh "$payload_root"
 
@@ -296,21 +330,21 @@ build_package() {
   log_step "PKG-Signaturprüfung erfolgreich für $architecture"
 }
 
-notarize_packages() {
-  local x64_package="$MAC_ROOT/MediTest-Setup-$VERSION-macos-x64.pkg"
-  local arm64_package="$MAC_ROOT/MediTest-Setup-$VERSION-macos-arm64.pkg"
+notarize_artifacts() {
+  local x64_artifact="$MAC_ROOT/MediTest-Setup-$VERSION-macos-x64.dmg"
+  local arm64_artifact="$MAC_ROOT/MediTest-Setup-$VERSION-macos-arm64.dmg"
   local notary_staging="$MAC_ROOT/notary-staging"
   local notary_archive="$MAC_ROOT/MediTest-Setup-$VERSION-macos-notarization.zip"
   local notary_submission_file="$MAC_ROOT/notary-submission.json"
   local notary_result_file="$MAC_ROOT/notary-result.json"
 
-  log_step "Zu notarisierende PKG-Dateien:"
-  ls -lh "$x64_package" "$arm64_package"
+  log_step "Zu notarisierende DMG-Dateien:"
+  ls -lh "$x64_artifact" "$arm64_artifact"
   log_step "Gemeinsames Notarisierungsarchiv wird erstellt: $notary_archive"
   rm -rf "$notary_staging"
   rm -f "$notary_archive"
   mkdir -p "$notary_staging"
-  cp "$x64_package" "$arm64_package" "$notary_staging/"
+  cp "$x64_artifact" "$arm64_artifact" "$notary_staging/"
   ditto -c -k --keepParent "$notary_staging" "$notary_archive"
   ls -lh "$notary_archive"
 
@@ -355,7 +389,7 @@ notarize_packages() {
   if [[ "$notary_status" == "Accepted" ]]; then
     cp "$notary_submission_file" "$notary_result_file"
   else
-    log_step "Apple verarbeitet beide PKGs weiter; Submission-ID-Polling startet: $submission_id"
+    log_step "Apple verarbeitet beide DMGs weiter; Submission-ID-Polling startet: $submission_id"
     local poll_attempt
     for poll_attempt in $(seq 1 390); do
       xcrun notarytool info "$submission_id" \
@@ -364,7 +398,7 @@ notarize_packages() {
         --issuer "$NOTARY_ISSUER_ID" \
         --output-format json > "$notary_result_file"
       notary_status="$(plutil -extract status raw -o - "$notary_result_file")"
-      log_step "Notarisierung beider PKGs ($submission_id): Status $notary_status (Prüfung $poll_attempt/390)"
+      log_step "Notarisierung beider DMGs ($submission_id): Status $notary_status (Prüfung $poll_attempt/390)"
 
       if [[ "$notary_status" == "Accepted" ]]; then
         break
@@ -387,31 +421,31 @@ notarize_packages() {
   fi
 
   cat "$notary_result_file"
-  log_step "Apple-Notarisierung für beide PKGs akzeptiert; Stapling startet"
-  for package_file in "$x64_package" "$arm64_package"; do
-    run_logged_phase "stapler-staple-$(basename "$package_file")" 180 \
-      xcrun stapler staple "$package_file"
-    run_logged_phase "stapler-validate-$(basename "$package_file")" 180 \
-      xcrun stapler validate "$package_file"
+  log_step "Apple-Notarisierung für beide DMGs akzeptiert; Stapling startet"
+  for artifact_file in "$x64_artifact" "$arm64_artifact"; do
+    run_logged_phase "stapler-staple-$(basename "$artifact_file")" 180 \
+      xcrun stapler staple "$artifact_file"
+    run_logged_phase "stapler-validate-$(basename "$artifact_file")" 180 \
+      xcrun stapler validate "$artifact_file"
 
-    log_step "Gatekeeper-Prüfung startet: $package_file"
-    spctl --assess --type install --verbose=4 "$package_file"
-    log_step "Gatekeeper-Prüfung erfolgreich: $package_file"
+    log_step "Gatekeeper-Prüfung startet: $artifact_file"
+    spctl --assess --type open --context context:primary-signature --verbose=4 "$artifact_file"
+    log_step "Gatekeeper-Prüfung erfolgreich: $artifact_file"
   done
 
   rm -rf "$notary_staging"
   rm -f "$notary_archive" "$notary_submission_file" "$notary_result_file"
   rm -rf "$MAC_ROOT/work-x64" "$MAC_ROOT/work-arm64"
-  log_step "Notarisierung und Bereinigung für beide PKGs abgeschlossen"
+  log_step "Notarisierung und Bereinigung für beide DMGs abgeschlossen"
 }
 
 log_step "Build und Signierung für Intel x64 startet"
-build_package "osx-x64" "x64" "x86_64"
+build_macos_artifact "osx-x64" "x64" "x86_64"
 log_step "Build und Signierung für Apple Silicon ARM64 startet"
-build_package "osx-arm64" "arm64" "arm64"
+build_macos_artifact "osx-arm64" "arm64" "arm64"
 
 log_step "Gemeinsame Apple-Notarisierung für x64 und ARM64 startet"
-notarize_packages
+notarize_artifacts
 
-log_step "Signierte und notarisierte macOS-Pakete sind fertig:"
-ls -lh "$MAC_ROOT"/*.pkg
+log_step "Signierte und notarisierte macOS-Disk-Images sind fertig:"
+ls -lh "$MAC_ROOT"/*.dmg

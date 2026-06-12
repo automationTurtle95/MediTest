@@ -78,7 +78,7 @@ jobs:
         run: |
           set -euo pipefail
           missing=()
-          for value in APP_CERTIFICATE INSTALLER_CERTIFICATE CERTIFICATE_PASSWORD NOTARY_KEY NOTARY_KEY_ID NOTARY_ISSUER_ID; do
+          for value in APP_CERTIFICATE CERTIFICATE_PASSWORD NOTARY_KEY NOTARY_KEY_ID NOTARY_ISSUER_ID; do
             if [[ -z "${!value}" ]]; then
               missing+=("$value")
             fi
@@ -108,33 +108,34 @@ jobs:
           INSTALLER_CERTIFICATE_PATH="$RUNNER_TEMP/developer-id-installer.p12"
 
           printf '%s' "$APP_CERTIFICATE" | base64 -D > "$APP_CERTIFICATE_PATH"
-          printf '%s' "$INSTALLER_CERTIFICATE" | base64 -D > "$INSTALLER_CERTIFICATE_PATH"
-
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security import "$APP_CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
-          security import "$INSTALLER_CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$CERTIFICATE_PASSWORD" -A
+          if [[ -n "$INSTALLER_CERTIFICATE" ]]; then
+            printf '%s' "$INSTALLER_CERTIFICATE" | base64 -D > "$INSTALLER_CERTIFICATE_PATH"
+            security import "$INSTALLER_CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$CERTIFICATE_PASSWORD" -A
+          fi
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH"
           security default-keychain -d user -s "$KEYCHAIN_PATH"
 
           APP_IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' | head -n 1)"
           INSTALLER_IDENTITY="$(security find-identity -v "$KEYCHAIN_PATH" | sed -n 's/.*"\(Developer ID Installer:[^"]*\)".*/\1/p' | head -n 1)"
-          if [[ -z "$APP_IDENTITY" || -z "$INSTALLER_IDENTITY" ]]; then
-            echo "Developer-ID-Zertifikate konnten nicht aus dem Keychain gelesen werden." >&2
+          if [[ -z "$APP_IDENTITY" ]]; then
+            echo "Developer-ID-Application-Zertifikat konnte nicht aus dem Keychain gelesen werden." >&2
             security find-identity -v "$KEYCHAIN_PATH"
             exit 1
           fi
           echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] Temporärer Signing-Keychain ist entsperrt und als Default gesetzt"
           security show-keychain-info "$KEYCHAIN_PATH"
           security find-identity -v "$KEYCHAIN_PATH"
-          INSTALLER_CERT_SHA1="$(security find-certificate -c "$INSTALLER_IDENTITY" -Z "$KEYCHAIN_PATH" | awk '/SHA-1 hash:/{print $3; exit}')"
-          if [[ -z "$INSTALLER_CERT_SHA1" ]]; then
-            echo "Installer-Zertifikat wurde ohne abrufbaren SHA-1-Fingerprint importiert." >&2
-            exit 1
+          if [[ -n "$INSTALLER_IDENTITY" ]]; then
+            INSTALLER_CERT_SHA1="$(security find-certificate -c "$INSTALLER_IDENTITY" -Z "$KEYCHAIN_PATH" | awk '/SHA-1 hash:/{print $3; exit}')"
+            echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] Optionale Developer-ID-Installer-Identität gefunden: ${INSTALLER_CERT_SHA1:0:8}..."
+          else
+            echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] Kein Installer-Zertifikat importiert; DMG-Release bleibt vollständig unterstützt."
           fi
-          echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] Developer-ID-Installer-Identität inklusive privatem Schlüssel gefunden: ${INSTALLER_CERT_SHA1:0:8}..."
 
           echo "APPLE_DEVELOPER_ID_APPLICATION=$APP_IDENTITY" >> "$GITHUB_ENV"
           echo "APPLE_DEVELOPER_ID_INSTALLER=$INSTALLER_IDENTITY" >> "$GITHUB_ENV"
@@ -177,12 +178,12 @@ jobs:
         working-directory: MediTest
         run: bash ./scripts/build-macos-release.sh
 
-      - name: Upload macOS installers
+      - name: Upload macOS disk images
         uses: actions/upload-artifact@v7
         with:
           name: macos-release
           if-no-files-found: error
-          path: MediTest/dist/MediTest-*/macos/MediTest-Setup-*-macos-*.pkg
+          path: MediTest/dist/MediTest-*/macos/MediTest-Setup-*-macos-*.dmg
 
       - name: Remove temporary Apple credentials
         if: always()
@@ -244,8 +245,8 @@ jobs:
             return $signed[0]
           }
 
-          $macArm64 = Select-MacArtifact "MediTest-Setup-$version-macos-arm64.pkg"
-          $macX64 = Select-MacArtifact "MediTest-Setup-$version-macos-x64.pkg"
+          $macArm64 = Select-MacArtifact "MediTest-Setup-$version-macos-arm64.dmg"
+          $macX64 = Select-MacArtifact "MediTest-Setup-$version-macos-x64.dmg"
           Copy-Item -LiteralPath $macArm64.FullName -Destination (Join-Path $assetRoot $macArm64.Name)
           Copy-Item -LiteralPath $macX64.FullName -Destination (Join-Path $assetRoot $macX64.Name)
 
@@ -292,10 +293,10 @@ jobs:
           $version = [string]($project.Project.PropertyGroup | Select-Object -First 1).Version
           $tag = "v$version"
           $files = Get-ChildItem ./release-assets -File | Select-Object -ExpandProperty FullName
-          if (@(Get-ChildItem ./release-assets -File -Filter *.pkg).Count -ne 2) {
-            throw "Der Release benötigt zwei signierte und notarisierte macOS-PKGs."
+          if (@(Get-ChildItem ./release-assets -File -Filter *.dmg).Count -ne 2) {
+            throw "Der Release benötigt zwei signierte und notarisierte macOS-DMGs."
           }
-          $notes = "Meduvalo $version`n`nDie macOS-Pakete sind mit einer Apple Developer ID signiert und von Apple notarisiert."
+          $notes = "Meduvalo $version`n`nDie macOS-Disk-Images sind mit einer Apple Developer ID signiert und von Apple notarisiert."
 
           $null = gh release view $tag 2>$null
           if ($LASTEXITCODE -eq 0) {

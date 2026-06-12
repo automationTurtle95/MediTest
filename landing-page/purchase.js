@@ -22,20 +22,20 @@ const DOWNLOAD_PRODUCTS = Object.freeze({
   },
   "macos-arm64": {
     kicker: "macOS · Apple Silicon",
-    lead: "Melde dich an oder erstelle ein Konto. Der einmalige Kauf schaltet das signierte und von Apple notarisierte PKG für Apple Silicon sowie eine 7-tägige Testphase frei.",
+    lead: "Melde dich an oder erstelle ein Konto. Der einmalige Kauf schaltet das signierte und von Apple notarisierte DMG für Apple Silicon sowie eine 7-tägige Testphase frei.",
     name: "Meduvalo für Mac mit Apple Chip",
-    details: "Apple Silicon · signiertes PKG · macOS 11+ · Version 5.0.4",
-    benefit: "Notarisiertes macOS-PKG direkt nach erfolgreicher Zahlung",
+    details: "Apple Silicon · signiertes DMG · macOS 11+ · Version 5.0.4",
+    benefit: "Notarisiertes macOS-DMG direkt nach erfolgreicher Zahlung",
     success: "Dein Kauf ist aktiv und deine 7-tägige Testphase hat begonnen. Das PKG für Apple Silicon kann jetzt heruntergeladen werden.",
     downloadLabel: "Mac-PKG für Apple Silicon herunterladen",
     apple: true
   },
   "macos-x64": {
     kicker: "macOS · Intel",
-    lead: "Melde dich an oder erstelle ein Konto. Der einmalige Kauf schaltet das signierte und von Apple notarisierte PKG für Intel-Macs sowie eine 7-tägige Testphase frei.",
+    lead: "Melde dich an oder erstelle ein Konto. Der einmalige Kauf schaltet das signierte und von Apple notarisierte DMG für Intel-Macs sowie eine 7-tägige Testphase frei.",
     name: "Meduvalo für Intel-Mac",
-    details: "Intel 64-Bit · signiertes PKG · macOS 11+ · Version 5.0.4",
-    benefit: "Notarisiertes macOS-PKG direkt nach erfolgreicher Zahlung",
+    details: "Intel 64-Bit · signiertes DMG · macOS 11+ · Version 5.0.4",
+    benefit: "Notarisiertes macOS-DMG direkt nach erfolgreicher Zahlung",
     success: "Dein Kauf ist aktiv und deine 7-tägige Testphase hat begonnen. Das PKG für Intel-Macs kann jetzt heruntergeladen werden.",
     downloadLabel: "Mac-PKG für Intel herunterladen",
     apple: true

@@ -12,12 +12,12 @@ Version 5.0.4 veröffentlicht:
 ```text
 MediTest-Setup-5.0.4-win-x64.msi
 MediTest-5.0.4-win-x64-portable.zip
-MediTest-Setup-5.0.4-macos-arm64.pkg
-MediTest-Setup-5.0.4-macos-x64.pkg
+MediTest-Setup-5.0.4-macos-arm64.dmg
+MediTest-Setup-5.0.4-macos-x64.dmg
 SHA256SUMS.txt
 ```
 
-Die beiden macOS-PKGs müssen mit `Developer ID Application` und `Developer ID Installer` signiert, von Apple notarisiert und mit einem Ticket versehen sein.
+Die beiden macOS-DMGs müssen mit `Developer ID Application` signiert, von Apple notarisiert und mit einem Ticket versehen sein.
 
 ## Geschützter Download
 
@@ -62,5 +62,5 @@ Stripe Checkout und der signaturgeprüfte Webhook setzen die Lizenz im Firebase-
   werden. SSL wird anschließend von Firebase bereitgestellt.
 - GitHub Releases müssen erreichbar sein, solange die Download-URLs auf öffentliche Release-Assets zeigen.
 - Ein wirklich nicht öffentlich abrufbarer Binärdownload benötigt später private Cloud-Storage-Objekte mit kurzlebigen signierten URLs.
-- Vor jedem Release müssen beide macOS-PKGs auf einem frischen Mac über Gatekeeper getestet werden.
+- Vor jedem Release müssen beide macOS-DMGs auf einem frischen Mac über Gatekeeper getestet werden.
 - Impressum, Datenschutz, Widerruf, AGB und Lizenzbedingungen müssen alle angebotenen Desktop-Plattformen abdecken.

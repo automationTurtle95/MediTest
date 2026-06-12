@@ -6,7 +6,7 @@ GitHub Releases und bereits veröffentlichte Installationen kompatibel.
 
 ## Ziel
 
-Version 5.0.4 wird als Windows-MSI, Windows-Portable-ZIP und zwei signierte, von Apple notarisierte macOS-PKGs veröffentlicht.
+Version 5.0.4 wird als Windows-MSI, Windows-Portable-ZIP und zwei signierte, von Apple notarisierte macOS-DMGs veröffentlicht.
 
 ```text
 dist/MediTest-5.0.4/
@@ -37,8 +37,8 @@ Der Workflow `.github/workflows/release.yml` baut:
 ```text
 MediTest-Setup-5.0.4-win-x64.msi
 MediTest-5.0.4-win-x64-portable.zip
-MediTest-Setup-5.0.4-macos-arm64.pkg
-MediTest-Setup-5.0.4-macos-x64.pkg
+MediTest-Setup-5.0.4-macos-arm64.dmg
+MediTest-Setup-5.0.4-macos-x64.dmg
 latest.json
 SHA256SUMS.txt
 ```
@@ -46,12 +46,12 @@ SHA256SUMS.txt
 Der macOS-Job:
 
 1. prüft, dass alle Apple-Secrets vorhanden sind,
-2. importiert `Developer ID Application` und `Developer ID Installer`,
+2. importiert die Developer-ID-Zertifikate in einen temporären Schlüsselbund,
 3. validiert die Notarisierungs-Zugangsdaten,
 4. baut beide Architekturen,
 5. signiert alle Mach-O-Dateien mit Hardened Runtime,
-6. erstellt und signiert PKGs direkt mit `pkgbuild`,
-7. bündelt beide Pakete in einem Notarisierungsarchiv, reicht nur einen Apple-Auftrag mit einem initialen 45-Minuten-Wartefenster ein und fragt bei längerer Bearbeitung dessen Status weiter ab,
+6. erstellt und signiert DMGs mit `Developer ID Application`,
+7. bündelt beide Disk-Images in einem Notarisierungsarchiv, reicht nur einen Apple-Auftrag mit einem initialen 45-Minuten-Wartefenster ein und fragt bei längerer Bearbeitung dessen Status weiter ab,
 8. heftet die Tickets an und führt Gatekeeper-Prüfungen aus.
 
 Ausstehende Apple-Submissions werden bis zu vier Stunden lang in kurzen Intervallen geprüft.
@@ -96,7 +96,7 @@ Die App liest standardmäßig den neuesten GitHub Release:
 
 - Keine `.pdb`, lokale Datenbank oder Secret-Datei im Release.
 - Versionsnummern in `.csproj`, App-Konfiguration, Installer und Dateinamen müssen übereinstimmen.
-- macOS-Kundenpakete sind ausschließlich signierte und notarisierte `.pkg`.
+- macOS-Kundenpakete sind ausschließlich signierte und notarisierte `.dmg`.
 - Das Windows-MSI behält seinen konstanten `UpgradeCode`.
 - Bestehende stabile Release-Archive werden nicht verändert.
 

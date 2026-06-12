@@ -62,10 +62,10 @@ const windowsDownloadUrl = defineString("WINDOWS_DOWNLOAD_URL", {
   default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.4/MediTest-Setup-5.0.4-win-x64.msi"
 });
 const macosArm64DownloadUrl = defineString("MACOS_ARM64_DOWNLOAD_URL", {
-  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.4/MediTest-Setup-5.0.4-macos-arm64.pkg"
+  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.4/MediTest-Setup-5.0.4-macos-arm64.dmg"
 });
 const macosX64DownloadUrl = defineString("MACOS_X64_DOWNLOAD_URL", {
-  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.4/MediTest-Setup-5.0.4-macos-x64.pkg"
+  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.4/MediTest-Setup-5.0.4-macos-x64.dmg"
 });
 const db = getFirestore();
 const legacyExpiredTrialDate = "1970-01-01T00:00:00.000Z";
@@ -486,11 +486,11 @@ export const meditestDownloadAccess = onRequest(
         url: windowsDownloadUrl.value().trim()
       },
       "macos-arm64": {
-        fileName: `MediTest-Setup-${version}-macos-arm64.pkg`,
+        fileName: `MediTest-Setup-${version}-macos-arm64.dmg`,
         url: macosArm64DownloadUrl.value().trim()
       },
       "macos-x64": {
-        fileName: `MediTest-Setup-${version}-macos-x64.pkg`,
+        fileName: `MediTest-Setup-${version}-macos-x64.dmg`,
         url: macosX64DownloadUrl.value().trim()
       }
     };

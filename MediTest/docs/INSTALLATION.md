@@ -24,25 +24,24 @@ Updates funktionieren über dasselbe MSI: Eine neuere `MediTest-Setup-<Version>-
 
 ## macOS
 
-Für den produktiven Release werden zwei signierte und von Apple notarisierte PKGs veröffentlicht:
+Für den produktiven Release werden zwei signierte und von Apple notarisierte DMGs veröffentlicht:
 
 ```text
-MediTest-Setup-5.0.4-macos-x64.pkg
-MediTest-Setup-5.0.4-macos-arm64.pkg
+MediTest-Setup-5.0.4-macos-x64.dmg
+MediTest-Setup-5.0.4-macos-arm64.dmg
 ```
 
 `macos-x64` ist für Intel-Macs, `macos-arm64` für Apple-Silicon-Macs.
 
 Installation:
 
-1. Passendes ZIP herunterladen und entpacken.
-2. Das heruntergeladene `.pkg` öffnen.
-3. Den normalen macOS-Installer abschließen.
-4. Meduvalo anschließend aus `~/Applications` oder über die Desktop-Verknüpfung starten.
+1. Passendes `.dmg` herunterladen und öffnen.
+2. `Meduvalo.app` auf die im Disk-Image angezeigte Verknüpfung `Applications` ziehen.
+3. Meduvalo anschließend aus `/Applications` oder über Spotlight starten.
 
 Die App öffnet automatisch den Browser unter `http://127.0.0.1:55000`.
 
-Der Release-Workflow veröffentlicht ab Version 5.0.4 nur noch, wenn beide PKGs erfolgreich signiert, von Apple notarisiert und mit einem Notarisierungsticket versehen wurden.
+Der Release-Workflow veröffentlicht ab Version 5.0.4 nur noch, wenn beide DMGs erfolgreich signiert, von Apple notarisiert und mit einem Notarisierungsticket versehen wurden.
 
 Version 5.0.4 legt keine lokale Nutzerdatenbank mehr an. Bestehende alte `meditest.db`-Dateien werden ignoriert.
 
@@ -62,7 +61,7 @@ Wenn Updates in `appsettings.json` aktiviert sind, prüft Meduvalo auf der Seite
 }
 ```
 
-Windows-Updates laufen über das neue MSI. macOS-Updates laufen über das signierte und notarisierte PKG.
+Windows-Updates laufen über das neue MSI. macOS-Updates laufen über das signierte und notarisierte DMG.
 
 ## Erster Start und Anmeldung
 

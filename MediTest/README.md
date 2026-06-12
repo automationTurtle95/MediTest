@@ -50,7 +50,7 @@ umbenannt werden. Details stehen in [../BRANDING.md](../BRANDING.md).
 - UglyToad.PdfPig für PDF-Extraktion
 - Open XML SDK für PowerPoint-Extraktion
 - WiX Toolset für das Windows-MSI
-- Apple Developer ID, Hardened Runtime und Notarisierung für macOS-PKGs
+- Apple Developer ID, Hardened Runtime und Notarisierung für macOS-DMGs
 
 ## Lokal starten
 
@@ -145,7 +145,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 
 Die fertigen Artefakte liegen danach unter `dist/MediTest-5.0.4/`. Frühere Release-Ordner bleiben erhalten.
 
-Ohne `-WindowsOnly` können lokal weiterhin Test-ZIPs für Intel und Apple Silicon erzeugt werden. Der produktive Release-Workflow akzeptiert ab Version 5.0.4 ausschließlich signierte und von Apple notarisierte PKG-Installer.
+Ohne `-WindowsOnly` können lokal weiterhin Test-ZIPs für Intel und Apple Silicon erzeugt werden. Der produktive Release-Workflow akzeptiert ab Version 5.0.4 ausschließlich signierte und von Apple notarisierte DMG-Disk-Images.
 
 Die veröffentlichte Windows-EXE ist als GUI-Anwendung gebaut. Beim Start über MSI-Verknüpfung oder Portable-ZIP bleibt deshalb kein Konsolenfenster sichtbar.
 
