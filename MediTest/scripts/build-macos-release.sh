@@ -26,11 +26,13 @@ log_duration() {
 
 run_logged_phase() {
   local label="$1"
-  shift
+  local timeout_seconds="$2"
+  shift 2
   local started_at
   local phase_pid
   local phase_status
   local elapsed
+  local timed_out=0
 
   started_at="$(date +%s)"
   log_step "PHASE $label START"
@@ -46,6 +48,23 @@ run_logged_phase() {
       if (( elapsed > 0 && elapsed % 15 == 0 )); then
         log_step "PHASE $label LÄUFT seit ${elapsed}s (PID $phase_pid)"
       fi
+      if (( timeout_seconds > 0 && elapsed >= timeout_seconds )); then
+        log_step "PHASE $label TIMEOUT nach ${elapsed}s; Prozess $phase_pid wird beendet"
+        pkill -TERM -P "$phase_pid" 2>/dev/null || true
+        kill "$phase_pid" 2>/dev/null || true
+        for _ in 1 2 3 4 5; do
+          if ! kill -0 "$phase_pid" 2>/dev/null; then
+            break
+          fi
+          sleep 1
+        done
+        if kill -0 "$phase_pid" 2>/dev/null; then
+          pkill -KILL -P "$phase_pid" 2>/dev/null || true
+          kill -KILL "$phase_pid" 2>/dev/null || true
+        fi
+        timed_out=1
+        break
+      fi
     fi
   done
 
@@ -53,6 +72,10 @@ run_logged_phase() {
   wait "$phase_pid"
   phase_status=$?
   set -e
+
+  if (( timed_out == 1 )); then
+    phase_status=124
+  fi
 
   log_step "PHASE $label ENDE: Exit-Code $phase_status"
   log_duration "$label" "$started_at"
@@ -192,6 +215,7 @@ build_package() {
   local work_dir="$MAC_ROOT/work-$architecture"
   local publish_dir="$work_dir/publish"
   local app_bundle="$work_dir/Meduvalo.app"
+  local payload_root="$work_dir/payload-root"
   local package_file="$MAC_ROOT/MediTest-Setup-$VERSION-macos-$architecture.pkg"
   local unsigned_package_file="$work_dir/MediTest-Setup-$VERSION-macos-$architecture-unsigned.pkg"
 
@@ -234,15 +258,22 @@ build_package() {
   log_step "INSTALLER_IDENTITY=$INSTALLER_SIGNING_IDENTITY"
   ls -ld "$app_bundle"
   du -sh "$app_bundle"
-  run_logged_phase "pkgbuild-unsigned-$architecture" pkgbuild \
-    --component "$app_bundle" \
-    --install-location /Applications \
+
+  mkdir -p "$payload_root/Applications"
+  mv "$app_bundle" "$payload_root/Applications/Meduvalo.app"
+  log_step "PKG_PAYLOAD_ROOT=$payload_root"
+  du -sh "$payload_root"
+
+  run_logged_phase "pkgbuild-root-$architecture" 180 pkgbuild \
+    --root "$payload_root" \
+    --install-location / \
+    --ownership recommended \
     --identifier "$BUNDLE_ID" \
     --version "$VERSION" \
     "$unsigned_package_file"
   ls -lh "$unsigned_package_file"
 
-  run_logged_phase "productsign-$architecture" productsign \
+  run_logged_phase "productsign-$architecture" 180 productsign \
     "${PRODUCTSIGN_KEYCHAIN_ARGS[@]}" \
     --sign "$INSTALLER_SIGNING_IDENTITY" \
     --timestamp \
@@ -287,7 +318,7 @@ notarize_packages() {
   }
 
   local submit_status
-  if run_logged_phase "notarytool-submit-wait" submit_notarization; then
+  if run_logged_phase "notarytool-submit-wait" 3000 submit_notarization; then
     submit_status=0
   else
     submit_status=$?
@@ -349,9 +380,9 @@ notarize_packages() {
   cat "$notary_result_file"
   log_step "Apple-Notarisierung für beide PKGs akzeptiert; Stapling startet"
   for package_file in "$x64_package" "$arm64_package"; do
-    run_logged_phase "stapler-staple-$(basename "$package_file")" \
+    run_logged_phase "stapler-staple-$(basename "$package_file")" 180 \
       xcrun stapler staple "$package_file"
-    run_logged_phase "stapler-validate-$(basename "$package_file")" \
+    run_logged_phase "stapler-validate-$(basename "$package_file")" 180 \
       xcrun stapler validate "$package_file"
 
     log_step "Gatekeeper-Prüfung startet: $package_file"
