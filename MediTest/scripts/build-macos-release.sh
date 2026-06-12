@@ -137,8 +137,6 @@ build_package() {
   local publish_dir="$work_dir/publish"
   local app_bundle="$work_dir/Meduvalo.app"
   local package_file="$MAC_ROOT/MediTest-Setup-$VERSION-macos-$architecture.pkg"
-  local notary_submission_file="$work_dir/notary-submission.json"
-  local notary_result_file="$work_dir/notary-result.json"
 
   rm -rf "$work_dir" "$package_file"
   mkdir -p "$app_bundle/Contents/MacOS" "$app_bundle/Contents/Resources"
@@ -180,6 +178,15 @@ build_package() {
     "$package_file"
 
   pkgutil --check-signature "$package_file"
+}
+
+notarize_package() {
+  local architecture="$1"
+  local package_file="$MAC_ROOT/MediTest-Setup-$VERSION-macos-$architecture.pkg"
+  local work_dir="$MAC_ROOT/work-$architecture"
+  local notary_submission_file="$work_dir/notary-submission.json"
+  local notary_result_file="$work_dir/notary-result.json"
+
   if ! xcrun notarytool submit "$package_file" \
     --key "$NOTARY_KEY_FILE" \
     --key-id "$NOTARY_KEY_ID" \
@@ -189,6 +196,7 @@ build_package() {
     exit 1
   fi
 
+  printf 'Notarisierung %s eingereicht:\n' "$architecture"
   cat "$notary_submission_file"
   local submission_id
   submission_id="$(plutil -extract id raw -o - "$notary_submission_file")"
@@ -206,8 +214,8 @@ build_package() {
       --issuer "$NOTARY_ISSUER_ID" \
       --output-format json > "$notary_result_file"
     notary_status="$(plutil -extract status raw -o - "$notary_result_file")"
-    printf 'Notarisierung %s: Status %s (Pruefung %s/240)\n' \
-      "$submission_id" "$notary_status" "$poll_attempt"
+    printf 'Notarisierung %s (%s): Status %s (Pruefung %s/240)\n' \
+      "$architecture" "$submission_id" "$notary_status" "$poll_attempt"
 
     if [[ "$notary_status" == "Accepted" ]]; then
       break
@@ -238,6 +246,21 @@ build_package() {
 
 build_package "osx-x64" "x64" "x86_64"
 build_package "osx-arm64" "arm64" "arm64"
+
+notarize_package "x64" &
+x64_notary_pid=$!
+notarize_package "arm64" &
+arm64_notary_pid=$!
+
+x64_notary_status=0
+arm64_notary_status=0
+wait "$x64_notary_pid" || x64_notary_status=$?
+wait "$arm64_notary_pid" || arm64_notary_status=$?
+
+if (( x64_notary_status != 0 || arm64_notary_status != 0 )); then
+  echo "Mindestens eine Apple-Notarisierung ist fehlgeschlagen." >&2
+  exit 1
+fi
 
 echo "Signierte und notarisierte macOS-Pakete:"
 ls -lh "$MAC_ROOT"/*.pkg
