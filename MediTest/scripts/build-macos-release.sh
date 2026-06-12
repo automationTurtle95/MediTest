@@ -24,6 +24,41 @@ log_duration() {
   log_step "$label beendet. Dauer: ${elapsed}s"
 }
 
+run_logged_phase() {
+  local label="$1"
+  shift
+  local started_at
+  local phase_pid
+  local phase_status
+  local elapsed
+
+  started_at="$(date +%s)"
+  log_step "PHASE $label START"
+
+  "$@" &
+  phase_pid=$!
+  log_step "PHASE $label PID $phase_pid"
+
+  while kill -0 "$phase_pid" 2>/dev/null; do
+    sleep 1
+    if kill -0 "$phase_pid" 2>/dev/null; then
+      elapsed=$(($(date +%s) - started_at))
+      if (( elapsed > 0 && elapsed % 15 == 0 )); then
+        log_step "PHASE $label LÄUFT seit ${elapsed}s (PID $phase_pid)"
+      fi
+    fi
+  done
+
+  set +e
+  wait "$phase_pid"
+  phase_status=$?
+  set -e
+
+  log_step "PHASE $label ENDE: Exit-Code $phase_status"
+  log_duration "$label" "$started_at"
+  return "$phase_status"
+}
+
 VERSION="${VERSION:-$(sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' "$PROJECT_FILE" | head -n 1)}"
 if [[ -z "$VERSION" ]]; then
   echo "Keine <Version> in $PROJECT_FILE gefunden." >&2
@@ -192,11 +227,13 @@ build_package() {
 
   sign_app_bundle "$app_bundle"
 
-  local pkg_started_at
-  pkg_started_at="$(date +%s)"
-  log_step "PHASE pkgbuild START für $architecture: $package_file"
+  log_step "pkgbuild Eingaben für $architecture:"
+  log_step "APP_BUNDLE=$app_bundle"
+  log_step "PACKAGE_FILE=$package_file"
+  log_step "INSTALLER_IDENTITY=$INSTALLER_SIGNING_IDENTITY"
   ls -ld "$app_bundle"
-  pkgbuild \
+  du -sh "$app_bundle"
+  run_logged_phase "pkgbuild-$architecture" pkgbuild \
     "${PKGBUILD_KEYCHAIN_ARGS[@]}" \
     --sign "$INSTALLER_SIGNING_IDENTITY" \
     --timestamp \
@@ -205,8 +242,6 @@ build_package() {
     --identifier "$BUNDLE_ID" \
     --version "$VERSION" \
     "$package_file"
-  log_step "PHASE pkgbuild ENDE für $architecture: Exit-Code 0"
-  log_duration "PKG-Erstellung für $architecture" "$pkg_started_at"
   ls -lh "$package_file"
 
   log_step "PKG-Signaturprüfung startet für $architecture"
@@ -232,22 +267,24 @@ notarize_packages() {
   ditto -c -k --keepParent "$notary_staging" "$notary_archive"
   ls -lh "$notary_archive"
 
-  local submit_started_at
-  submit_started_at="$(date +%s)"
-  log_step "PHASE notarytool-submit-wait START für beide PKGs mit --wait --timeout 45m"
   log_step "Live-Ausgabe von notarytool folgt:"
-  set +e
-  xcrun notarytool submit "$notary_archive" \
-    --key "$NOTARY_KEY_FILE" \
-    --key-id "$NOTARY_KEY_ID" \
-    --issuer "$NOTARY_ISSUER_ID" \
-    --wait \
-    --timeout 45m \
-    --output-format json | tee "$notary_submission_file"
-  local submit_status=${PIPESTATUS[0]}
-  set -e
-  log_step "PHASE notarytool-submit-wait ENDE für beide PKGs: Exit-Code $submit_status"
-  log_duration "notarytool submit --wait" "$submit_started_at"
+
+  submit_notarization() {
+    xcrun notarytool submit "$notary_archive" \
+      --key "$NOTARY_KEY_FILE" \
+      --key-id "$NOTARY_KEY_ID" \
+      --issuer "$NOTARY_ISSUER_ID" \
+      --wait \
+      --timeout 45m \
+      --output-format json | tee "$notary_submission_file"
+  }
+
+  local submit_status
+  if run_logged_phase "notarytool-submit-wait" submit_notarization; then
+    submit_status=0
+  else
+    submit_status=$?
+  fi
 
   local submission_id
   submission_id="$(plutil -extract id raw -o - "$notary_submission_file" 2>/dev/null || true)"
@@ -305,19 +342,10 @@ notarize_packages() {
   cat "$notary_result_file"
   log_step "Apple-Notarisierung für beide PKGs akzeptiert; Stapling startet"
   for package_file in "$x64_package" "$arm64_package"; do
-    local staple_started_at
-    staple_started_at="$(date +%s)"
-    log_step "PHASE stapler-staple START: $package_file"
-    xcrun stapler staple "$package_file"
-    log_step "PHASE stapler-staple ENDE: Exit-Code 0"
-    log_duration "stapler staple für $(basename "$package_file")" "$staple_started_at"
-
-    local validate_started_at
-    validate_started_at="$(date +%s)"
-    log_step "PHASE stapler-validate START: $package_file"
-    xcrun stapler validate "$package_file"
-    log_step "PHASE stapler-validate ENDE: Exit-Code 0"
-    log_duration "stapler validate für $(basename "$package_file")" "$validate_started_at"
+    run_logged_phase "stapler-staple-$(basename "$package_file")" \
+      xcrun stapler staple "$package_file"
+    run_logged_phase "stapler-validate-$(basename "$package_file")" \
+      xcrun stapler validate "$package_file"
 
     log_step "Gatekeeper-Prüfung startet: $package_file"
     spctl --assess --type install --verbose=4 "$package_file"
