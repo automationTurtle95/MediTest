@@ -198,18 +198,27 @@ build_package() {
   log_step "PKG-Signaturprüfung erfolgreich für $architecture"
 }
 
-notarize_package() {
-  local architecture="$1"
-  local package_file="$MAC_ROOT/MediTest-Setup-$VERSION-macos-$architecture.pkg"
-  local work_dir="$MAC_ROOT/work-$architecture"
-  local notary_submission_file="$work_dir/notary-submission.json"
-  local notary_result_file="$work_dir/notary-result.json"
+notarize_packages() {
+  local x64_package="$MAC_ROOT/MediTest-Setup-$VERSION-macos-x64.pkg"
+  local arm64_package="$MAC_ROOT/MediTest-Setup-$VERSION-macos-arm64.pkg"
+  local notary_staging="$MAC_ROOT/notary-staging"
+  local notary_archive="$MAC_ROOT/MediTest-Setup-$VERSION-macos-notarization.zip"
+  local notary_submission_file="$MAC_ROOT/notary-submission.json"
+  local notary_result_file="$MAC_ROOT/notary-result.json"
 
-  log_step "Zu notarisierende Datei für $architecture:"
-  ls -lh "$package_file"
-  log_step "xcrun notarytool submit startet für $architecture mit --wait --timeout 45m"
+  log_step "Zu notarisierende PKG-Dateien:"
+  ls -lh "$x64_package" "$arm64_package"
+  log_step "Gemeinsames Notarisierungsarchiv wird erstellt: $notary_archive"
+  rm -rf "$notary_staging"
+  rm -f "$notary_archive"
+  mkdir -p "$notary_staging"
+  cp "$x64_package" "$arm64_package" "$notary_staging/"
+  ditto -c -k --keepParent "$notary_staging" "$notary_archive"
+  ls -lh "$notary_archive"
+
+  log_step "xcrun notarytool submit startet einmalig für beide PKGs mit --wait --timeout 45m"
   set +e
-  xcrun notarytool submit "$package_file" \
+  xcrun notarytool submit "$notary_archive" \
     --key "$NOTARY_KEY_FILE" \
     --key-id "$NOTARY_KEY_ID" \
     --issuer "$NOTARY_ISSUER_ID" \
@@ -218,7 +227,7 @@ notarize_package() {
     --output-format json > "$notary_submission_file"
   local submit_status=$?
   set -e
-  log_step "xcrun notarytool submit beendet für $architecture mit Exit-Code $submit_status"
+  log_step "xcrun notarytool submit beendet für beide PKGs mit Exit-Code $submit_status"
   cat "$notary_submission_file"
 
   local submission_id
@@ -243,7 +252,7 @@ notarize_package() {
   if [[ "$notary_status" == "Accepted" ]]; then
     cp "$notary_submission_file" "$notary_result_file"
   else
-    log_step "Apple verarbeitet $architecture weiter; Submission-ID-Polling startet: $submission_id"
+    log_step "Apple verarbeitet beide PKGs weiter; Submission-ID-Polling startet: $submission_id"
     local poll_attempt
     for poll_attempt in $(seq 1 390); do
       xcrun notarytool info "$submission_id" \
@@ -252,7 +261,7 @@ notarize_package() {
         --issuer "$NOTARY_ISSUER_ID" \
         --output-format json > "$notary_result_file"
       notary_status="$(plutil -extract status raw -o - "$notary_result_file")"
-      log_step "Notarisierung $architecture ($submission_id): Status $notary_status (Prüfung $poll_attempt/390)"
+      log_step "Notarisierung beider PKGs ($submission_id): Status $notary_status (Prüfung $poll_attempt/390)"
 
       if [[ "$notary_status" == "Accepted" ]]; then
         break
@@ -275,15 +284,20 @@ notarize_package() {
   fi
 
   cat "$notary_result_file"
-  log_step "Apple-Notarisierung akzeptiert für $architecture; Stapling startet"
-  xcrun stapler staple "$package_file"
-  xcrun stapler validate "$package_file"
-  log_step "Stapling erfolgreich für $architecture; Gatekeeper-Prüfung startet"
-  spctl --assess --type install --verbose=4 "$package_file"
-  log_step "Gatekeeper-Prüfung erfolgreich für $architecture"
+  log_step "Apple-Notarisierung für beide PKGs akzeptiert; Stapling startet"
+  for package_file in "$x64_package" "$arm64_package"; do
+    log_step "Ticket wird angeheftet und validiert: $package_file"
+    xcrun stapler staple "$package_file"
+    xcrun stapler validate "$package_file"
+    log_step "Gatekeeper-Prüfung startet: $package_file"
+    spctl --assess --type install --verbose=4 "$package_file"
+    log_step "Gatekeeper-Prüfung erfolgreich: $package_file"
+  done
 
-  rm -rf "$work_dir"
-  log_step "Notarisierung und Bereinigung abgeschlossen für $architecture"
+  rm -rf "$notary_staging"
+  rm -f "$notary_archive" "$notary_submission_file" "$notary_result_file"
+  rm -rf "$MAC_ROOT/work-x64" "$MAC_ROOT/work-arm64"
+  log_step "Notarisierung und Bereinigung für beide PKGs abgeschlossen"
 }
 
 log_step "Build und Signierung für Intel x64 startet"
@@ -291,21 +305,8 @@ build_package "osx-x64" "x64" "x86_64"
 log_step "Build und Signierung für Apple Silicon ARM64 startet"
 build_package "osx-arm64" "arm64" "arm64"
 
-log_step "Parallele Apple-Notarisierung für x64 und ARM64 startet"
-notarize_package "x64" &
-x64_notary_pid=$!
-notarize_package "arm64" &
-arm64_notary_pid=$!
-
-x64_notary_status=0
-arm64_notary_status=0
-wait "$x64_notary_pid" || x64_notary_status=$?
-wait "$arm64_notary_pid" || arm64_notary_status=$?
-
-if (( x64_notary_status != 0 || arm64_notary_status != 0 )); then
-  echo "Mindestens eine Apple-Notarisierung ist fehlgeschlagen." >&2
-  exit 1
-fi
+log_step "Gemeinsame Apple-Notarisierung für x64 und ARM64 startet"
+notarize_packages
 
 log_step "Signierte und notarisierte macOS-Pakete sind fertig:"
 ls -lh "$MAC_ROOT"/*.pkg
