@@ -9,7 +9,7 @@ Updates vorhandener Installationen weiterhin funktionieren.
 Empfohlen ist das MSI-Paket aus dem Release-Ordner:
 
 ```text
-dist/MediTest-5.0.6/windows/MediTest-Setup-5.0.6-win-x64.msi
+dist/MediTest-5.0.7/windows/MediTest-Setup-5.0.7-win-x64.msi
 ```
 
 Das MSI installiert Meduvalo benutzerbezogen nach:
@@ -27,8 +27,8 @@ Updates funktionieren über dasselbe MSI: Eine neuere `MediTest-Setup-<Version>-
 Für den produktiven Release werden zwei signierte und von Apple notarisierte DMGs veröffentlicht:
 
 ```text
-MediTest-Setup-5.0.6-macos-x64.dmg
-MediTest-Setup-5.0.6-macos-arm64.dmg
+MediTest-Setup-5.0.7-macos-x64.dmg
+MediTest-Setup-5.0.7-macos-arm64.dmg
 ```
 
 `macos-x64` ist für Intel-Macs, `macos-arm64` für Apple-Silicon-Macs.

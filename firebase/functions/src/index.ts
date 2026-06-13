@@ -76,15 +76,15 @@ const billingWebsiteBaseUrl = defineString("BILLING_WEBSITE_BASE_URL", {
 });
 const stripeCustomersCollection = defineString("STRIPE_CUSTOMERS_COLLECTION", { default: "customers" });
 const stripePortalConfigurationId = defineString("STRIPE_PORTAL_CONFIGURATION_ID", { default: "not-configured" });
-const currentAppVersion = defineString("CURRENT_APP_VERSION", { default: "5.0.6" });
+const currentAppVersion = defineString("CURRENT_APP_VERSION", { default: "5.0.7" });
 const windowsDownloadUrl = defineString("WINDOWS_DOWNLOAD_URL", {
-  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.6/MediTest-Setup-5.0.6-win-x64.msi"
+  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.7/MediTest-Setup-5.0.7-win-x64.msi"
 });
 const macosArm64DownloadUrl = defineString("MACOS_ARM64_DOWNLOAD_URL", {
-  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.6/MediTest-Setup-5.0.6-macos-arm64.dmg"
+  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.7/MediTest-Setup-5.0.7-macos-arm64.dmg"
 });
 const macosX64DownloadUrl = defineString("MACOS_X64_DOWNLOAD_URL", {
-  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.6/MediTest-Setup-5.0.6-macos-x64.dmg"
+  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.7/MediTest-Setup-5.0.7-macos-x64.dmg"
 });
 const db = getFirestore();
 const legacyExpiredTrialDate = "1970-01-01T00:00:00.000Z";
@@ -592,7 +592,7 @@ export const meditestDownloadAccess = onRequest(
     const license = await ensureCommercialLicense(user, state, appConfig);
     const activatedDevices = await db.collection(`deviceActivations/${user.uid}/devices`).get();
 
-    const version = currentAppVersion.value().trim() || "5.0.6";
+    const version = currentAppVersion.value().trim() || "5.0.7";
     const downloads: Record<DownloadPlatform, { fileName: string; url: string }> = {
       "windows-x64": {
         fileName: `MediTest-Setup-${version}-win-x64.msi`,
@@ -1588,8 +1588,8 @@ async function ensureGlobalAppConfig(): Promise<GlobalAppConfig> {
   const storedAppVersion = stringValue(source.currentAppVersion);
   const storedTermsVersion = stringValue(source.currentTermsVersion);
   const config: GlobalAppConfig = {
-    currentAppVersion: !storedAppVersion || ["5.0.2", "5.0.3", "5.0.4", "5.0.5"].includes(storedAppVersion)
-      ? "5.0.6"
+    currentAppVersion: !storedAppVersion || ["5.0.2", "5.0.3", "5.0.4", "5.0.5", "5.0.6"].includes(storedAppVersion)
+      ? "5.0.7"
       : storedAppVersion,
     currentTermsVersion: !storedTermsVersion || storedTermsVersion === "5.0" ? "5.1" : storedTermsVersion,
     currentPrivacyVersion: !stringValue(source.currentPrivacyVersion) || stringValue(source.currentPrivacyVersion) === "5.0"

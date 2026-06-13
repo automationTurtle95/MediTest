@@ -21,10 +21,16 @@
       <p class="muted">PDF, PPTX oder TXT als Quelldokument hochladen und daraus anschließend einen Test generieren.</p>
       <form id="uploadForm">
         <label for="file">Unterlage</label>
-        <input id="file" name="file" type="file" accept=".pdf,.pptx,.txt" required>
+        <div class="file-picker">
+          <span class="file-picker-trigger">
+            <input id="file" name="file" type="file" accept=".pdf,.pptx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain" aria-label="Datei für Upload auswählen" aria-describedby="fileSelection" required>
+            <span class="button primary file-picker-button" aria-hidden="true">Datei auswählen</span>
+          </span>
+          <span id="fileSelection" class="file-picker-selection" aria-live="polite">Keine Datei ausgewählt</span>
+        </div>
         <label for="uploadFolder">Ordner (optional)</label>
         <input type="text" id="uploadFolder" name="folderPath" placeholder="z. B. Studium/Innere Medizin">
-        <div class="actions"><button class="primary" type="submit">Hochladen &amp; Text extrahieren</button></div>
+        <div class="actions"><button class="primary" id="uploadBtn" type="submit" disabled>Hochladen &amp; Text extrahieren</button></div>
       </form>
     </article>
 
@@ -33,7 +39,13 @@
       <p class="muted">Vorbereitete Fragenlisten als eigenen Fragenpool importieren.</p>
       <form id="importForm">
         <label for="importFile">TXT-Datei</label>
-        <input id="importFile" type="file" accept=".txt" required>
+        <div class="file-picker">
+          <span class="file-picker-trigger">
+            <input id="importFile" type="file" accept=".txt,text/plain" aria-label="TXT-Datei für Import auswählen" aria-describedby="importFileSelection" required>
+            <span class="button file-picker-button" aria-hidden="true">TXT-Datei auswählen</span>
+          </span>
+          <span id="importFileSelection" class="file-picker-selection" aria-live="polite">Keine Datei ausgewählt</span>
+        </div>
         <label for="importName">Fragenpool-Name (optional)</label>
         <input type="text" id="importName" placeholder="z. B. Innere Medizin Altfragen">
         <label for="importFolder">Ordner (optional)</label>
@@ -43,7 +55,7 @@
           <option value="false" selected>Nein, ohne KI-Badge importieren</option>
           <option value="true">Ja, KI-Badge bei allen Fragen anzeigen</option>
         </select>
-        <div class="actions"><button type="submit" id="importBtn">Importieren</button></div>
+        <div class="actions"><button type="submit" id="importBtn" disabled>Importieren</button></div>
       </form>
     </article>
   </section>
@@ -74,6 +86,36 @@ function formatFileSize(bytes){
   while(value>=1024&&unit<units.length-1){value/=1024;unit++;}
   const digits=unit===0?0:value>=10?1:2;
   return `${value.toLocaleString('de-AT',{minimumFractionDigits:0,maximumFractionDigits:digits})} ${units[unit]}`;
+}
+function selectedFile(inputId){
+  return document.getElementById(inputId)?.files?.[0]||null;
+}
+function fileExtension(file){
+  const name=String(file?.name||'');
+  const dot=name.lastIndexOf('.');
+  return dot>=0?name.slice(dot).toLowerCase():'';
+}
+function hasAllowedSelectedFile(inputId,allowedExtensions){
+  const file=selectedFile(inputId);
+  return !!file&&allowedExtensions.includes(fileExtension(file));
+}
+function bindFilePicker(inputId,selectionId,submitButtonId,allowedExtensions){
+  const input=document.getElementById(inputId);
+  const selection=document.getElementById(selectionId);
+  const button=document.getElementById(submitButtonId);
+  const update=()=>{
+    const file=selectedFile(inputId);
+    const valid=hasAllowedSelectedFile(inputId,allowedExtensions);
+    input.setCustomValidity(file&&!valid?'Dieser Dateityp wird nicht unterstützt.':'');
+    selection.textContent=file
+      ? `${file.name} · ${formatFileSize(file.size)}${valid?'':' · Dateityp nicht unterstützt'}`
+      : 'Keine Datei ausgewählt';
+    selection.classList.toggle('error',!!file&&!valid);
+    button.disabled=!valid;
+  };
+  input.addEventListener('change',update);
+  input.addEventListener('cancel',update);
+  update();
 }
 function documentFolderSegments(doc){
   const source=String(doc?.folderPath||'').trim()||'Unsortiert';
@@ -520,17 +562,38 @@ async function deleteDocument(id){
   }catch(e){popup.fail(e.message);}
 }
 
+bindFilePicker('file','fileSelection','uploadBtn',['.pdf','.pptx','.txt']);
+bindFilePicker('importFile','importFileSelection','importBtn',['.txt']);
 document.getElementById('uploadForm').addEventListener('submit', async e=>{
   e.preventDefault();
+  const file=selectedFile('file');
+  if(!file){
+    const popup=openActionPopup('Bitte wähle zuerst eine PDF-, PPTX- oder TXT-Datei aus.','Keine Datei ausgewählt');
+    popup.fail('Bitte wähle zuerst eine Datei aus.');
+    return;
+  }
   const popup=openActionPopup('Die Datei wird hochgeladen und der Text wird extrahiert.','Dokument wird hochgeladen');
+  const uploadButton=document.getElementById('uploadBtn');
   try{
-    const fd=new FormData(e.target);
+    uploadButton.disabled=true;
+    uploadButton.setAttribute('aria-busy','true');
+    uploadButton.textContent='Datei wird verarbeitet...';
+    const fd=new FormData();
+    fd.append('file',file,file.name);
+    const folder=document.getElementById('uploadFolder').value.trim();
+    if(folder)fd.append('folderPath',folder);
     const r=await api('/api/documents/upload',{method:'POST',body:fd});
     e.target.reset();
+    document.getElementById('file').dispatchEvent(new Event('change'));
     await loadDocs();
     popup.success(`${r.fileName} wurde gespeichert.`);
   }
   catch(err){popup.fail(err.message);}
+  finally{
+    uploadButton.setAttribute('aria-busy','false');
+    uploadButton.textContent='Hochladen & Text extrahieren';
+    uploadButton.disabled=!hasAllowedSelectedFile('file',['.pdf','.pptx','.txt']);
+  }
 });
 document.getElementById('importForm').addEventListener('submit', async e=>{
   e.preventDefault();
@@ -555,11 +618,16 @@ document.getElementById('importForm').addEventListener('submit', async e=>{
     importButton.textContent='Import wird verarbeitet...';
     const r=await api('/api/documents/import-txt',{method:'POST',body:fd});
     document.getElementById('importForm').reset();
+    document.getElementById('importFile').dispatchEvent(new Event('change'));
     await loadDocs();
     popup.success(`${r.importedQuestions} Fragen wurden in „${r.documentName}“ importiert.`);
   }
   catch(err){popup.fail(err.message);}
-  finally{importButton.disabled=false; importButton.setAttribute('aria-busy','false'); importButton.textContent='Importieren';}
+  finally{
+    importButton.disabled=!hasAllowedSelectedFile('importFile',['.txt']);
+    importButton.setAttribute('aria-busy','false');
+    importButton.textContent='Importieren';
+  }
 });
 loadDocs().catch(e=>status(document.getElementById('msg'),e.message,'status error'));
 </script>

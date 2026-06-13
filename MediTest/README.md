@@ -1,6 +1,6 @@
 # Meduvalo
 
-Meduvalo ist eine Lernsoftware für Medizinstudenten zur prüfungsnahen Vorbereitung mit strukturierten Fragen, Tests, Lernmodulen, Fortschrittsübersicht und KI-gestützter Fragengenerierung. Version 5.0.6 nutzt Firebase Authentication, Firestore und Stripe Checkout.
+Meduvalo ist eine Lernsoftware für Medizinstudenten zur prüfungsnahen Vorbereitung mit strukturierten Fragen, Tests, Lernmodulen, Fortschrittsübersicht und KI-gestützter Fragengenerierung. Version 5.0.7 nutzt Firebase Authentication, Firestore und Stripe Checkout.
 
 ## Branding und Kompatibilität
 
@@ -144,7 +144,7 @@ cd MediTest
 powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 ```
 
-Die fertigen Artefakte liegen danach unter `dist/MediTest-5.0.6/`. Frühere Release-Ordner bleiben erhalten.
+Die fertigen Artefakte liegen danach unter `dist/MediTest-5.0.7/`. Frühere Release-Ordner bleiben erhalten.
 
 Ohne `-WindowsOnly` können lokal weiterhin Test-ZIPs für Intel und Apple Silicon erzeugt werden. Der produktive Release-Workflow akzeptiert ab Version 5.0.4 ausschließlich signierte und von Apple notarisierte DMG-Disk-Images.
 

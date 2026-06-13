@@ -220,6 +220,31 @@ input:focus,select:focus,textarea:focus{
   border-color:var(--accent);
   box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 18%,transparent);
 }
+.file-picker{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.file-picker-trigger{position:relative;display:inline-flex;max-width:100%;border-radius:11px}
+.file-picker-trigger input[type=file]{
+  position:absolute;
+  z-index:2;
+  top:0;
+  right:0;
+  bottom:0;
+  left:0;
+  width:100%;
+  height:100%;
+  min-height:0;
+  margin:0;
+  padding:0;
+  border:0;
+  opacity:0;
+  cursor:pointer;
+}
+.file-picker-trigger:focus-within{
+  outline:3px solid color-mix(in srgb,var(--accent) 55%,transparent);
+  outline-offset:3px;
+}
+.file-picker-button{pointer-events:none}
+.file-picker-selection{min-width:180px;color:var(--muted);font-size:14px;font-weight:700;overflow-wrap:anywhere}
+.file-picker-selection.error{color:var(--danger)}
 .option-edit{
   border:1px solid var(--border);
   border-radius:14px;

@@ -61,13 +61,13 @@ public sealed class InstallationAuthorizationServiceTests : IDisposable
 
     private string WriteAuthorization(string platform, DateTimeOffset expiresAt)
     {
-        var path = Path.Combine(_directory, "Meduvalo-Installationsberechtigung-5.0.6.json");
+        var path = Path.Combine(_directory, "Meduvalo-Installationsberechtigung-5.0.7.json");
         File.WriteAllText(path, JsonSerializer.Serialize(new
         {
             schemaVersion = 1,
             token = Token,
             platform,
-            version = "5.0.6",
+            version = "5.0.7",
             expiresAt
         }));
         return path;

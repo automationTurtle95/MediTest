@@ -224,7 +224,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     var url = app.Urls.FirstOrDefault(u => u.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase))
         ?? app.Urls.FirstOrDefault()
         ?? "http://127.0.0.1:55000";
-    managedBrowserProcess = OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=5006");
+    managedBrowserProcess = OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=5007");
 });
 
 app.Lifetime.ApplicationStopping.Register(() =>
@@ -1025,7 +1025,15 @@ app.MapPost("/api/license/portal", async (HttpContext context, IConfiguration cf
 app.MapPost("/api/documents/upload", async (HttpRequest request, FirestoreUserDataStore store, ITextExtractionService extractor, IConfiguration cfg, CancellationToken ct) =>
 {
     if (!request.HasFormContentType) return Results.BadRequest(new { error = "Multipart/Form-Data erwartet." });
-    var form = await request.ReadFormAsync(ct);
+    IFormCollection form;
+    try
+    {
+        form = await request.ReadFormAsync(ct);
+    }
+    catch (InvalidDataException)
+    {
+        return Results.BadRequest(new { error = "Die Dateiübertragung war unvollständig. Bitte wähle die Datei erneut aus und versuche es noch einmal." });
+    }
     var file = form.Files.GetFile("file");
     if (file == null || file.Length == 0) return Results.BadRequest(new { error = "Keine Datei hochgeladen." });
     if (!AllowedFile(file)) return Results.BadRequest(new { error = "Nur PDF, PPTX und TXT sind erlaubt." });
@@ -1033,7 +1041,18 @@ app.MapPost("/api/documents/upload", async (HttpRequest request, FirestoreUserDa
     var maxMb = cfg.GetValue<int?>("Upload:MaxFileSizeMb") ?? 100;
     if (file.Length > maxMb * 1024L * 1024L) return Results.BadRequest(new { error = $"Datei ist zu groß. Maximum: {maxMb} MB." });
 
-    var text = await extractor.ExtractTextAsync(file, ct);
+    string text;
+    try
+    {
+        text = await extractor.ExtractTextAsync(file, ct);
+    }
+    catch (Exception ex) when (ex is InvalidDataException or IOException or InvalidOperationException or UnauthorizedAccessException)
+    {
+        return Results.BadRequest(new
+        {
+            error = $"„{Path.GetFileName(file.FileName)}“ konnte nicht gelesen werden. Prüfe, ob die Datei lokal verfügbar, unbeschädigt und nicht passwortgeschützt ist."
+        });
+    }
     if (string.IsNullOrWhiteSpace(text)) return Results.BadRequest(new { error = "Aus der Datei konnte kein Text extrahiert werden." });
 
     var doc = new UploadedDocument
