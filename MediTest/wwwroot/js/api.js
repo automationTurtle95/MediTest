@@ -8,6 +8,9 @@ const APP_BRAND = Object.freeze({
   logoPath: '/assets/meduvalo-logo.svg'
 });
 
+const APP_PLATFORM = /Macintosh|Mac OS X/i.test(navigator.userAgent || '') ? 'macos' : 'other';
+document.documentElement.dataset.platform = APP_PLATFORM;
+
 const AUTH_SESSION_KEY = 'meditest-firebase-session';
 const AUTH_CONFIG_KEY = 'meditest-auth-config';
 let authConfigPromise = null;
@@ -485,11 +488,57 @@ window.priceLabel = priceLabel;
 function qs(name){ return new URLSearchParams(location.search).get(name); }
 function status(el, msg, type='status'){ el.className = type; el.textContent = msg; el.classList.remove('hidden'); }
 
+function describeUiElement(element) {
+  if (!(element instanceof Element)) return null;
+  const style = getComputedStyle(element);
+  return {
+    tag: element.tagName.toLowerCase(),
+    id: element.id || '',
+    classes: [...element.classList],
+    role: element.getAttribute('role') || '',
+    text: (element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120),
+    pointerEvents: style.pointerEvents,
+    position: style.position,
+    zIndex: style.zIndex,
+    visibility: style.visibility,
+    opacity: style.opacity,
+    appRegion: style.getPropertyValue('-webkit-app-region')
+  };
+}
+
+function uiElementFromPoint(x, y) {
+  const hit = document.elementFromPoint(x, y);
+  return {
+    x,
+    y,
+    hit: describeUiElement(hit),
+    stack: (document.elementsFromPoint?.(x, y) || []).slice(0, 8).map(describeUiElement)
+  };
+}
+
+window.mediTestElementFromPoint = uiElementFromPoint;
+
+function installMacUiDiagnostics() {
+  if (APP_PLATFORM !== 'macos' || qs('uiDebug') !== '1') return;
+  const inspect = event => {
+    console.debug('[Meduvalo UI hit-test]', event.type, uiElementFromPoint(event.clientX, event.clientY));
+  };
+  document.addEventListener('pointerdown', inspect, true);
+  document.addEventListener('click', inspect, true);
+  console.info('[Meduvalo UI hit-test] aktiv. Aufruf: mediTestElementFromPoint(x, y)');
+}
+
+function clearTransientUiLayers() {
+  document.querySelectorAll('[data-transient-overlay="true"]').forEach(element => element.remove());
+  document.getElementById('loginSuccess')?.classList.add('hidden');
+}
+
 function openActionPopup(message, title = 'Aktion wird ausgeführt') {
   document.getElementById('actionProgressModal')?.remove();
   const modal = document.createElement('div');
   modal.id = 'actionProgressModal';
   modal.className = 'modal-backdrop action-progress-backdrop';
+  modal.dataset.transientOverlay = 'true';
   modal.innerHTML = `
     <section class="modal-panel action-progress-modal" role="status" aria-live="polite" aria-labelledby="actionProgressTitle">
       <span class="action-progress-spinner" aria-hidden="true"></span>
@@ -516,7 +565,7 @@ function openActionPopup(message, title = 'Aktion wird ausgeführt') {
       modal.querySelector('.action-progress-spinner')?.classList.add('action-progress-check');
       const messageElement = document.getElementById('actionProgressMessage');
       if (messageElement) messageElement.textContent = nextMessage;
-      setTimeout(() => closeActionPopup(), 650);
+      setTimeout(() => modal.remove(), 650);
     },
     fail(errorMessage) {
       modal.classList.add('action-progress-error');
@@ -1242,6 +1291,11 @@ function applyProductBranding() {
 }
 
 document.addEventListener('DOMContentLoaded', applyProductBranding);
+document.addEventListener('DOMContentLoaded', installMacUiDiagnostics);
+window.addEventListener('pagehide', clearTransientUiLayers);
+window.addEventListener('pageshow', event => {
+  if (event.persisted) clearTransientUiLayers();
+});
 
 document.addEventListener('DOMContentLoaded', () => {
   const nav = document.querySelector('header.topbar nav');

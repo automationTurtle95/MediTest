@@ -105,7 +105,7 @@ serverseitiger Mailversand mit Firebase Admin SDK und SMTP erforderlich.
    npx firebase-tools deploy --only functions,firestore:rules
    ```
 
-Zusätzlich zur KI stellt das Projekt `meditestRedeemCatalogCode` für die atomare Einmalverwendung eines Gratis-Codes pro Benutzerkonto und `meditestDeleteAccount` für die vollständige Kontolöschung bereit. Alle geschützten Funktionen prüfen das Firebase-ID-Token; KI und Code-Einlösung verlangen außerdem eine bestätigte E-Mail-Adresse.
+Zusätzlich zur KI stellt das Projekt `meditestRedeemCatalogCode` für die atomare Einmalverwendung eines Gratis-Katalog-Codes pro Benutzerkonto, `meditestRedeemProductCode` für dauerhaft unterstützte Gratis-Produktcodes und `meditestDeleteAccount` für die vollständige Kontolöschung bereit. Produktcodes funktionieren unabhängig von einer bereits heruntergeladenen App und bleiben für ältere Installationen serverseitig gültig. Alle geschützten Funktionen prüfen das Firebase-ID-Token; KI und Code-Einlösung verlangen außerdem eine bestätigte E-Mail-Adresse.
 
 `meditestSupportRequest` nimmt authentifizierte Supportanfragen entgegen,
 begrenzt sie pro Konto und UTC-Tag, speichert sie dauerhaft unter

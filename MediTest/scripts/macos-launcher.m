@@ -6,7 +6,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-@interface MediTestAppDelegate : NSObject <NSApplicationDelegate, WKNavigationDelegate>
+@interface MediTestAppDelegate : NSObject <NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate>
 @property(nonatomic, copy) NSString *appDirectory;
 @property(nonatomic, copy) NSString *appExecutable;
 @property(nonatomic) pid_t serverPid;
@@ -38,6 +38,8 @@
     WKWebViewConfiguration *configuration = [[WKWebViewConfiguration alloc] init];
     self.webView = [[WKWebView alloc] initWithFrame:frame configuration:configuration];
     self.webView.navigationDelegate = self;
+    self.webView.UIDelegate = self;
+    self.webView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     self.window.contentView = self.webView;
     [self.window center];
     [self.window makeKeyAndOrderFront:nil];
@@ -104,6 +106,137 @@
     [self.webView loadRequest:[NSURLRequest requestWithURL:url
                                                cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
                                            timeoutInterval:5.0]];
+}
+
+- (BOOL)isApplicationURL:(NSURL *)url
+{
+    if (url == nil) return NO;
+    NSString *scheme = url.scheme.lowercaseString;
+    NSString *host = url.host.lowercaseString;
+    BOOL localHost = [host isEqualToString:@"127.0.0.1"] ||
+        [host isEqualToString:@"localhost"];
+    return [scheme isEqualToString:@"http"] &&
+        localHost &&
+        (url.port == nil || url.port.integerValue == 55000);
+}
+
+- (BOOL)openExternalURL:(NSURL *)url
+{
+    if (url == nil) return NO;
+    NSString *scheme = url.scheme.lowercaseString;
+    if (![scheme isEqualToString:@"http"] &&
+        ![scheme isEqualToString:@"https"] &&
+        ![scheme isEqualToString:@"mailto"]) {
+        return NO;
+    }
+    return [[NSWorkspace sharedWorkspace] openURL:url];
+}
+
+- (void)webView:(WKWebView *)webView
+    decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction
+                    decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler
+{
+    NSURL *url = navigationAction.request.URL;
+    if (url == nil || [self isApplicationURL:url] ||
+        [url.scheme.lowercaseString isEqualToString:@"about"]) {
+        decisionHandler(WKNavigationActionPolicyAllow);
+        return;
+    }
+
+    if ([self openExternalURL:url]) {
+        decisionHandler(WKNavigationActionPolicyCancel);
+        return;
+    }
+
+    decisionHandler(WKNavigationActionPolicyAllow);
+}
+
+- (WKWebView *)webView:(WKWebView *)webView
+    createWebViewWithConfiguration:(WKWebViewConfiguration *)configuration
+               forNavigationAction:(WKNavigationAction *)navigationAction
+                    windowFeatures:(WKWindowFeatures *)windowFeatures
+{
+    (void)configuration;
+    (void)windowFeatures;
+    NSURL *url = navigationAction.request.URL;
+    if ([self isApplicationURL:url]) {
+        [webView loadRequest:navigationAction.request];
+    } else {
+        [self openExternalURL:url];
+    }
+    return nil;
+}
+
+- (void)webView:(WKWebView *)webView
+    runJavaScriptAlertPanelWithMessage:(NSString *)message
+                      initiatedByFrame:(WKFrameInfo *)frame
+                     completionHandler:(void (^)(void))completionHandler
+{
+    (void)webView;
+    (void)frame;
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = @"Meduvalo";
+    alert.informativeText = message ?: @"";
+    [alert addButtonWithTitle:@"OK"];
+    [alert beginSheetModalForWindow:self.window completionHandler:^(__unused NSModalResponse response) {
+        completionHandler();
+    }];
+}
+
+- (void)webView:(WKWebView *)webView
+    runJavaScriptConfirmPanelWithMessage:(NSString *)message
+                        initiatedByFrame:(WKFrameInfo *)frame
+                       completionHandler:(void (^)(BOOL result))completionHandler
+{
+    (void)webView;
+    (void)frame;
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = @"Meduvalo";
+    alert.informativeText = message ?: @"";
+    [alert addButtonWithTitle:@"Bestätigen"];
+    [alert addButtonWithTitle:@"Abbrechen"];
+    [alert beginSheetModalForWindow:self.window completionHandler:^(NSModalResponse response) {
+        completionHandler(response == NSAlertFirstButtonReturn);
+    }];
+}
+
+- (void)webView:(WKWebView *)webView
+    runJavaScriptTextInputPanelWithPrompt:(NSString *)prompt
+                              defaultText:(NSString *)defaultText
+                         initiatedByFrame:(WKFrameInfo *)frame
+                        completionHandler:(void (^)(NSString *result))completionHandler
+{
+    (void)webView;
+    (void)frame;
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = @"Meduvalo";
+    alert.informativeText = prompt ?: @"";
+    [alert addButtonWithTitle:@"OK"];
+    [alert addButtonWithTitle:@"Abbrechen"];
+
+    NSTextField *input = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 360, 24)];
+    input.stringValue = defaultText ?: @"";
+    alert.accessoryView = input;
+
+    [alert beginSheetModalForWindow:self.window completionHandler:^(NSModalResponse response) {
+        completionHandler(response == NSAlertFirstButtonReturn ? input.stringValue : nil);
+    }];
+}
+
+- (void)webView:(WKWebView *)webView
+    runOpenPanelWithParameters:(WKOpenPanelParameters *)parameters
+              initiatedByFrame:(WKFrameInfo *)frame
+             completionHandler:(void (^)(NSArray<NSURL *> *URLs))completionHandler
+{
+    (void)webView;
+    (void)frame;
+    NSOpenPanel *panel = [NSOpenPanel openPanel];
+    panel.canChooseFiles = YES;
+    panel.canChooseDirectories = parameters.allowsDirectories;
+    panel.allowsMultipleSelection = parameters.allowsMultipleSelection;
+    [panel beginSheetModalForWindow:self.window completionHandler:^(NSModalResponse response) {
+        completionHandler(response == NSModalResponseOK ? panel.URLs : nil);
+    }];
 }
 
 - (void)webView:(WKWebView *)webView

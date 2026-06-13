@@ -1,6 +1,6 @@
 # Meduvalo
 
-Meduvalo ist eine Lernsoftware für Medizinstudenten zur prüfungsnahen Vorbereitung mit strukturierten Fragen, Tests, Lernmodulen, Fortschrittsübersicht und KI-gestützter Fragengenerierung. Version 5.0.7 nutzt Firebase Authentication, Firestore und Stripe Checkout.
+Meduvalo ist eine Lernsoftware für Medizinstudenten zur prüfungsnahen Vorbereitung mit strukturierten Fragen, Tests, Lernmodulen, Fortschrittsübersicht und KI-gestützter Fragengenerierung. Version 5.0.8 nutzt Firebase Authentication, Firestore und Stripe Checkout.
 
 ## Branding und Kompatibilität
 
@@ -123,7 +123,7 @@ Die Seite `Rechtliches & Lizenz` zeigt Produkt- und Entwicklerdaten, den Firebas
 - 7 Tage vollständige Testphase ab bestätigter Zahlung
 - 9,99 EUR pro Monat für den optionalen Vollzugang danach
 - ohne Abo können Tests aus vorhandenen Fragenpools gestartet, fortgesetzt und ausgewertet werden; alle anderen Funktionen sind gesperrt
-- Premium- und Gratis-Code-Hashes liegen ausschließlich in den Firebase-Functions-Parametern
+- Premium-Code-Hashes und zusätzliche Gratis-Code-Hashes liegen in den Firebase-Functions-Parametern; dauerhaft unterstützte Gratis-Produktcodes werden als Hash in der Function geführt
 - Gratis-Katalog-Codes können von jedem Benutzerkonto genau einmal verwendet werden
 - 2 Geräte pro neuem Basiskauf und 7 Tage Offline-Nutzung nach einer erfolgreichen Online-Prüfung
 - jeder Download für ein noch freies Gerät erhält eine einmalige, 24 Stunden gültige Installationsberechtigung
@@ -144,7 +144,7 @@ cd MediTest
 powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 ```
 
-Die fertigen Artefakte liegen danach unter `dist/MediTest-5.0.7/`. Frühere Release-Ordner bleiben erhalten.
+Die fertigen Artefakte liegen danach unter `dist/MediTest-5.0.8/`. Frühere Release-Ordner bleiben erhalten.
 
 Ohne `-WindowsOnly` können lokal weiterhin Test-ZIPs für Intel und Apple Silicon erzeugt werden. Der produktive Release-Workflow akzeptiert ab Version 5.0.4 ausschließlich signierte und von Apple notarisierte DMG-Disk-Images.
 

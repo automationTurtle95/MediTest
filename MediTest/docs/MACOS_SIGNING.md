@@ -81,9 +81,9 @@ Die Developer-ID-Signierung ist unabhängig von `Mit Apple anmelden`. Für den A
 Nach dem Einrichten der Secrets:
 
 ```bash
-git tag v5.0.7
+git tag v5.0.8
 git push origin main
-git push origin v5.0.7
+git push origin v5.0.8
 ```
 
 Der Workflow:
@@ -107,9 +107,9 @@ Fehlt ein Secret oder lehnt Apple ein Disk-Image ab, schlägt der Release fehl. 
 Auf einem Mac:
 
 ```bash
-codesign --verify --strict --verbose=2 MediTest-Setup-5.0.7-macos-arm64.dmg
-xcrun stapler validate MediTest-Setup-5.0.7-macos-arm64.dmg
-spctl --assess --type open --context context:primary-signature --verbose=4 MediTest-Setup-5.0.7-macos-arm64.dmg
+codesign --verify --strict --verbose=2 MediTest-Setup-5.0.8-macos-arm64.dmg
+xcrun stapler validate MediTest-Setup-5.0.8-macos-arm64.dmg
+spctl --assess --type open --context context:primary-signature --verbose=4 MediTest-Setup-5.0.8-macos-arm64.dmg
 ```
 
 Zusätzlich sollte das Disk-Image auf einem Mac getestet werden, auf dem Meduvalo zuvor weder installiert noch manuell freigegeben wurde.

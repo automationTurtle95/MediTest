@@ -40,6 +40,21 @@ body{
   line-height:1.55;
   -webkit-font-smoothing:antialiased;
 }
+
+/* Native desktop shells may mark larger title areas as draggable. */
+button,
+a,
+input,
+select,
+textarea,
+summary,
+label,
+[role="button"],
+[onclick],
+[tabindex],
+.button{
+  -webkit-app-region:no-drag;
+}
 .topbar{
   min-height:78px;
   display:flex;
@@ -54,6 +69,8 @@ body{
   position:sticky;
   top:0;
   z-index:10;
+  isolation:isolate;
+  pointer-events:auto;
 }
 .brand{
   display:inline-flex;
@@ -171,7 +188,7 @@ h1,h2,h3,.title-wrap{overflow-wrap:anywhere;word-break:normal;hyphens:auto}
 .help-tip:hover .help-popover,.help-tip:focus-within .help-popover{
   opacity:1;
   visibility:visible;
-  pointer-events:auto;
+  pointer-events:none;
   transform:translateY(0);
 }
 .muted{color:var(--muted)}
@@ -315,7 +332,9 @@ button:disabled,.button:disabled{cursor:not-allowed;opacity:.55;transform:none}
   border-radius:14px;
   box-shadow:var(--shadow);
   backdrop-filter:blur(10px);
+  pointer-events:none;
 }
+.account-dock>*{pointer-events:auto}
 .account-dock-user{
   color:var(--muted);
   font-weight:900;
@@ -336,7 +355,7 @@ button:disabled,.button:disabled{cursor:not-allowed;opacity:.55;transform:none}
 .hidden{display:none!important}
 .auth-page{min-height:100vh;display:grid;grid-template-columns:minmax(280px,440px) minmax(0,1fr);background:var(--bg)}
 .auth-brand{background:#0b3b3c;color:#fff;padding:42px;display:flex;flex-direction:column;justify-content:space-between;min-height:100vh;position:relative;overflow:hidden}
-.auth-brand::before,.auth-brand::after{content:"";position:absolute;border:1px solid rgba(94,217,183,.2);border-radius:50%}
+.auth-brand::before,.auth-brand::after{content:"";position:absolute;border:1px solid rgba(94,217,183,.2);border-radius:50%;pointer-events:none}
 .auth-brand::before{width:420px;height:420px;right:-210px;top:-70px}
 .auth-brand::after{width:260px;height:260px;right:-85px;top:15px;background:rgba(94,217,183,.06)}
 .auth-brand h1{font-size:40px;margin:0 0 18px;position:relative;z-index:1}
@@ -417,6 +436,9 @@ button:disabled,.button:disabled{cursor:not-allowed;opacity:.55;transform:none}
   padding:24px;
   background:color-mix(in srgb, var(--bg) 76%, transparent);
   backdrop-filter:blur(14px);
+  isolation:isolate;
+  overscroll-behavior:contain;
+  pointer-events:auto;
 }
 .modal-panel{
   width:min(540px,100%);
@@ -427,6 +449,9 @@ button:disabled,.button:disabled{cursor:not-allowed;opacity:.55;transform:none}
   padding:28px;
   background:var(--card);
   box-shadow:0 26px 70px rgba(15,23,42,.24);
+  position:relative;
+  z-index:1;
+  pointer-events:auto;
 }
 .modal-panel h2{margin-top:2px}
 .modal-panel p{margin:10px 0}
@@ -678,6 +703,24 @@ button:disabled,.button:disabled{cursor:not-allowed;opacity:.55;transform:none}
   background:color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter:blur(16px);
   animation:successFade .22s ease both;
+}
+
+html[data-platform="macos"] .topbar,
+html[data-platform="macos"] .account-dock,
+html[data-platform="macos"] .modal-backdrop,
+html[data-platform="macos"] .login-success{
+  -webkit-backdrop-filter:none;
+  backdrop-filter:none;
+}
+html[data-platform="macos"] .topbar,
+html[data-platform="macos"] .account-dock{
+  background:var(--card);
+}
+html[data-platform="macos"] .modal-backdrop{
+  background:color-mix(in srgb,var(--bg) 94%,transparent);
+}
+html[data-platform="macos"] .login-success{
+  background:color-mix(in srgb,var(--bg) 97%,transparent);
 }
 .login-success-panel{
   width:min(390px,100%);
