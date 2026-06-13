@@ -2,6 +2,9 @@ namespace MediTest.Models;
 
 public sealed class UserLicenseState
 {
+    public int ProductPriceCents { get; set; }
+    public int MonthlyPriceCents { get; set; }
+    public string Currency { get; set; } = string.Empty;
     public bool BaseProductPurchased { get; set; }
     public DateTime? BaseProductPurchasedAt { get; set; }
     public string BaseProductProvider { get; set; } = string.Empty;

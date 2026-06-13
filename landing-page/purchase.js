@@ -14,7 +14,7 @@ const DOWNLOAD_PRODUCTS = Object.freeze({
     kicker: "Windows-Version",
     lead: "Melde dich an oder erstelle ein Konto. Der einmalige Kauf schaltet den Windows-MSI-Installer und eine 7-tägige Testphase mit allen Funktionen frei.",
     name: "Meduvalo für Windows 10 & 11",
-    details: "64-Bit · MSI-Installer · Version 5.0.5",
+    details: "64-Bit · MSI-Installer · Version 5.0.6",
     benefit: "Windows-MSI direkt nach erfolgreicher Zahlung",
     success: "Dein Kauf ist aktiv und deine 7-tägige Testphase hat begonnen. Der MSI-Installer kann jetzt heruntergeladen werden.",
     downloadLabel: "Windows MSI herunterladen",
@@ -24,7 +24,7 @@ const DOWNLOAD_PRODUCTS = Object.freeze({
     kicker: "macOS · Apple Silicon",
     lead: "Melde dich an oder erstelle ein Konto. Der einmalige Kauf schaltet das signierte und von Apple notarisierte DMG für Apple Silicon sowie eine 7-tägige Testphase frei.",
     name: "Meduvalo für Mac mit Apple Chip",
-    details: "Apple Silicon · signiertes DMG · macOS 11+ · Version 5.0.5",
+    details: "Apple Silicon · signiertes DMG · macOS 11+ · Version 5.0.6",
     benefit: "Notarisiertes macOS-DMG direkt nach erfolgreicher Zahlung",
     success: "Dein Kauf ist aktiv und deine 7-tägige Testphase hat begonnen. Das DMG für Apple Silicon kann jetzt heruntergeladen werden.",
     downloadLabel: "Mac-DMG für Apple Silicon herunterladen",
@@ -34,7 +34,7 @@ const DOWNLOAD_PRODUCTS = Object.freeze({
     kicker: "macOS · Intel",
     lead: "Melde dich an oder erstelle ein Konto. Der einmalige Kauf schaltet das signierte und von Apple notarisierte DMG für Intel-Macs sowie eine 7-tägige Testphase frei.",
     name: "Meduvalo für Intel-Mac",
-    details: "Intel 64-Bit · signiertes DMG · macOS 11+ · Version 5.0.5",
+    details: "Intel 64-Bit · signiertes DMG · macOS 11+ · Version 5.0.6",
     benefit: "Notarisiertes macOS-DMG direkt nach erfolgreicher Zahlung",
     success: "Dein Kauf ist aktiv und deine 7-tägige Testphase hat begonnen. Das DMG für Intel-Macs kann jetzt heruntergeladen werden.",
     downloadLabel: "Mac-DMG für Intel herunterladen",
@@ -109,6 +109,7 @@ function authErrorMessage(code) {
   if (value.includes("INVALID_LOGIN_CREDENTIALS")) return "E-Mail-Adresse oder Passwort ist nicht korrekt.";
   if (value.includes("WEAK_PASSWORD")) return "Das Passwort muss mindestens sechs Zeichen lang sein.";
   if (value.includes("TOO_MANY_ATTEMPTS")) return "Zu viele Versuche. Bitte warte kurz und versuche es erneut.";
+  if (value.includes("INVALID_DYNAMIC_LINK_DOMAIN") || value.includes("INVALID_CONTINUE_URI") || value.includes("UNAUTHORIZED_DOMAIN")) return "Firebase kann meduvalo.at noch nicht als Bestätigungslink-Domain verwenden. Bitte kontaktiere support@meduvalo.at.";
   return "Die Anmeldung konnte nicht abgeschlossen werden.";
 }
 
@@ -210,7 +211,7 @@ function setLoggedOut() {
   checkoutPanel.classList.add("hidden");
   purchaseSuccess.classList.add("hidden");
   securedDownload.removeAttribute("href");
-  checkoutButton.textContent = "Für 14,99 € kaufen";
+  checkoutButton.textContent = `Für ${formatSitePrice(SITE_CONFIG.productPriceCents)} kaufen`;
   freeProductCode.value = "";
   redeemProductCode.textContent = "Gratis herunterladen";
 }
@@ -236,7 +237,8 @@ async function register(email, password) {
   });
   await authRequest("sendOobCode", {
     requestType: "VERIFY_EMAIL",
-    idToken: created.idToken
+    idToken: created.idToken,
+    continueUrl: `${SITE_CONFIG.websiteUrl}/purchase.html?emailVerified=1`
   });
   setMode("login");
   emailInput.value = email;
@@ -379,7 +381,8 @@ resendVerification.addEventListener("click", async () => {
     });
     await authRequest("sendOobCode", {
       requestType: "VERIFY_EMAIL",
-      idToken: auth.idToken
+      idToken: auth.idToken,
+      continueUrl: `${SITE_CONFIG.websiteUrl}/purchase.html?emailVerified=1`
     });
     showMessage("Bestätigungs-E-Mail wurde erneut gesendet.", "success");
   } catch (error) {
@@ -440,6 +443,8 @@ applySelectedProduct();
     setLoggedOut();
     if (new URLSearchParams(location.search).get("checkout") === "success") {
       showMessage("Zahlung abgeschlossen. Bitte melde dich erneut an, um den Download freizuschalten.", "success");
+    } else if (new URLSearchParams(location.search).get("emailVerified") === "1") {
+      showMessage("E-Mail-Adresse bestätigt. Du kannst dich jetzt anmelden.", "success");
     }
   }
 })().catch((error) => showMessage(error.message, "error"));

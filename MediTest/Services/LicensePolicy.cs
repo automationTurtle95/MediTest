@@ -54,7 +54,7 @@ public static class LicensePolicy
         var message = status == "trial"
             ? $"Testversion aktiv bis {license.LicenseEndDate?.ToLocalTime():dd.MM.yyyy}."
             : status == "restricted"
-                ? "Testphase beendet. Vorhandene Tests bleiben nutzbar."
+                ? "Testphase beendet. Tests aus vorhandenen Fragenpools bleiben ausführbar."
                 : "Lizenz aktiv.";
         return new LicenseCheckResult
         {

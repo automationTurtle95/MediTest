@@ -7,23 +7,18 @@ public static class RestrictedAccessPolicy
         path = NormalizePath(path);
         var normalizedMethod = (method ?? string.Empty).Trim().ToUpperInvariant();
 
-        if (Matches(path, "/api/catalog")) return true;
-        if (Matches(path, "/api/stats")) return normalizedMethod == "GET";
-        if (Matches(path, "/api/tests"))
-        {
-            if (normalizedMethod == "GET") return true;
-            if (normalizedMethod == "POST")
-                return path.Equals("/api/tests/start", StringComparison.OrdinalIgnoreCase) ||
-                       MatchesTestAction(path, "submit");
-            if (normalizedMethod == "PUT")
-                return MatchesTestAction(path, "draft");
-            return false;
-        }
+        if (normalizedMethod == "GET")
+            return path.Equals("/api/settings", StringComparison.OrdinalIgnoreCase) ||
+                   path.Equals("/api/tests", StringComparison.OrdinalIgnoreCase) ||
+                   path.Equals("/api/tests/sources", StringComparison.OrdinalIgnoreCase) ||
+                   MatchesTestAction(path, "resume") ||
+                   MatchesTestAction(path, "review");
 
-        if (normalizedMethod != "GET") return false;
-        return Matches(path, "/api/documents") ||
-               Matches(path, "/api/questions") ||
-               path.Equals("/api/settings", StringComparison.OrdinalIgnoreCase);
+        if (normalizedMethod == "POST")
+            return path.Equals("/api/tests/start", StringComparison.OrdinalIgnoreCase) ||
+                   MatchesTestAction(path, "submit");
+
+        return normalizedMethod == "PUT" && MatchesTestAction(path, "draft");
     }
 
     private static bool MatchesTestAction(string path, string action)
@@ -35,10 +30,6 @@ public static class RestrictedAccessPolicy
                int.TryParse(segments[2], out _) &&
                segments[3].Equals(action, StringComparison.OrdinalIgnoreCase);
     }
-
-    private static bool Matches(string path, string prefix) =>
-        path.Equals(prefix, StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase);
 
     private static string NormalizePath(string? path)
     {

@@ -1,6 +1,6 @@
 # Meduvalo
 
-Meduvalo ist eine Lernsoftware für Medizinstudenten zur prüfungsnahen Vorbereitung mit strukturierten Fragen, Tests, Lernmodulen, Fortschrittsübersicht und KI-gestützter Fragengenerierung. Version 5.0.5 nutzt Firebase Authentication, Firestore und Stripe Checkout.
+Meduvalo ist eine Lernsoftware für Medizinstudenten zur prüfungsnahen Vorbereitung mit strukturierten Fragen, Tests, Lernmodulen, Fortschrittsübersicht und KI-gestützter Fragengenerierung. Version 5.0.6 nutzt Firebase Authentication, Firestore und Stripe Checkout.
 
 ## Branding und Kompatibilität
 
@@ -35,7 +35,7 @@ umbenannt werden. Details stehen in [../BRANDING.md](../BRANDING.md).
 - Firestore-Katalog als aufklappbares Fach- und Themenverzeichnis mit sichtbaren Preisen, Kaufübersicht und Admin-Veröffentlichung
 - Katalogordner `MedAT` mit festem Einzelpreis von 49,99 EUR pro Test
 - Stripe Checkout für Basiskauf, Monatsabo und Katalogtests, Stripe-Kundenportal sowie serverseitige Lizenz-Synchronisierung
-- Lizenzmodell mit 14,99 EUR Einmalkauf, 7 Tagen Vollzugang und optional 5,99 EUR/Monat
+- Lizenzmodell mit 24,99 EUR Einmalkauf, 7 Tagen Vollzugang und optional 9,99 EUR/Monat
 - eingeschränkter Modus nach der Testphase: vorhandene Tests bleiben ausführbar
 - Bereich `Rechtliches & Lizenz` mit zentralen Produktdaten, rechtlichen Links, Gerätebindung und Lizenzprüfung
 - Versionierte AGB-/Datenschutz-Zustimmung in Firestore und begrenzter Offline-Modus mit verschlüsseltem Cache
@@ -119,14 +119,14 @@ Meduvalo läuft installationsbezogen als Einzelinstanz. Unter Windows wird die O
 
 Die Seite `Rechtliches & Lizenz` zeigt Produkt- und Entwicklerdaten, den Firebase-Nutzer, Lizenztyp, Lizenzstatus, Gerätebelegung, rechtliche Links, Basiskauf, Testphase, Abo-Status und Premium-Code-Eingabe. Standardwerte:
 
-- 14,99 EUR einmalig für Installer und Basiskauf
+- 24,99 EUR einmalig für Installer und Basiskauf
 - 7 Tage vollständige Testphase ab bestätigter Zahlung
-- 5,99 EUR pro Monat für den optionalen Vollzugang danach
-- ohne Abo bleiben vorhandene Tests, Ergebnisse und gekaufte Katalogtests nutzbar
+- 9,99 EUR pro Monat für den optionalen Vollzugang danach
+- ohne Abo können Tests aus vorhandenen Fragenpools gestartet, fortgesetzt und ausgewertet werden; alle anderen Funktionen sind gesperrt
 - Premium- und Gratis-Code-Hashes liegen ausschließlich in den Firebase-Functions-Parametern
 - Gratis-Katalog-Codes können von jedem Benutzerkonto genau einmal verwendet werden
-- 1 Gerät pro neuem Basiskauf und 7 Tage Offline-Nutzung nach einer erfolgreichen Online-Prüfung
-- einmalige, 24 Stunden gültige Installationsberechtigung bindet den ersten Start an das Download-Gerät
+- 2 Geräte pro neuem Basiskauf und 7 Tage Offline-Nutzung nach einer erfolgreichen Online-Prüfung
+- jeder Download für ein noch freies Gerät erhält eine einmalige, 24 Stunden gültige Installationsberechtigung
 - AGB- und Datenschutz-Version `5.0`; geänderte Versionen erfordern eine neue aktive Zustimmung
 
 Die geschützte Function `meditestLicenseAccess` verwaltet `users`, `licenses`, `deviceActivations`, `termsAcceptances` und `appConfig`. Der Client verwendet ausschließlich die UID aus Firebase Authentication. Direkte Schreibzugriffe auf Lizenz-, Geräte- und Zustimmungsdaten sind in den Firestore-Regeln gesperrt. Lokale Lizenzdaten liegen nur als mit ASP.NET Data Protection verschlüsselter Cache vor.
@@ -144,7 +144,7 @@ cd MediTest
 powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 ```
 
-Die fertigen Artefakte liegen danach unter `dist/MediTest-5.0.5/`. Frühere Release-Ordner bleiben erhalten.
+Die fertigen Artefakte liegen danach unter `dist/MediTest-5.0.6/`. Frühere Release-Ordner bleiben erhalten.
 
 Ohne `-WindowsOnly` können lokal weiterhin Test-ZIPs für Intel und Apple Silicon erzeugt werden. Der produktive Release-Workflow akzeptiert ab Version 5.0.4 ausschließlich signierte und von Apple notarisierte DMG-Disk-Images.
 

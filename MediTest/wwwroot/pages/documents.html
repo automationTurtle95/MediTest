@@ -10,15 +10,15 @@
 <header class="topbar"><a class="brand" href="/pages/documents.html">Meduvalo</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
 <main>
   <section class="card">
-    <h1>Dokumente &amp; Fragenpools</h1>
-    <p class="muted">Lade Unterlagen hoch, importiere vorhandene Fragen, generiere KI-Fragen und starte Tests aus deinen Fragenpools.</p>
+    <h1>Dokumente &amp; Tests</h1>
+    <p class="muted">Dokumente sind deine Quellen für die KI-Generierung. Fertige Fragenpools werden getrennt als Tests verwaltet.</p>
     <div id="msg" class="hidden"></div>
   </section>
 
   <section id="uploadPanel" class="tool-grid">
     <article class="card">
       <h2>Unterlage hochladen</h2>
-      <p class="muted">PDF, PPTX oder TXT hochladen und automatisch als Fragenpool vorbereiten.</p>
+      <p class="muted">PDF, PPTX oder TXT als Quelldokument hochladen und daraus anschließend einen Test generieren.</p>
       <form id="uploadForm">
         <label for="file">Unterlage</label>
         <input id="file" name="file" type="file" accept=".pdf,.pptx,.txt" required>
@@ -49,8 +49,8 @@
   </section>
 
   <section class="card">
-    <h2>Gespeicherte Dokumente</h2>
-    <p class="muted">Ordner können mit einem Pfad wie „Studium/Innere Medizin“ angelegt werden.</p>
+    <h2>Gespeicherte Inhalte</h2>
+    <p class="muted">Dokumente und Tests liegen in getrennten Hauptverzeichnissen. Eigene Unterordner können mit einem Pfad wie „Studium/Innere Medizin“ angelegt werden.</p>
     <div id="docs" class="catalog-explorer"></div>
   </section>
 </main>
@@ -63,16 +63,25 @@ let aiGenerationContext=null;
 let documentPreviewOpen=false;
 function questionCountOptions(selected){const counts=[5,10,15,25]; selected=Math.min(25,Math.max(1,Number(selected)||25)); if(!counts.includes(selected))counts.unshift(selected); return counts.map(c=>`<option value="${c}" ${c===selected?'selected':''}>${c}</option>`).join('');}
 function documentTypeLabel(doc){
+  if(doc?.itemType==='test')return 'Test';
   const extension=String(doc?.fileName||'').split('.').pop().toUpperCase();
   return ['PDF','PPTX','TXT'].includes(extension)?extension:'Dokument';
+}
+function formatFileSize(bytes){
+  let value=Math.max(0,Number(bytes)||0);
+  const units=['B','KB','MB','GB'];
+  let unit=0;
+  while(value>=1024&&unit<units.length-1){value/=1024;unit++;}
+  const digits=unit===0?0:value>=10?1:2;
+  return `${value.toLocaleString('de-AT',{minimumFractionDigits:0,maximumFractionDigits:digits})} ${units[unit]}`;
 }
 function documentFolderSegments(doc){
   const source=String(doc?.folderPath||'').trim()||'Unsortiert';
   return source.split(/[\\/]+/).map(value=>value.trim()).filter(Boolean);
 }
-function existingDocumentFolders(){
+function existingDocumentFolders(itemType){
   const folders=new Set();
-  pageDocuments.forEach(doc=>{
+  pageDocuments.filter(doc=>!itemType||doc.itemType===itemType).forEach(doc=>{
     const segments=documentFolderSegments(doc);
     let path='';
     segments.forEach(segment=>{
@@ -82,19 +91,22 @@ function existingDocumentFolders(){
   });
   return [...folders].sort((a,b)=>a.localeCompare(b,'de'));
 }
-function createDocumentFolderNode(name,path){
-  return {name,path,folders:new Map(),documents:[],documentCount:0};
+function createDocumentFolderNode(name,path,itemType){
+  return {name,path,itemType,folders:new Map(),documents:[],documentCount:0};
 }
-function buildDocumentTree(documents){
-  const root=createDocumentFolderNode('Dokumente','');
+function buildDocumentTrees(documents){
+  const roots=[
+    createDocumentFolderNode('Dokumente','', 'document'),
+    createDocumentFolderNode('Tests','', 'test')
+  ];
   documents.forEach(doc=>{
-    let node=root;
+    let node=roots.find(root=>root.itemType===(doc.itemType==='test'?'test':'document'));
     documentFolderSegments(doc).forEach(segment=>{
       const key=segment.toLocaleLowerCase('de');
       let child=[...node.folders.values()].find(entry=>entry.name.toLocaleLowerCase('de')===key);
       if(!child){
         const path=node.path?`${node.path}/${segment}`:segment;
-        child=createDocumentFolderNode(segment,path);
+        child=createDocumentFolderNode(segment,path,node.itemType);
         node.folders.set(segment,child);
       }
       node=child;
@@ -106,21 +118,34 @@ function buildDocumentTree(documents){
     node.folders.forEach(child=>{node.documentCount+=count(child);});
     return node.documentCount;
   }
-  count(root);
-  return root;
+  roots.forEach(count);
+  return roots;
 }
 function documentCard(d,generateDefault,testDefault){
+  const isTest=d.itemType==='test';
+  const badges=isTest
+    ? `<span class="badge">${d.questionCount} Fragen</span><span class="badge">Test</span>`
+    : `<span class="badge">Dokument</span><span class="badge">${documentTypeLabel(d)}</span>`;
+  const testFields=isTest?`
+      <label>Testname (optional)</label>
+      <input type="text" id="testname-${d.id}" placeholder="z. B. Kardiologie Probe 1">
+      <div class="field-row"><div><label>Testlänge</label><input id="testcount-${d.id}" type="number" min="1" max="100" step="1" value="${testDefault}"></div></div>`:'';
+  const generationFields=!isTest&&!pageRestrictedMode&&d.canGenerateQuestions?`
+      <div class="field-row"><div><label>Fragen generieren</label><select id="count-${d.id}">${questionCountOptions(generateDefault)}</select></div></div>`:'';
+  const primaryActions=isTest
+    ? `<a class="button" href="/pages/questions.html?id=${d.id}">Fragen ansehen</a><button type="button" class="primary" onclick="startTest(${d.id})">Test starten</button><button type="button" onclick="exportTxt(${d.id})">Export .txt</button>`
+    : `${!pageRestrictedMode&&d.canGenerateQuestions?`<button class="primary" type="button" onclick="openAiGenerationModal(${d.id})">Test mit KI generieren</button>`:''}`;
+  const previewAction=`<button type="button" onclick="openDocumentPreview(${d.id})">${isTest?'Inhalt ansehen':'Dokument ansehen'}</button>`;
+  const managementActions=pageRestrictedMode?'':`<button type="button" onclick="moveDocument(${d.id})">Verschieben</button><button type="button" class="danger" onclick="deleteDocument(${d.id})">Löschen</button>`;
   return `<article class="catalog-file">
     <span class="catalog-file-icon" aria-hidden="true">
       <svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5M10 12h6M10 16h6"></path></svg>
     </span>
     <div class="catalog-file-main">
-      <div class="catalog-file-title"><h3>${esc(d.fileName)}</h3><span class="badge">${d.questionCount} Fragen</span><span class="badge">${documentTypeLabel(d)}</span>${pageRestrictedMode?' <span class="badge">Vorhandener Inhalt</span>':''}</div>
-      <p class="muted">${d.textLength} Zeichen · ${new Date(d.createdAt).toLocaleString()} · ${esc(d.folderPath||'Unsortiert')}</p>
-      <label>Testname (optional)</label>
-      <input type="text" id="testname-${d.id}" placeholder="z. B. Kardiologie Probe 1">
-      <div class="field-row">${pageRestrictedMode?'':`<div><label>Fragen generieren</label><select id="count-${d.id}">${questionCountOptions(generateDefault)}</select></div>`}<div><label>Testlänge</label><input id="testcount-${d.id}" type="number" min="1" max="100" step="1" value="${testDefault}"></div></div>
-      <div class="actions">${pageRestrictedMode?'':`<button type="button" onclick="openAiGenerationModal(${d.id})">Generieren</button>`}<button type="button" onclick="openDocumentPreview(${d.id})">Dokument ansehen</button><a class="button" href="/pages/questions.html?id=${d.id}">Fragen ansehen</a><button type="button" class="primary" onclick="startTest(${d.id})">Test starten</button><button type="button" onclick="exportTxt(${d.id})">Export .txt</button>${pageRestrictedMode?'':`<button type="button" onclick="moveDocument(${d.id})">Verschieben</button><button type="button" class="danger" onclick="deleteDocument(${d.id})">Löschen</button>`}</div>
+      <div class="catalog-file-title"><h3>${esc(d.fileName)}</h3>${badges}${pageRestrictedMode?' <span class="badge">Vorhandener Inhalt</span>':''}</div>
+      <p class="muted">${formatFileSize(d.fileSizeBytes)} · ${new Date(d.createdAt).toLocaleString()} · ${esc(d.folderPath||'Unsortiert')}</p>
+      ${testFields}${generationFields}
+      <div class="actions">${primaryActions}${previewAction}${managementActions}</div>
     </div>
   </article>`;
 }
@@ -133,18 +158,23 @@ function documentFolder(node,generateDefault,testDefault,depth=0){
     .sort((a,b)=>String(a.fileName).localeCompare(String(b.fileName),'de'))
     .map(doc=>documentCard(doc,generateDefault,testDefault))
     .join('');
-  return `<details class="catalog-tree-folder depth-${Math.min(depth,4)}" ${depth<1?'open':''}>
+  const isRoot=depth===0;
+  const rootClass=isRoot?` document-root-folder document-root-folder--${node.itemType}`:'';
+  const itemLabel=node.itemType==='test'?(node.documentCount===1?'Test':'Tests'):(node.documentCount===1?'Dokument':'Dokumente');
+  const empty=!folders&&!documents?`<p class="catalog-empty">Noch keine ${node.itemType==='test'?'Tests':'Dokumente'} vorhanden.</p>`:'';
+  return `<details class="catalog-tree-folder depth-${Math.min(depth,4)}${rootClass}" ${isRoot?'open':''}>
     <summary>
       <span class="catalog-folder-chevron" aria-hidden="true">›</span>
       <span class="catalog-folder-icon" aria-hidden="true"></span>
       <span class="catalog-folder-name">${esc(node.name)}</span>
-      <span class="catalog-folder-count">${node.documentCount} ${node.documentCount===1?'Dokument':'Dokumente'}</span>
+      <span class="catalog-folder-count">${node.documentCount} ${itemLabel}</span>
     </summary>
-    <div class="catalog-tree-contents">${folders}${documents}</div>
+    <div class="catalog-tree-contents">${folders}${documents}${empty}</div>
   </details>`;
 }
 async function loadDocs(){
   const box=document.getElementById('docs');
+  const msg=document.getElementById('msg');
   const [docs,settings,license]=await Promise.all([
     api('/api/documents'),
     getAppSettings().catch(()=>null),
@@ -154,19 +184,12 @@ async function loadDocs(){
   pageRestrictedMode=license?.restrictedMode===true;
   document.getElementById('uploadPanel').classList.toggle('hidden',pageRestrictedMode);
   if(settings) pageSettings=settings;
-  if(!docs.length){
-    box.innerHTML=pageRestrictedMode
-      ? '<p class="muted">Es sind noch keine vorhandenen Fragenpools verfügbar. Neue Inhalte können mit einem aktiven Monatsabo erstellt werden.</p>'
-      : '<p class="muted">Noch keine Dokumente. Nutze oben den Hochladen-Bereich oder importiere eine TXT-Fragenliste.</p>';
-    return;
-  }
+  if(!docs.length&&pageRestrictedMode)
+    status(msg,'Es sind noch keine Tests verfügbar. Neue Inhalte können mit einem aktiven Monatsabo erstellt werden.','status');
   const generateDefault=Number(pageSettings.defaultGenerateQuestionCount)||25;
   const testDefault=Number(pageSettings.defaultTestQuestionCount)||25;
-  const tree=buildDocumentTree(docs);
-  box.innerHTML=[...tree.folders.values()]
-    .sort((a,b)=>a.name.localeCompare(b.name,'de'))
-    .map(folder=>documentFolder(folder,generateDefault,testDefault))
-    .join('');
+  const trees=buildDocumentTrees(docs);
+  box.innerHTML=trees.map(tree=>documentFolder(tree,generateDefault,testDefault)).join('');
   enhanceTooltips(box);
 }
 function closeDocumentPreview(){
@@ -192,7 +215,7 @@ async function openDocumentPreview(id){
       <div class="recommendation-head">
         <div>
           <h2 id="documentPreviewTitle">${esc(doc.fileName)}</h2>
-          <p class="muted">${documentTypeLabel(doc)} · ${aiSourceSize(doc.textLength)} · ${esc(doc.folderPath||'Unsortiert')} · hochgeladen am ${new Date(doc.createdAt).toLocaleString()}</p>
+          <p class="muted">${documentTypeLabel(doc)} · ${formatFileSize(doc.fileSizeBytes)} · ${esc(doc.folderPath||'Unsortiert')} · hochgeladen am ${new Date(doc.createdAt).toLocaleString()}</p>
         </div>
         <button type="button" onclick="closeDocumentPreview()">Schließen</button>
       </div>
@@ -226,10 +249,6 @@ function showGeneratedLink(msg,id,r){
   link.textContent='Fragenpool mit neuen Fragen öffnen';
   actions.appendChild(link);
   msg.appendChild(actions);
-}
-function aiSourceSize(chars){
-  const value=Number(chars)||0;
-  return value>=1000?`${(value/1000).toFixed(1).replace('.',',')} Tsd. Zeichen`:`${value} Zeichen`;
 }
 function closeAiGenerationModal(){
   if(aiGenerationContext?.running)return;
@@ -314,6 +333,10 @@ function openAiGenerationModal(id){
   if(document.getElementById('aiGenerationModal'))return;
   const doc=pageDocuments.find(item=>Number(item.id)===Number(id));
   if(!doc)return;
+  if(!doc.canGenerateQuestions||doc.itemType==='test'){
+    status(document.getElementById('msg'),'Aus einem bestehenden Test kann kein weiterer Test generiert werden.','status error');
+    return;
+  }
   const selectedCount=Number(document.getElementById(`count-${id}`)?.value)||pageSettings.defaultGenerateQuestionCount||25;
   aiGenerationContext={id:Number(id),doc,count:selectedCount,quota:null,loadingQuota:true,running:false,cooldownTimer:null};
   const modal=document.createElement('div');
@@ -326,9 +349,9 @@ function openAiGenerationModal(id){
       <h2 id="aiGenerationTitle">Generierung vorbereiten</h2>
       <p class="muted">Prüfe die Übersicht. Die Erstellung beginnt erst nach deiner ausdrücklichen Bestätigung.</p>
       <div class="ai-generation-document">
-        <div><span class="muted">Fragenpool</span><strong>${esc(doc.fileName)}</strong></div>
-        <div><span class="muted">Quelltext</span><strong>${aiSourceSize(doc.textLength)}</strong></div>
-        <div><span class="muted">Vorhanden</span><strong>${Number(doc.questionCount)||0} Fragen</strong></div>
+        <div><span class="muted">Dokument</span><strong>${esc(doc.fileName)}</strong></div>
+        <div><span class="muted">Dateigröße</span><strong>${formatFileSize(doc.fileSizeBytes)}</strong></div>
+        <div><span class="muted">Ergebnis</span><strong>Neuer Test</strong></div>
       </div>
       <label for="aiGenerationCount">Anzahl neuer KI-Fragen</label>
       <select id="aiGenerationCount" onchange="updateAiGenerationOverview()">${questionCountOptions(selectedCount)}</select>
@@ -393,7 +416,7 @@ async function startAiGeneration(){
     await loadDocs();
     const ids=Array.isArray(result.questionIds)?result.questionIds:[];
     resultBox.className='status success';
-    resultBox.innerHTML=`<strong>Generierung abgeschlossen</strong><p>${Number(result.added)||0} neue Fragen wurden gespeichert. Der Fragenpool enthält jetzt ${Number(result.total)||0} Fragen.</p>${ids.length?`<div class="actions"><a class="button primary" href="${newQuestionsHref(context.id,ids)}">Neue Fragen ansehen</a></div>`:''}`;
+    resultBox.innerHTML=`<strong>Generierung abgeschlossen</strong><p>${Number(result.added)||0} neue Fragen wurden gespeichert. Der neue Test enthält ${Number(result.total)||0} Fragen und liegt nun im Hauptverzeichnis „Tests“.</p>${ids.length?`<div class="actions"><a class="button primary" href="${newQuestionsHref(context.id,ids)}">Neue Fragen ansehen</a></div>`:''}`;
     document.getElementById('aiGenerationTitle').textContent='Generierung abgeschlossen';
     startButton.classList.add('hidden');
     cancelButton.disabled=false;
@@ -444,7 +467,7 @@ function moveDocument(id){
   const doc=pageDocuments.find(item=>Number(item.id)===Number(id));
   if(!doc)return;
   closeMoveDocumentModal();
-  const folders=existingDocumentFolders();
+  const folders=existingDocumentFolders(doc.itemType);
   const current=String(doc.folderPath||'').trim();
   const options=[
     `<option value="" ${current?'':'selected'}>Unsortiert</option>`,
@@ -456,7 +479,7 @@ function moveDocument(id){
   modal.addEventListener('click',event=>{if(event.target===modal)closeMoveDocumentModal();});
   modal.innerHTML=`
     <section class="modal-panel move-document-modal" role="dialog" aria-modal="true" aria-labelledby="moveDocumentTitle">
-      <p class="eyebrow">Fragenkatalog verschieben</p>
+      <p class="eyebrow">${doc.itemType==='test'?'Test':'Dokument'} verschieben</p>
       <h2 id="moveDocumentTitle">${esc(doc.fileName)}</h2>
       <p class="muted">Wähle einen vorhandenen Ordner oder lege mit einem neuen Pfad direkt einen Ordner an.</p>
       <div class="move-document-choice">

@@ -23,7 +23,8 @@ Zugriffsregeln und Hosting-Konfiguration bleiben getrennt unter `../firebase`.
 
 ## Marke, Preis und Kaufablauf ändern
 
-Zentrale Werte stehen am Anfang von `script.js` in `SITE_CONFIG`:
+Markenwerte und lokale Preis-Fallbacks stehen am Anfang von `script.js` in
+`SITE_CONFIG`:
 
 - `brandName`: sichtbarer Produktname
 - `domain`: öffentliche Domain `meduvalo.at`
@@ -31,9 +32,17 @@ Zentrale Werte stehen am Anfang von `script.js` in `SITE_CONFIG`:
 - `claim`: Hauptclaim
 - `shortClaim`: alternativer Kurzclaim
 - `description`: zentrale Produktbeschreibung
-- `purchasePrice`: einmaliger Kaufpreis für Installer und 7-tägige Testphase
-- `monthlyPrice`: optionaler Monatspreis für den Vollzugang nach der Testphase
+- `productPriceCents`: lokaler Fallback für den einmaligen Kaufpreis
+- `monthlyPriceCents`: lokaler Fallback für den Monatspreis
+- `currency`: Währung der lokalen Preis-Fallbacks
 - `purchaseUrl`: getrennte Kaufseite
+
+Die produktive Preisquelle sind `BILLING_PRODUCT_PRICE_CENTS`,
+`BILLING_MONTHLY_PRICE_CENTS` und `BILLING_CURRENCY` in
+`firebase/functions/.env.<project-id>`. `meditestPricing` liefert diese Werte
+über `/api/pricing` an die Landingpage; Checkout und Preisanzeige verwenden
+damit dieselbe serverseitige Konfiguration. Nach einer Preisänderung müssen
+Functions und Hosting erneut bereitgestellt werden.
 
 `purchase.html` meldet Nutzer über den bestehenden Kontodienst an und startet
 den serverseitigen Einmalkauf-Checkout. Der Windows-Download wird erst von

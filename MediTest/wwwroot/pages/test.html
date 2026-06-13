@@ -78,6 +78,8 @@ document.getElementById('submit').onclick=async()=>{
 };
 async function init(){
   const id=qs('id');
+  const license=await api('/api/license/status').catch(()=>null);
+  if(license?.restrictedMode) document.getElementById('pdf').classList.add('hidden');
   const stored=JSON.parse(sessionStorage.getItem('currentTest')||'null');
   if(stored&&(!id||String(stored.testSessionId)===String(id))) test=stored;
   else if(id) test=await api(`/api/tests/${id}/resume`);

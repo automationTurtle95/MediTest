@@ -2,6 +2,7 @@ const APP_BRAND = Object.freeze({
   productName: 'Meduvalo',
   domain: 'meduvalo.at',
   websiteUrl: 'https://meduvalo.at',
+  supportEmail: 'support@meduvalo.at',
   claim: 'Prüfungsnah lernen. Sicherer bestehen.',
   shortClaim: 'Medizinfragen smart trainieren.',
   logoPath: '/assets/meduvalo-logo.svg'
@@ -74,6 +75,7 @@ function firebaseErrorMessage(code) {
   if (raw.includes('WEAK_PASSWORD')) return 'Das Passwort muss mindestens 6 Zeichen lang sein.';
   if (raw.includes('TOO_MANY_ATTEMPTS_TRY_LATER')) return 'Zu viele Versuche. Bitte später erneut versuchen.';
   if (raw.includes('USER_NOT_FOUND')) return 'Zu dieser E-Mail-Adresse wurde kein Konto gefunden.';
+  if (raw.includes('INVALID_DYNAMIC_LINK_DOMAIN') || raw.includes('INVALID_CONTINUE_URI') || raw.includes('UNAUTHORIZED_DOMAIN')) return 'Firebase kann meduvalo.at noch nicht als Bestätigungslink-Domain verwenden. Bitte kontaktiere support@meduvalo.at.';
   return raw || 'Firebase-Anmeldung fehlgeschlagen.';
 }
 
@@ -209,7 +211,8 @@ async function registerWithFirebase(payload) {
   }
   await firebaseAuthRequest('sendOobCode', {
     requestType: 'VERIFY_EMAIL',
-    idToken: auth.idToken
+    idToken: auth.idToken,
+    continueUrl: `${APP_BRAND.websiteUrl}/purchase.html?emailVerified=1`
   });
   clearAuthSession();
   return {
@@ -320,7 +323,8 @@ async function resendFirebaseEmailVerification(payload) {
   if (account?.emailVerified === true) return { verified: true, message: 'Die E-Mail-Adresse ist bereits bestätigt. Du kannst dich jetzt anmelden.' };
   await firebaseAuthRequest('sendOobCode', {
     requestType: 'VERIFY_EMAIL',
-    idToken: auth.idToken
+    idToken: auth.idToken,
+    continueUrl: `${APP_BRAND.websiteUrl}/purchase.html?emailVerified=1`
   });
   return { verified: false, message: 'Bestätigungs-E-Mail wurde erneut gesendet.' };
 }
@@ -646,6 +650,7 @@ const TOOLTIP_BY_TEXT = new Map([
   ['Manuell', 'Eigene Multiple-Choice-Fragen ohne Datei anlegen.'],
   ['Tests', 'Gestartete und abgeschlossene Tests ansehen.'],
   ['Statistik', 'Ergebnisse und Fehlerschwerpunkte auswerten.'],
+  ['Support', 'Kontaktformular für Fragen und Supportanfragen öffnen.'],
   ['Rechtliches & Lizenz', 'Produktdaten, Rechtstexte, Geräte und Lizenzstatus ansehen.'],
   ['Einstellungen', 'Profil und Darstellung konfigurieren.'],
   ['Einloggen', `Mit deinem ${APP_BRAND.productName}-Konto anmelden.`],
@@ -685,7 +690,8 @@ const TOOLTIP_BY_TEXT = new Map([
   ['Kaufen', 'Kauf oder Checkout für diesen Katalogtest vorbereiten.'],
   ['Konto endgültig löschen', 'Konto und sämtliche zugehörigen Nutzerdaten dauerhaft entfernen.'],
   ['Bestätigungs-E-Mail erneut senden', 'Neue E-Mail mit einem Link zur Bestätigung der Konto-Adresse senden.'],
-  ['Abo starten', 'Vollzugang für 5,99 € pro Monat nach der Testphase abschließen.'],
+  ['An Support senden', 'Supportanfrage sicher übermitteln.'],
+  ['Abo starten', 'Vollzugang zum angezeigten Monatspreis nach der Testphase abschließen.'],
   ['Code einlösen', 'Premium-Code prüfen und dieses Konto freischalten.'],
   ['Aktualisieren', 'Statistik mit der aktuellen Auswahl neu laden.'],
   ['Zum Thema springen', 'Ausgewähltes Thema öffnen und alle enthaltenen Fragen anzeigen.'],
@@ -874,20 +880,47 @@ async function logoutApp() {
 
 let pendingLegalLicenseState = null;
 
-function showRestrictedModeBanner() {
+const RESTRICTED_ALLOWED_PAGES = new Set([
+  '/pages/tests.html',
+  '/pages/test.html',
+  '/pages/review.html',
+  '/pages/license.html',
+  '/pages/settings.html'
+]);
+
+function applyRestrictedNavigation() {
+  const lockedPages = new Set([
+    '/pages/documents.html',
+    '/pages/upload.html',
+    '/pages/questions.html',
+    '/pages/manual.html',
+    '/pages/catalog.html',
+    '/pages/stats.html'
+  ]);
+  document.querySelectorAll('header.topbar nav a[href]').forEach(link => {
+    if (lockedPages.has(link.getAttribute('href'))) link.remove();
+  });
+  document.querySelectorAll('a.brand').forEach(link => {
+    link.href = '/pages/tests.html';
+  });
+}
+
+function showRestrictedModeBanner(license) {
   window.mediTestRestrictedMode = true;
+  applyRestrictedNavigation();
   if (document.getElementById('restrictedModeBanner')) return;
   const main = document.querySelector('main');
   if (!main) return;
+  const monthlyPrice = priceLabel(license?.monthlyPriceCents || 999, license?.currency || 'EUR');
   const banner = document.createElement('section');
   banner.id = 'restrictedModeBanner';
   banner.className = 'status restricted-mode-banner';
   banner.innerHTML = `
     <div>
       <strong>Eingeschränkter Modus</strong>
-      <span>Die 7-tägige Testphase ist beendet. Vorhandene Tests, Auswertungen und gekaufte Katalogtests bleiben nutzbar.</span>
+      <span>Die 7-tägige Testphase ist beendet. Tests aus vorhandenen Fragenpools können weiterhin gestartet, fortgesetzt und ausgewertet werden.</span>
     </div>
-    <a class="button primary" href="/pages/license.html">Vollzugang für 5,99 € / Monat</a>`;
+    <a class="button primary" href="/pages/license.html">Vollzugang für ${esc(monthlyPrice)} / Monat</a>`;
   main.prepend(banner);
 }
 
@@ -943,7 +976,7 @@ function showTermsAcceptanceModal(state) {
 }
 
 function showLicenseAccessModal(state) {
-  if (location.pathname.endsWith('/pages/license.html')) return;
+  if (location.pathname.endsWith('/pages/license.html') || location.pathname.endsWith('/pages/contact.html')) return;
   const result = state?.access?.result || {};
   if (result.isValid || document.getElementById('licenseAccessModal')) return;
   const modal = document.createElement('div');
@@ -970,7 +1003,13 @@ async function ensureLegalLicenseCompliance() {
   const state = await api('/api/legal-license/status');
   pendingLegalLicenseState = state;
   if (state.access?.result?.requiresTermsAcceptance) showTermsAcceptanceModal(state);
-  else if (state.access?.result?.status === 'restricted') showRestrictedModeBanner();
+  else if (state.access?.result?.status === 'restricted') {
+    const license = await api('/api/license/status').catch(() => null);
+    showRestrictedModeBanner(license);
+    if (!RESTRICTED_ALLOWED_PAGES.has(location.pathname)) {
+      location.replace('/pages/tests.html?restricted=1');
+    }
+  }
   else if (!state.access?.result?.isValid) showLicenseAccessModal(state);
   return state;
 }
@@ -1060,6 +1099,7 @@ function showTrialFeedbackModal(settings) {
       <p class="eyebrow">7-tägige Testphase beendet</p>
       <h2 id="trialFeedbackTitle">Wie war deine Erfahrung mit ${APP_BRAND.productName}?</h2>
       <p>Dein kurzes Feedback hilft uns, Lernabläufe und Funktionen gezielt zu verbessern.</p>
+      <p class="muted">Das Formular speichert dein Feedback in deinem Benutzerkonto und versendet keine E-Mail. Für eine Nachricht an den Support nutze das <a href="/pages/contact.html">Kontaktformular</a>.</p>
       <form id="trialFeedbackForm">
         <label for="trialFeedbackRating">Gesamtbewertung</label>
         <select id="trialFeedbackRating" required>
@@ -1073,7 +1113,7 @@ function showTrialFeedbackModal(settings) {
         <label for="trialFeedbackComment">Was hat dir gefallen oder gefehlt? <span class="muted">(optional)</span></label>
         <textarea id="trialFeedbackComment" maxlength="2000" rows="5" placeholder="Dein Feedback"></textarea>
         <div class="actions">
-          <button class="primary" type="submit" id="submitTrialFeedbackButton">Feedback senden</button>
+          <button class="primary" type="submit" id="submitTrialFeedbackButton">Feedback speichern</button>
           <button type="button" id="deferTrialFeedbackButton">In 7 Tagen erinnern</button>
         </div>
         <div id="trialFeedbackStatus" class="hidden"></div>
@@ -1134,11 +1174,12 @@ async function ensureTrialFeedback(settings) {
 }
 
 async function ensureUserOnboarding() {
-  if (location.pathname.endsWith('/pages/login.html')) return;
+  if (location.pathname.endsWith('/pages/login.html') || location.pathname.endsWith('/pages/contact.html')) return;
   const user = await currentAuthUser(false);
   if (!user) return;
-  const settings = await ensureProfileCompletion(user);
-  await ensureLegalLicenseCompliance();
+  const legalState = await ensureLegalLicenseCompliance();
+  const restricted = legalState?.access?.result?.status === 'restricted';
+  const settings = restricted ? await getAppSettings() : await ensureProfileCompletion(user);
   await ensureTrialFeedback(settings);
 }
 
@@ -1218,6 +1259,14 @@ document.addEventListener('DOMContentLoaded', () => {
     license.href = '/pages/license.html';
     license.textContent = 'Rechtliches & Lizenz';
     nav.appendChild(license);
+  }
+  if (!nav.querySelector('a[href="/pages/contact.html"]')) {
+    const support = document.createElement('a');
+    support.href = '/pages/contact.html';
+    support.textContent = 'Support';
+    const license = nav.querySelector('a[href="/pages/license.html"]');
+    if (license) nav.insertBefore(support, license);
+    else nav.appendChild(support);
   }
   if (!nav.querySelector('a[href="/pages/settings.html"]')) {
     const link = document.createElement('a');

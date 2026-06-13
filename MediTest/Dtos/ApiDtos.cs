@@ -1,6 +1,15 @@
 namespace MediTest.Dtos;
 
-public sealed record DocumentDto(int Id, string FileName, string FolderPath, string ContentType, DateTime CreatedAt, int QuestionCount, int TextLength);
+public sealed record DocumentDto(
+    int Id,
+    string FileName,
+    string FolderPath,
+    string ContentType,
+    DateTime CreatedAt,
+    int QuestionCount,
+    long FileSizeBytes,
+    string ItemType,
+    bool CanGenerateQuestions);
 public sealed record UpdateDocumentFolderRequest(string? FolderPath);
 public sealed record GenerateQuestionsRequest(int Count);
 
@@ -25,7 +34,13 @@ public sealed record CatalogTestDto(
     int PriceCents = 199,
     string Currency = "EUR",
     bool Purchased = false,
-    bool RequiresPurchase = false);
+    bool RequiresPurchase = false,
+    string StripeProductId = "",
+    string StripePriceId = "",
+    int PriceAmount = 0,
+    string TaxCode = "",
+    bool Active = true,
+    bool StripeReady = false);
 
 public sealed record CatalogDownloadRequest(string? DocumentName);
 
@@ -41,6 +56,27 @@ public sealed record CatalogPublishRequest(
     string? Difficulty);
 
 public sealed record CatalogPublishResult(string Id, string Title, int QuestionCount);
+public sealed record CatalogQuestionListDto(
+    string CatalogId,
+    string Title,
+    int QuestionCount,
+    List<CatalogQuestionDto> Questions);
+public sealed record CatalogQuestionDto(
+    int Index,
+    string QuestionText,
+    List<string> Options,
+    int CorrectOptionIndex,
+    string Explanation,
+    string Topic,
+    string Difficulty,
+    bool IsAiGenerated);
+public sealed record UpdateCatalogQuestionRequest(
+    string QuestionText,
+    List<string> Options,
+    int CorrectOptionIndex,
+    string Explanation,
+    string Topic,
+    string Difficulty);
 public sealed record CatalogUpdateRequest(
     int DocumentId,
     string? Title,
@@ -264,6 +300,7 @@ public sealed record LicenseStatusDto(
 
 public sealed record RedeemPremiumCodeRequest(string? Code);
 public sealed record RedeemCatalogCodeRequest(string? Code);
+public sealed record ValidateStripeProductsRequest(bool CreateMissing = false);
 
 public sealed record CheckoutLinkDto(bool Available, string? Url, string Message);
 
@@ -344,6 +381,14 @@ public sealed record TrialFeedbackRequest(
     string? Action,
     int? Rating,
     string? Comment);
+
+public sealed record SupportRequest(
+    string? Category,
+    string? Subject,
+    string? Message,
+    bool IncludeDiagnostics,
+    string? CurrentPage,
+    string? UserAgent);
 
 public sealed record AuthConfigDto(
     string Mode,

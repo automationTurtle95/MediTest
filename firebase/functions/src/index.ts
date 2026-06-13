@@ -6,8 +6,18 @@ import { defineInt, defineSecret, defineString } from "firebase-functions/params
 import { onRequest } from "firebase-functions/v2/https";
 import { setGlobalOptions } from "firebase-functions/v2/options";
 import { GoogleGenAI } from "@google/genai";
-import { createHash, randomBytes, randomInt } from "node:crypto";
+import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import nodemailer from "nodemailer";
 import Stripe from "stripe";
+import {
+  CommerceProduct,
+  StripeProductConfigurationError,
+  assertStripeCheckoutProduct,
+  loadCommerceProducts,
+  resolveCommerceProduct,
+  resolveCommerceProductByPriceId,
+  validateStripeProducts
+} from "./stripe-products";
 
 initializeApp();
 
@@ -20,6 +30,7 @@ const BRAND = Object.freeze({
   productName: "Meduvalo",
   domain: "meduvalo.at",
   websiteUrl: "https://meduvalo.at",
+  supportEmail: "support@meduvalo.at",
   claim: "Prüfungsnah lernen. Sicherer bestehen.",
   shortClaim: "Medizinfragen smart trainieren."
 });
@@ -27,6 +38,8 @@ const BRAND = Object.freeze({
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const stripeApiKey = defineSecret("MEDITEST_STRIPE_API_KEY");
 const stripeWebhookSecret = defineSecret("MEDITEST_STRIPE_WEBHOOK_SECRET");
+const stripeValidationToken = defineSecret("MEDITEST_STRIPE_VALIDATION_TOKEN");
+const supportSmtpPassword = defineSecret("MEDITEST_SMTP_PASSWORD");
 const aiMaxQuestionsPerRequest = defineInt("AI_MAX_QUESTIONS_PER_REQUEST", { default: 25 });
 const aiDailyQuestionLimit = defineInt("AI_DAILY_QUESTION_LIMIT", { default: 50 });
 const aiMonthlyQuestionLimit = defineInt("AI_MONTHLY_QUESTION_LIMIT", { default: 500 });
@@ -44,27 +57,34 @@ const premiumCodeHashList = defineString("PREMIUM_CODE_HASHES", {
   default: ""
 });
 const billingTrialDays = defineInt("BILLING_TRIAL_DAYS", { default: 7 });
-const billingProductPriceCents = defineInt("BILLING_PRODUCT_PRICE_CENTS", { default: 1499 });
-const billingMonthlyPriceCents = defineInt("BILLING_MONTHLY_PRICE_CENTS", { default: 599 });
+const billingProductPriceCents = defineInt("BILLING_PRODUCT_PRICE_CENTS", { default: 2499 });
+const billingMonthlyPriceCents = defineInt("BILLING_MONTHLY_PRICE_CENTS", { default: 999 });
 const billingCatalogQuestionPriceCents = defineInt("BILLING_CATALOG_QUESTION_PRICE_CENTS", { default: 10 });
 const billingCatalogPriceEndingCents = defineInt("BILLING_CATALOG_PRICE_ENDING_CENTS", { default: 9 });
 const billingCurrency = defineString("BILLING_CURRENCY", { default: "EUR" });
 const installationAuthorizationTtlHours = defineInt("INSTALLATION_AUTHORIZATION_TTL_HOURS", { default: 24 });
+const licensingDefaultMaxDevices = defineInt("LICENSING_DEFAULT_MAX_DEVICES", { default: 2 });
+const supportMaxDailyRequests = defineInt("SUPPORT_MAX_DAILY_REQUESTS", { default: 5 });
+const supportRecipientEmail = defineString("SUPPORT_RECIPIENT_EMAIL", { default: BRAND.supportEmail });
+const supportFromEmail = defineString("SUPPORT_FROM_EMAIL", { default: "Meduvalo Support <support@meduvalo.at>" });
+const supportSmtpHost = defineString("SUPPORT_SMTP_HOST", { default: "smtp.ionos.de" });
+const supportSmtpPort = defineInt("SUPPORT_SMTP_PORT", { default: 465 });
+const supportSmtpUsername = defineString("SUPPORT_SMTP_USERNAME", { default: BRAND.supportEmail });
 const billingReturnBaseUrl = defineString("BILLING_RETURN_BASE_URL", { default: "http://127.0.0.1:55000" });
 const billingWebsiteBaseUrl = defineString("BILLING_WEBSITE_BASE_URL", {
   default: BRAND.websiteUrl
 });
 const stripeCustomersCollection = defineString("STRIPE_CUSTOMERS_COLLECTION", { default: "customers" });
 const stripePortalConfigurationId = defineString("STRIPE_PORTAL_CONFIGURATION_ID", { default: "not-configured" });
-const currentAppVersion = defineString("CURRENT_APP_VERSION", { default: "5.0.5" });
+const currentAppVersion = defineString("CURRENT_APP_VERSION", { default: "5.0.6" });
 const windowsDownloadUrl = defineString("WINDOWS_DOWNLOAD_URL", {
-  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.5/MediTest-Setup-5.0.5-win-x64.msi"
+  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.6/MediTest-Setup-5.0.6-win-x64.msi"
 });
 const macosArm64DownloadUrl = defineString("MACOS_ARM64_DOWNLOAD_URL", {
-  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.5/MediTest-Setup-5.0.5-macos-arm64.dmg"
+  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.6/MediTest-Setup-5.0.6-macos-arm64.dmg"
 });
 const macosX64DownloadUrl = defineString("MACOS_X64_DOWNLOAD_URL", {
-  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.5/MediTest-Setup-5.0.5-macos-x64.dmg"
+  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.6/MediTest-Setup-5.0.6-macos-x64.dmg"
 });
 const db = getFirestore();
 const legacyExpiredTrialDate = "1970-01-01T00:00:00.000Z";
@@ -76,6 +96,13 @@ type GenerateQuestionsRequest = {
   model?: unknown;
   temperature?: unknown;
   questionCount?: unknown;
+};
+
+type SupportRequestPayload = {
+  category?: unknown;
+  subject?: unknown;
+  message?: unknown;
+  diagnostics?: unknown;
 };
 
 type QuestionResponse = {
@@ -444,6 +471,79 @@ export const meditestLicenseStatus = onRequest(
   }
 );
 
+export const meditestPricing = onRequest(
+  {
+    invoker: "public",
+    memory: "256MiB",
+    timeoutSeconds: 15
+  },
+  async (req, res) => {
+    if (req.method !== "GET") {
+      res.set("Allow", "GET").status(405).json({ error: { message: "Nur GET-Anfragen sind erlaubt." } });
+      return;
+    }
+
+    const products = await loadCommerceProducts(db, stripeProductConfig());
+    const baseProduct = products.find((product) => product.localProductKey === "base-product");
+    const subscription = products.find((product) => product.localProductKey === "subscription-monthly");
+    res.set("Cache-Control", "public, max-age=300");
+    res.status(200).json({
+      productPriceCents: baseProduct?.priceAmount ?? commercialPricing().productPriceCents,
+      monthlyPriceCents: subscription?.priceAmount ?? commercialPricing().monthlyPriceCents,
+      currency: (baseProduct?.currency || subscription?.currency || commercialPricing().currency).toUpperCase()
+    });
+  }
+);
+
+export const meditestValidateStripeProducts = onRequest(
+  {
+    invoker: "public",
+    memory: "256MiB",
+    secrets: [stripeApiKey, stripeValidationToken],
+    timeoutSeconds: 120
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.set("Allow", "POST").status(405).json({ error: { message: "Nur POST-Anfragen sind erlaubt." } });
+      return;
+    }
+    const maintenanceAuthorized = secureTokenMatches(
+      req.header("x-meduvalo-validation-token") ?? "",
+      stripeValidationToken.value()
+    );
+    let requestedBy = "deployment-validation";
+    if (!maintenanceAuthorized) {
+      const user = await verifiedUser(req.header("authorization") ?? "", res);
+      if (!user) return;
+      if (user.admin !== true && user.isAdmin !== true) {
+        res.status(403).json({ error: { message: "Nur Admin-Konten dürfen Stripe-Produkte prüfen." } });
+        return;
+      }
+      requestedBy = user.uid;
+    }
+
+    const repair = req.body?.createMissing === true;
+    try {
+      const report = await validateStripeProducts(stripeClient(), db, stripeProductConfig(), repair);
+      res.status(200).json(report);
+    } catch (error: any) {
+      logger.error("Stripe product validation failed", {
+        requestedBy,
+        repair,
+        code: stringValue(error?.code),
+        message: stringValue(error?.message)
+      });
+      res.status(502).json({
+        error: {
+          message: repair
+            ? "Der Stripe-Produktabgleich konnte nicht vollständig ausgeführt werden. Prüfe die Schreibrechte des Stripe-API-Schlüssels."
+            : "Die Stripe-Produkte konnten momentan nicht validiert werden."
+        }
+      });
+    }
+  }
+);
+
 export const meditestDownloadAccess = onRequest(
   {
     invoker: "public",
@@ -488,8 +588,11 @@ export const meditestDownloadAccess = onRequest(
         return current;
       });
     }
+    const appConfig = await ensureGlobalAppConfig();
+    const license = await ensureCommercialLicense(user, state, appConfig);
+    const activatedDevices = await db.collection(`deviceActivations/${user.uid}/devices`).get();
 
-    const version = currentAppVersion.value().trim() || "5.0.5";
+    const version = currentAppVersion.value().trim() || "5.0.6";
     const downloads: Record<DownloadPlatform, { fileName: string; url: string }> = {
       "windows-x64": {
         fileName: `MediTest-Setup-${version}-win-x64.msi`,
@@ -511,7 +614,7 @@ export const meditestDownloadAccess = onRequest(
     }
 
     let installationAuthorization: Record<string, unknown> | null = null;
-    if (state.installationAuthorizationRequired && !state.installationAuthorizedDeviceId) {
+    if (state.installationAuthorizationRequired && activatedDevices.size < license.maxDevices) {
       const token = randomBytes(32).toString("base64url");
       const tokenHash = createHash("sha256").update(token, "utf8").digest("hex");
       const ttlHours = Math.min(168, Math.max(1, Number(installationAuthorizationTtlHours.value()) || 24));
@@ -527,16 +630,14 @@ export const meditestDownloadAccess = onRequest(
         consumedDeviceId: ""
       });
       const updatedState = await updateLicenseState(user.uid, (current) => {
-        if (!current.installationAuthorizedDeviceId)
-          current.activeInstallationTokenHash = tokenHash;
+        current.activeInstallationTokenHash = tokenHash;
         return current;
       });
       const previousTokenHash = state.activeInstallationTokenHash;
       if (previousTokenHash && previousTokenHash !== tokenHash) {
         await db.doc(`installationAuthorizations/${previousTokenHash}`).delete().catch(() => undefined);
       }
-      if (!updatedState.installationAuthorizedDeviceId &&
-          updatedState.activeInstallationTokenHash === tokenHash) {
+      if (updatedState.activeInstallationTokenHash === tokenHash) {
         installationAuthorization = {
           schemaVersion: 1,
           token,
@@ -628,17 +729,12 @@ export const meditestLicenseAccess = onRequest(
             if (!(error instanceof Error) || error.message !== "device_limit_reached") throw error;
           }
         } else if (
-          currentDevice.exists &&
-          (!billingState.installationAuthorizationRequired ||
-           !billingState.installationAuthorizedDeviceId ||
-           billingState.installationAuthorizedDeviceId === deviceId)
+          currentDevice.exists
         ) {
           await currentDevice.ref.set({
             lastUsedAt: Timestamp.now(),
             appVersion
           }, { merge: true });
-        } else if (currentDevice.exists) {
-          throw new Error("installation_device_mismatch");
         }
       } else {
         res.status(400).json({ error: { message: "Unbekannte Lizenzaktion." } });
@@ -657,8 +753,8 @@ export const meditestLicenseAccess = onRequest(
       const result = evaluateCommercialAccess(userStatus, license, !!device, terms, appConfig);
       if (!device && billingState.installationAuthorizationRequired) {
         result.canActivateDevice = false;
-        result.message = billingState.installationAuthorizedDeviceId
-          ? "Diese Lizenz ist bereits an das Gerät gebunden, auf dem die Installationsberechtigung verwendet wurde."
+        result.message = license.currentDeviceCount >= license.maxDevices
+          ? "Maximale Geräteanzahl erreicht."
           : "Die Installationsberechtigung fehlt oder ist abgelaufen. Lade den Installer auf diesem Gerät erneut über meduvalo.at herunter.";
       }
 
@@ -693,10 +789,6 @@ export const meditestLicenseAccess = onRequest(
       }
       if (code === "installation_authorization_invalid") {
         res.status(409).json({ error: { message: "Die Installationsberechtigung ist ungültig, abgelaufen oder wurde bereits verwendet." } });
-        return;
-      }
-      if (code === "installation_device_mismatch") {
-        res.status(409).json({ error: { message: "Diese Lizenz wurde bereits an ein anderes Gerät gebunden." } });
         return;
       }
       logger.error("License access failed", {
@@ -887,36 +979,36 @@ export const meditestCreateCheckout = onRequest(
         (session) => session.mode === "payment" && session.metadata?.meditestPurchaseType === "base-product"
       );
 
-      const productPriceCents = Math.max(1, billingProductPriceCents.value());
-      const currency = billingCurrency.value().trim().toLowerCase();
+      const commerceProduct = await resolveCommerceProduct(db, stripeProductConfig(), "base-product");
+      await assertStripeCheckoutProduct(stripe, commerceProduct);
       const metadata = {
         meditestPurchaseType: "base-product",
+        localProductKey: commerceProduct.localProductKey,
+        stripeProductId: commerceProduct.stripeProductId,
+        stripePriceId: commerceProduct.stripePriceId,
         firebaseUid: user.uid,
         purchaseSource: source === "landing" ? "landing" : "app",
         downloadPlatform,
-        productPriceCents: String(productPriceCents),
+        productPriceCents: String(commerceProduct.priceAmount),
         trialDays: String(Math.min(60, Math.max(1, Number(billingTrialDays.value()) || 7))),
-        currency: currency.toUpperCase()
+        currency: commerceProduct.currency.toUpperCase()
       };
       checkoutData = {
         mode: "payment",
         customer: customerId,
         line_items: [{
-          price_data: {
-            currency,
-            unit_amount: productPriceCents,
-            product_data: {
-              name: `${BRAND.productName} für Windows und macOS`,
-              description: `Einmaliger Softwarekauf inklusive aller Desktop-Versionen und 7 Tagen vollständigem ${BRAND.productName}-Zugang`
-            }
-          },
+          price: commerceProduct.stripePriceId,
           quantity: 1
         }],
         client_reference_id: user.uid,
         success_url: `${websiteBaseUrl}/purchase.html?checkout=success&platform=${downloadPlatform}`,
         cancel_url: `${websiteBaseUrl}/purchase.html?checkout=cancelled&platform=${downloadPlatform}`,
         metadata,
-        payment_intent_data: { metadata }
+        payment_intent_data: { metadata },
+        invoice_creation: {
+          enabled: true,
+          invoice_data: { metadata }
+        }
       };
     } else if (kind === "subscription") {
       if (state.premiumActive || state.subscriptionActive) {
@@ -962,28 +1054,23 @@ export const meditestCreateCheckout = onRequest(
         0,
         Math.ceil(((state.trialEndsAt ? Date.parse(state.trialEndsAt) : 0) - Date.now()) / 86_400_000)
       );
-      const monthlyPriceCents = Math.max(1, billingMonthlyPriceCents.value());
-      const currency = billingCurrency.value().trim().toLowerCase();
+      const commerceProduct = await resolveCommerceProduct(db, stripeProductConfig(), "subscription");
+      await assertStripeCheckoutProduct(stripe, commerceProduct);
       const metadata = {
         meditestPurchaseType: "subscription",
+        localProductKey: commerceProduct.localProductKey,
+        stripeProductId: commerceProduct.stripeProductId,
+        stripePriceId: commerceProduct.stripePriceId,
         firebaseUid: user.uid,
         purchaseSource: "app",
-        monthlyPriceCents: String(monthlyPriceCents),
-        currency: currency.toUpperCase()
+        monthlyPriceCents: String(commerceProduct.priceAmount),
+        currency: commerceProduct.currency.toUpperCase()
       };
       checkoutData = {
         mode: "subscription",
         customer: customerId,
         line_items: [{
-          price_data: {
-            currency,
-            unit_amount: monthlyPriceCents,
-            recurring: { interval: "month" },
-            product_data: {
-              name: BRAND.productName,
-              description: `Monatlicher Zugang zur ${BRAND.productName} Lernsoftware`
-            }
-          },
+          price: commerceProduct.stripePriceId,
           quantity: 1
         }],
         client_reference_id: user.uid,
@@ -1013,49 +1100,42 @@ export const meditestCreateCheckout = onRequest(
         res.status(404).json({ error: { message: "Katalogtest nicht gefunden." } });
         return;
       }
-      const isMedAt = catalog.category.toLowerCase() === "medat";
       await expireOpenCheckoutSessions(
         stripe,
         customerId,
         (session) => session.mode === "payment" && session.metadata?.catalogId === catalogId
       );
 
-      const expectedPriceCents = isMedAt
-        ? catalog.priceCents
-        : catalog.questionCount * Math.max(0, billingCatalogQuestionPriceCents.value()) +
-          Math.max(0, billingCatalogPriceEndingCents.value());
+      const commerceProduct = await resolveCommerceProduct(db, stripeProductConfig(), "catalog", catalogId);
+      await assertStripeCheckoutProduct(stripe, commerceProduct);
       const metadata = {
         meditestPurchaseType: "catalog",
+        localProductKey: commerceProduct.localProductKey,
+        stripeProductId: commerceProduct.stripeProductId,
+        stripePriceId: commerceProduct.stripePriceId,
         catalogId,
         firebaseUid: user.uid,
         category: catalog.category,
         questionCount: String(catalog.questionCount),
-        questionPriceCents: String(Math.max(0, billingCatalogQuestionPriceCents.value())),
-        priceEndingCents: String(Math.max(0, billingCatalogPriceEndingCents.value())),
-        expectedPriceCents: String(expectedPriceCents),
-        currency: catalog.currency
+        expectedPriceCents: String(commerceProduct.priceAmount),
+        currency: commerceProduct.currency.toUpperCase()
       };
       checkoutData = {
         mode: "payment",
         customer: customerId,
         line_items: [{
-          price_data: {
-            currency: catalog.currency.toLowerCase(),
-            unit_amount: expectedPriceCents,
-            product_data: {
-              name: catalog.title,
-              description: isMedAt
-                ? `${BRAND.productName} MedAT-Katalogtest`
-                : `${BRAND.productName} Katalogtest mit ${catalog.questionCount} Fragen`
-            }
-          },
+          price: commerceProduct.stripePriceId,
           quantity: 1
         }],
         client_reference_id: user.uid,
         success_url: `${returnBaseUrl}/pages/catalog.html?checkout=success&catalogId=${encodeURIComponent(catalogId)}`,
         cancel_url: `${returnBaseUrl}/pages/catalog.html?checkout=cancelled&catalogId=${encodeURIComponent(catalogId)}`,
         metadata,
-        payment_intent_data: { metadata }
+        payment_intent_data: { metadata },
+        invoice_creation: {
+          enabled: true,
+          invoice_data: { metadata }
+        }
       };
     } else {
       res.status(400).json({ error: { message: "Unbekannte Checkout-Art." } });
@@ -1080,9 +1160,11 @@ export const meditestCreateCheckout = onRequest(
         code: stringValue(error?.code),
         message: stringValue(error?.message)
       });
-      const message = error?.code === "resource_missing"
-        ? "Stripe-Live-Konfiguration und hinterlegte Preis- oder Kunden-IDs passen nicht zusammen."
-        : "Der Stripe-Checkout konnte momentan nicht erstellt werden.";
+      const message = error instanceof StripeProductConfigurationError
+        ? error.message
+        : error?.code === "resource_missing"
+          ? "Stripe-Live-Konfiguration und hinterlegte Preis- oder Kunden-IDs passen nicht zusammen."
+          : "Der Stripe-Checkout konnte momentan nicht erstellt werden.";
       res.status(502).json({ error: { message } });
     }
   }
@@ -1172,9 +1254,16 @@ export const meditestStripeWebhook = onRequest(
     }
 
     try {
+      const claimed = await claimStripeEvent(event);
+      if (!claimed) {
+        res.status(200).json({ received: true, duplicate: true });
+        return;
+      }
       await processStripeEvent(event);
+      await markStripeEventProcessed(event);
       res.status(200).json({ received: true });
     } catch (error) {
+      await markStripeEventFailed(event, error).catch(() => undefined);
       logger.error("Stripe webhook processing failed", {
         eventId: event.id,
         type: event.type,
@@ -1290,6 +1379,8 @@ export const meditestDeleteAccount = onRequest(
       const customerRef = db.collection(stripeCustomersCollection.value()).doc(user.uid);
       const aiUsageRef = db.collection("aiUsage").doc(user.uid);
       const eventsSnapshot = await db.collection("aiGenerationEvents").where("uid", "==", user.uid).get();
+      const supportRequestsSnapshot = await db.collection("supportRequests").where("uid", "==", user.uid).get();
+      const supportRateLimitRef = db.collection("supportRateLimits").doc(user.uid);
       const installationAuthorizationsSnapshot = await db.collection("installationAuthorizations")
         .where("uid", "==", user.uid)
         .get();
@@ -1312,7 +1403,9 @@ export const meditestDeleteAccount = onRequest(
         termsRef.delete(),
         db.recursiveDelete(customerRef),
         db.recursiveDelete(aiUsageRef),
+        db.recursiveDelete(supportRateLimitRef),
         deleteDocuments(eventsSnapshot.docs.map((doc) => doc.ref)),
+        deleteDocuments(supportRequestsSnapshot.docs.map((doc) => doc.ref)),
         deleteDocuments(installationAuthorizationsSnapshot.docs.map((doc) => doc.ref))
       ]);
       await getAuth().deleteUser(user.uid);
@@ -1334,6 +1427,160 @@ export const meditestDeleteAccount = onRequest(
   }
 );
 
+export const meditestSupportRequest = onRequest(
+  {
+    invoker: "public",
+    memory: "256MiB",
+    secrets: [supportSmtpPassword],
+    timeoutSeconds: 30
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.set("Allow", "POST").status(405).json({ error: { message: "Nur POST-Anfragen sind erlaubt." } });
+      return;
+    }
+
+    const user = await verifiedUser(req.header("authorization") ?? "", res);
+    if (!user) return;
+
+    const request = (req.body ?? {}) as SupportRequestPayload;
+    const category = normalizeSupportCategory(request.category);
+    const subject = stringValue(request.subject).trim().slice(0, 160);
+    const message = stringValue(request.message).trim().slice(0, 5000);
+    if (!subject) {
+      res.status(400).json({ error: { message: "Bitte gib einen Betreff ein." } });
+      return;
+    }
+    if (message.length < 10) {
+      res.status(400).json({ error: { message: "Bitte beschreibe dein Anliegen mit mindestens 10 Zeichen." } });
+      return;
+    }
+
+    const diagnosticsSource = request.diagnostics && typeof request.diagnostics === "object"
+      ? request.diagnostics as Record<string, unknown>
+      : {};
+    const diagnostics = {
+      appVersion: stringValue(diagnosticsSource.appVersion).slice(0, 80),
+      currentPage: stringValue(diagnosticsSource.currentPage).slice(0, 500),
+      userAgent: stringValue(diagnosticsSource.userAgent).slice(0, 500)
+    };
+    const now = Timestamp.now();
+    const dayKey = now.toDate().toISOString().slice(0, 10);
+    const rateRef = db.doc(`supportRateLimits/${user.uid}/days/${dayKey}`);
+    const ticketRef = db.collection("supportRequests").doc();
+    const userEmail = stringValue(user.email);
+    const displayName = stringValue(user.name) || userEmail.split("@")[0] || "Meduvalo Nutzer";
+    const maxDailyRequests = Math.min(20, Math.max(1, Number(supportMaxDailyRequests.value()) || 5));
+
+    try {
+      await db.runTransaction(async (transaction) => {
+        const rateSnapshot = await transaction.get(rateRef);
+        const requestCount = numberField(rateSnapshot.data() ?? {}, "requestCount");
+        if (requestCount >= maxDailyRequests) throw new Error("support_rate_limit");
+
+        transaction.set(rateRef, {
+          requestCount: FieldValue.increment(1),
+          lastRequestedAt: now,
+          expiresAt: Timestamp.fromMillis(now.toMillis() + 35 * 24 * 60 * 60 * 1000)
+        }, { merge: true });
+        transaction.set(ticketRef, {
+          uid: user.uid,
+          userEmail,
+          displayName,
+          category,
+          subject,
+          message,
+          diagnostics,
+          recipientEmail: supportRecipientEmail.value().trim() || BRAND.supportEmail,
+          status: "new",
+          deliveryStatus: "stored",
+          createdAt: now,
+          updatedAt: now
+        });
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === "support_rate_limit") {
+        res.status(429).json({
+          error: { message: `Du kannst höchstens ${maxDailyRequests} Supportanfragen pro Tag senden.` }
+        });
+        return;
+      }
+      logger.error("Support ticket storage failed", {
+        uid: user.uid,
+        message: error instanceof Error ? error.message : String(error)
+      });
+      res.status(503).json({ error: { message: "Die Supportanfrage konnte momentan nicht gespeichert werden." } });
+      return;
+    }
+
+    let emailSent = false;
+    const smtpPassword = supportSmtpPassword.value().trim();
+    if (smtpPassword) {
+      try {
+        const recipient = supportRecipientEmail.value().trim() || BRAND.supportEmail;
+        const smtpUsername = supportSmtpUsername.value().trim() || BRAND.supportEmail;
+        const smtpPort = supportSmtpPort.value();
+        const categoryLabel = supportCategoryLabel(category);
+        const diagnosticText = diagnostics.appVersion || diagnostics.currentPage || diagnostics.userAgent
+          ? `\n\nTechnische Angaben:\nVersion: ${diagnostics.appVersion || "-"}\nSeite: ${diagnostics.currentPage || "-"}\nBrowser: ${diagnostics.userAgent || "-"}`
+          : "";
+        const transporter = nodemailer.createTransport({
+          host: supportSmtpHost.value().trim() || "smtp.ionos.de",
+          port: smtpPort,
+          secure: smtpPort === 465,
+          requireTLS: smtpPort !== 465,
+          auth: {
+            user: smtpUsername,
+            pass: smtpPassword
+          },
+          tls: {
+            minVersion: "TLSv1.2"
+          }
+        });
+        const emailResult = await transporter.sendMail({
+          from: supportFromEmail.value().trim() || "Meduvalo Support <support@meduvalo.at>",
+          to: recipient,
+          replyTo: userEmail,
+          subject: `[Meduvalo Support · ${categoryLabel}] ${subject}`,
+          text: `Neue Supportanfrage von ${displayName} (${userEmail})\n\nKategorie: ${categoryLabel}\nBetreff: ${subject}\n\n${message}${diagnosticText}\n\nTicket: ${ticketRef.id}`,
+          html: supportEmailHtml(displayName, userEmail, categoryLabel, subject, message, diagnostics, ticketRef.id)
+        });
+        emailSent = true;
+        await ticketRef.set({
+          deliveryStatus: "sent",
+          emailProvider: "ionos-smtp",
+          emailProviderId: stringValue(emailResult.messageId),
+          emailSentAt: Timestamp.now(),
+          updatedAt: Timestamp.now()
+        }, { merge: true });
+      } catch (error) {
+        logger.error("Support email delivery failed", {
+          uid: user.uid,
+          ticketId: ticketRef.id,
+          message: error instanceof Error ? error.message : String(error)
+        });
+        await ticketRef.set({
+          deliveryStatus: "failed",
+          deliveryError: (error instanceof Error ? error.message : String(error)).slice(0, 500),
+          updatedAt: Timestamp.now()
+        }, { merge: true });
+      }
+    } else {
+      logger.warn("Support email delivery is not configured", { ticketId: ticketRef.id });
+    }
+
+    res.status(200).json({
+      submitted: true,
+      ticketId: ticketRef.id,
+      emailSent,
+      supportEmail: supportRecipientEmail.value().trim() || BRAND.supportEmail,
+      message: emailSent
+        ? `Deine Supportanfrage wurde an ${supportRecipientEmail.value().trim() || BRAND.supportEmail} gesendet.`
+        : "Deine Supportanfrage wurde sicher gespeichert. Der Support kann das Ticket im Support-Postfach bearbeiten."
+    });
+  }
+);
+
 async function ensureGlobalAppConfig(): Promise<GlobalAppConfig> {
   const ref = db.doc("appConfig/global");
   const snapshot = await ref.get();
@@ -1341,20 +1588,20 @@ async function ensureGlobalAppConfig(): Promise<GlobalAppConfig> {
   const storedAppVersion = stringValue(source.currentAppVersion);
   const storedTermsVersion = stringValue(source.currentTermsVersion);
   const config: GlobalAppConfig = {
-    currentAppVersion: !storedAppVersion || ["5.0.2", "5.0.3", "5.0.4"].includes(storedAppVersion)
-      ? "5.0.5"
+    currentAppVersion: !storedAppVersion || ["5.0.2", "5.0.3", "5.0.4", "5.0.5"].includes(storedAppVersion)
+      ? "5.0.6"
       : storedAppVersion,
     currentTermsVersion: !storedTermsVersion || storedTermsVersion === "5.0" ? "5.1" : storedTermsVersion,
     currentPrivacyVersion: !stringValue(source.currentPrivacyVersion) || stringValue(source.currentPrivacyVersion) === "5.0"
       ? "5.1"
       : stringValue(source.currentPrivacyVersion),
     allowedOfflineDays: boundedInt(source.allowedOfflineDays, 7, 0, 30),
-    supportEmail: stringValue(source.supportEmail),
+    supportEmail: stringValue(source.supportEmail) || BRAND.supportEmail,
     termsOfUseUrl: safeHttpUrl(source.termsOfUseUrl),
     privacyPolicyUrl: safeHttpUrl(source.privacyPolicyUrl),
     impressumUrl: safeHttpUrl(source.impressumUrl),
     licenseAgreementUrl: safeHttpUrl(source.licenseAgreementUrl),
-    defaultMaxDevices: 1,
+    defaultMaxDevices: Math.min(20, Math.max(1, Number(licensingDefaultMaxDevices.value()) || 2)),
     trialDurationDays: boundedInt(source.trialDurationDays, 7, 1, 60)
   };
   if (!snapshot.exists) {
@@ -1366,11 +1613,13 @@ async function ensureGlobalAppConfig(): Promise<GlobalAppConfig> {
   } else if (
     storedAppVersion !== config.currentAppVersion ||
     storedTermsVersion !== config.currentTermsVersion ||
+    source.supportEmail !== config.supportEmail ||
     source.defaultMaxDevices !== config.defaultMaxDevices
   ) {
     await ref.set({
       currentAppVersion: config.currentAppVersion,
       currentTermsVersion: config.currentTermsVersion,
+      supportEmail: config.supportEmail,
       defaultMaxDevices: config.defaultMaxDevices,
       updatedAt: Timestamp.now()
     }, { merge: true });
@@ -1444,10 +1693,9 @@ async function ensureCommercialLicense(
     subscription ? billing.subscriptionRenewsAt :
       trialActive ? billing.trialEndsAt : null;
   const licenseStartDate = billing.baseProductPurchasedAt ?? billing.trialStartedAt;
-  const maxDevices = billing.installationAuthorizationRequired
-    ? 1
-    : boundedInt(existing.maxDevices, config.defaultMaxDevices, 1, 20);
-  const currentDeviceCount = boundedInt(existing.currentDeviceCount, 0, 0, maxDevices);
+  const maxDevices = config.defaultMaxDevices;
+  const activatedDevices = await db.collection(`deviceActivations/${user.uid}/devices`).get();
+  const currentDeviceCount = Math.min(maxDevices, activatedDevices.size);
   const data = {
     userId: user.uid,
     userEmail: stringValue(user.email),
@@ -1475,13 +1723,18 @@ async function activateLicensedDevice(
   deviceName: string,
   appVersion: string
 ): Promise<void> {
-  if (!billing.installationAuthorizationRequired) {
+  const currentDevice = await db.doc(`deviceActivations/${userId}/devices/${deviceId}`).get();
+  if (currentDevice.exists) {
     await activateDevice(userId, deviceId, deviceName, appVersion);
     return;
   }
-  if (billing.installationAuthorizedDeviceId) {
-    if (billing.installationAuthorizedDeviceId !== deviceId)
-      throw new Error("installation_device_mismatch");
+  const licenseSnapshot = await db.doc(`licenses/${userId}`).get();
+  const license = licenseSnapshot.data() ?? {};
+  const maxDevices = boundedInt(license.maxDevices, 2, 1, 20);
+  const currentDeviceCount = boundedInt(license.currentDeviceCount, 0, 0, maxDevices);
+  if (currentDeviceCount >= maxDevices)
+    throw new Error("device_limit_reached");
+  if (!billing.installationAuthorizationRequired) {
     await activateDevice(userId, deviceId, deviceName, appVersion);
     return;
   }
@@ -1510,7 +1763,6 @@ async function consumeInstallationAuthorization(
   const billingRef = db.doc(`users/${userId}/billing/license`);
   const licenseRef = db.doc(`licenses/${userId}`);
   const deviceRef = db.doc(`deviceActivations/${userId}/devices/${deviceId}`);
-  const activatedDevices = await db.collection(`deviceActivations/${userId}/devices`).get();
 
   await db.runTransaction(async (transaction) => {
     const [authorizationSnapshot, billingSnapshot, licenseSnapshot, deviceSnapshot] = await Promise.all([
@@ -1529,8 +1781,7 @@ async function consumeInstallationAuthorization(
       !authorization.consumedAt &&
       !!expiresAt &&
       Date.parse(expiresAt) > Date.now() &&
-      stringValue(billingState.activeInstallationTokenHash) === tokenHash &&
-      !stringValue(billingState.installationAuthorizedDeviceId);
+      stringValue(billingState.activeInstallationTokenHash) === tokenHash;
     if (!valid)
       throw new Error("installation_authorization_invalid");
 
@@ -1538,8 +1789,13 @@ async function consumeInstallationAuthorization(
     const status = stringValue(license.licenseStatus).toLowerCase();
     if (status !== "active" && status !== "trial" && status !== "restricted")
       throw new Error("license_not_active");
-    if (!deviceSnapshot.exists && boundedInt(license.currentDeviceCount, 0, 0, 1) >= 1)
+    const maxDevices = boundedInt(license.maxDevices, 2, 1, 20);
+    const currentDeviceCount = boundedInt(license.currentDeviceCount, 0, 0, maxDevices);
+    if (!deviceSnapshot.exists && currentDeviceCount >= maxDevices)
       throw new Error("device_limit_reached");
+    const nextDeviceCount = deviceSnapshot.exists
+      ? currentDeviceCount
+      : currentDeviceCount + 1;
 
     const now = Timestamp.now();
     transaction.set(deviceRef, {
@@ -1551,12 +1807,13 @@ async function consumeInstallationAuthorization(
       installationAuthorizationHash: tokenHash
     }, { merge: true });
     transaction.set(licenseRef, {
-      maxDevices: 1,
-      currentDeviceCount: 1,
+      maxDevices,
+      currentDeviceCount: Math.min(maxDevices, nextDeviceCount),
       updatedAt: now
     }, { merge: true });
     billingState.installationAuthorizationRequired = true;
-    billingState.installationAuthorizedDeviceId = deviceId;
+    if (!stringValue(billingState.installationAuthorizedDeviceId))
+      billingState.installationAuthorizedDeviceId = deviceId;
     billingState.activeInstallationTokenHash = "";
     billingState.updatedAt = new Date().toISOString();
     transaction.set(billingRef, {
@@ -1566,9 +1823,6 @@ async function consumeInstallationAuthorization(
       consumedAt: now,
       consumedDeviceId: deviceId
     }, { merge: true });
-    activatedDevices.docs
-      .filter((document) => document.id !== deviceId)
-      .forEach((document) => transaction.delete(document.ref));
   });
 }
 
@@ -1690,7 +1944,7 @@ function evaluateCommercialAccess(
   let message = status === "trial" && license.licenseEndDate
     ? `Testversion aktiv bis ${new Date(license.licenseEndDate).toLocaleDateString("de-AT")}.`
     : status === "restricted"
-      ? "Die Testphase ist beendet. Vorhandene Tests bleiben nutzbar; neue Inhalte und KI-Funktionen benötigen ein Abo."
+      ? "Die Testphase ist beendet. Tests aus vorhandenen Fragenpools bleiben ausführbar; alle anderen Funktionen benötigen ein Abo."
       : "Lizenz aktiv.";
 
   if (user.isBlocked || status === "blocked") {
@@ -1874,16 +2128,24 @@ async function expireOpenCheckoutSessions(
 }
 
 async function processStripeEvent(event: any): Promise<void> {
+  const stripe = stripeClient();
   if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
-    const session = event.data.object as any;
+    const eventSession = event.data.object as any;
+    const session = await stripe.checkout.sessions.retrieve(eventSession.id, {
+      expand: ["line_items.data.price.product", "invoice", "payment_intent", "subscription"]
+    }) as any;
+    const priceIds = stripePriceIdsFromLineItems(session.line_items?.data ?? []);
+    const commerceProduct = await commerceProductForWebhookPrice(event, priceIds);
+    const customerId = objectId(session.customer);
+    const uid = stringValue(session.metadata?.firebaseUid) ||
+      await firebaseUidForStripeCustomer(customerId);
+    if (!uid) throw new Error(`stripe_customer_uid_missing:${customerId}`);
+
     if (session.mode === "payment" && session.payment_status === "paid") {
-      const uid = stringValue(session.metadata?.firebaseUid);
-      const catalogId = stringValue(session.metadata?.catalogId).slice(0, 200);
-      const purchaseType = stringValue(session.metadata?.meditestPurchaseType);
-      if (uid && purchaseType === "base-product") {
+      if (commerceProduct.productKind === "base-product") {
         await updateLicenseState(uid, (state) => {
           if (state.baseProductPurchased) return state;
-          const purchasedAt = new Date().toISOString();
+          const purchasedAt = stripeCreatedAt(session);
           const trialDays = Math.min(60, Math.max(1, Number(billingTrialDays.value()) || 7));
           state.baseProductPurchased = true;
           state.baseProductPurchasedAt = purchasedAt;
@@ -1896,56 +2158,224 @@ async function processStripeEvent(event: any): Promise<void> {
           state.trialEndsAt = new Date(Date.parse(purchasedAt) + trialDays * 86_400_000).toISOString();
           return state;
         });
-      } else if (uid && catalogId && purchaseType === "catalog") {
+      } else if (commerceProduct.productKind === "catalog" && commerceProduct.catalogId) {
         await updateLicenseState(uid, (state) => {
-          state.purchasedCatalogTestIds.push(catalogId);
+          state.purchasedCatalogTestIds.push(commerceProduct.catalogId);
           return state;
         });
+      } else {
+        throw new Error(`stripe_purchase_type_mismatch:${commerceProduct.localProductKey}`);
       }
     }
-  } else if (
+
+    const invoice = await expandedInvoice(stripe, session.invoice);
+    await saveStripePurchaseRecord(uid, commerceProduct, {
+      eventId: event.id,
+      checkoutSession: session,
+      invoice,
+      paymentStatus: stringValue(session.payment_status) || stringValue(invoice?.status)
+    });
+    return;
+  }
+
+  if (
     event.type === "customer.subscription.created" ||
     event.type === "customer.subscription.updated" ||
     event.type === "customer.subscription.deleted"
   ) {
     const subscription = event.data.object as any;
-    const customerId = typeof subscription.customer === "string"
-      ? subscription.customer
-      : stringValue(subscription.customer?.id);
+    const priceIds = stripePriceIdsFromSubscription(subscription);
+    const commerceProduct = await commerceProductForWebhookPrice(event, priceIds);
+    if (commerceProduct.productKind !== "subscription") {
+      throw new Error(`stripe_subscription_product_mismatch:${commerceProduct.localProductKey}`);
+    }
+    const customerId = objectId(subscription.customer);
     const uid = stringValue(subscription.metadata?.firebaseUid) ||
       await firebaseUidForStripeCustomer(customerId);
-    if (uid) {
-      const active = subscription.status === "active" || subscription.status === "trialing";
-      const renewsAt = Number(subscription.current_period_end);
-      await updateLicenseState(uid, (state) => {
-        state.subscriptionActive = active;
-        state.subscriptionRenewsAt = active && Number.isFinite(renewsAt)
-          ? new Date(renewsAt * 1000).toISOString()
-          : null;
-        state.subscriptionProvider = active ? "stripe" : "";
-        state.subscriptionCustomerId = active ? customerId : "";
-        if (active && !state.baseProductPurchased) {
-          const purchasedAt = new Date().toISOString();
-          const trialDays = Math.min(60, Math.max(1, Number(billingTrialDays.value()) || 7));
-          state.baseProductPurchased = true;
-          state.baseProductPurchasedAt = purchasedAt;
-          state.baseProductProvider = "legacy-subscription";
-          state.installationAuthorizationRequired = true;
-          state.installationAuthorizedDeviceId = "";
-          state.activeInstallationTokenHash = "";
-          state.trialStartedAt = purchasedAt;
-          state.trialEndsAt = new Date(Date.parse(purchasedAt) + trialDays * 86_400_000).toISOString();
-        }
-        return state;
-      });
-    }
+    if (!uid) throw new Error(`stripe_customer_uid_missing:${customerId}`);
+
+    const active = subscription.status === "active" || subscription.status === "trialing";
+    const renewsAt = Number(subscription.current_period_end);
+    await updateLicenseState(uid, (state) => {
+      state.subscriptionActive = active;
+      state.subscriptionRenewsAt = active && Number.isFinite(renewsAt)
+        ? new Date(renewsAt * 1000).toISOString()
+        : null;
+      state.subscriptionProvider = active ? "stripe" : "";
+      state.subscriptionCustomerId = active ? customerId : "";
+      return state;
+    });
+
+    const invoice = await expandedInvoice(stripe, subscription.latest_invoice);
+    await saveStripePurchaseRecord(uid, commerceProduct, {
+      eventId: event.id,
+      subscription,
+      invoice,
+      paymentStatus: stringValue(invoice?.status) || stringValue(subscription.status)
+    });
+    return;
   }
 
-  await db.collection("stripeWebhookEvents").doc(event.id).set({
-    type: event.type,
-    livemode: event.livemode,
-    processedAt: Timestamp.now()
+  if (
+    event.type === "invoice.paid" ||
+    event.type === "invoice.payment_failed" ||
+    event.type === "invoice.finalized"
+  ) {
+    const invoice = await expandedInvoice(stripe, event.data.object);
+    if (!invoice) throw new Error("stripe_invoice_missing");
+    const priceIds = stripePriceIdsFromInvoice(invoice);
+    const commerceProduct = await commerceProductForWebhookPrice(event, priceIds);
+    const customerId = objectId(invoice.customer);
+    const uid = stringValue(invoice.metadata?.firebaseUid) ||
+      await firebaseUidForStripeCustomer(customerId);
+    if (!uid) throw new Error(`stripe_customer_uid_missing:${customerId}`);
+    await saveStripePurchaseRecord(uid, commerceProduct, {
+      eventId: event.id,
+      invoice,
+      paymentStatus: stringValue(invoice.status)
+    });
+  }
+}
+
+async function claimStripeEvent(event: any): Promise<boolean> {
+  const ref = db.collection("stripeWebhookEvents").doc(stringValue(event.id));
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    const data = snapshot.data() ?? {};
+    if (stringValue(data.status) === "processed") return false;
+    const startedAt = data.startedAt instanceof Timestamp ? data.startedAt.toMillis() : 0;
+    if (stringValue(data.status) === "processing" && startedAt > Date.now() - 5 * 60_000) return false;
+    transaction.set(ref, {
+      type: stringValue(event.type),
+      objectId: stringValue(event.data?.object?.id),
+      livemode: event.livemode === true,
+      status: "processing",
+      attempts: FieldValue.increment(1),
+      startedAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    }, { merge: true });
+    return true;
+  });
+}
+
+async function markStripeEventProcessed(event: any): Promise<void> {
+  await db.collection("stripeWebhookEvents").doc(stringValue(event.id)).set({
+    status: "processed",
+    processedAt: Timestamp.now(),
+    updatedAt: Timestamp.now()
   }, { merge: true });
+}
+
+async function markStripeEventFailed(event: any, error: unknown): Promise<void> {
+  await db.collection("stripeWebhookEvents").doc(stringValue(event.id)).set({
+    status: "failed",
+    error: (error instanceof Error ? error.message : String(error)).slice(0, 1000),
+    failedAt: Timestamp.now(),
+    updatedAt: Timestamp.now()
+  }, { merge: true });
+}
+
+async function commerceProductForWebhookPrice(
+  event: any,
+  priceIds: string[]
+): Promise<CommerceProduct> {
+  const uniquePriceIds = [...new Set(priceIds.filter(Boolean))];
+  if (uniquePriceIds.length !== 1) {
+    logger.error("Stripe webhook has an unexpected number of prices", {
+      eventId: stringValue(event.id),
+      type: stringValue(event.type),
+      priceIds: uniquePriceIds
+    });
+    throw new Error(`stripe_price_count_invalid:${uniquePriceIds.length}`);
+  }
+  const product = await resolveCommerceProductByPriceId(db, stripeProductConfig(), uniquePriceIds[0]);
+  if (!product) {
+    logger.error("Stripe webhook contains an unknown price", {
+      eventId: stringValue(event.id),
+      type: stringValue(event.type),
+      stripePriceId: uniquePriceIds[0]
+    });
+    throw new Error(`unknown_stripe_price:${uniquePriceIds[0]}`);
+  }
+  return product;
+}
+
+async function expandedInvoice(stripe: InstanceType<typeof Stripe>, value: any): Promise<any | null> {
+  const invoiceId = objectId(value);
+  if (!invoiceId) return value && typeof value === "object" ? value : null;
+  return await stripe.invoices.retrieve(invoiceId, {
+    expand: ["lines.data.price.product"]
+  }) as any;
+}
+
+async function saveStripePurchaseRecord(
+  uid: string,
+  product: CommerceProduct,
+  source: {
+    eventId: string;
+    checkoutSession?: any;
+    subscription?: any;
+    invoice?: any;
+    paymentStatus: string;
+  }
+): Promise<void> {
+  const session = source.checkoutSession ?? {};
+  const subscription = source.subscription ?? session.subscription ?? {};
+  const invoice = source.invoice ?? {};
+  const checkoutSessionId = stringValue(session.id);
+  const invoiceId = stringValue(invoice.id);
+  const subscriptionId = objectId(subscription);
+  const paymentIntentId = objectId(session.payment_intent) || objectId(invoice.payment_intent);
+  const customerId = objectId(session.customer) || objectId(subscription.customer) || objectId(invoice.customer);
+  const purchaseId = checkoutSessionId || invoiceId || subscriptionId || source.eventId;
+  const createdSeconds = Number(invoice.created || session.created || subscription.created);
+  const createdAt = Number.isFinite(createdSeconds) && createdSeconds > 0
+    ? Timestamp.fromMillis(createdSeconds * 1000)
+    : Timestamp.now();
+  const record = {
+    uid,
+    localProductKey: product.localProductKey,
+    productKind: product.productKind,
+    catalogId: product.catalogId,
+    productName: product.name,
+    stripeProductId: product.stripeProductId,
+    stripePriceId: product.stripePriceId,
+    currency: stringValue(invoice.currency || session.currency || product.currency).toUpperCase(),
+    priceAmount: product.priceAmount,
+    checkoutSessionId,
+    invoiceId,
+    invoiceNumber: stringValue(invoice.number),
+    invoicePdfUrl: stringValue(invoice.invoice_pdf),
+    hostedInvoiceUrl: stringValue(invoice.hosted_invoice_url),
+    paymentIntentId,
+    subscriptionId,
+    customerId,
+    paymentStatus: source.paymentStatus,
+    amountTotal: positiveNumber(invoice.amount_paid ?? session.amount_total),
+    stripeEventId: source.eventId,
+    createdAt,
+    updatedAt: Timestamp.now()
+  };
+  const documentId = firestoreDocumentId(purchaseId);
+  await Promise.all([
+    db.collection("stripePurchases").doc(documentId).set(record, { merge: true }),
+    db.collection(stripeCustomersCollection.value()).doc(uid)
+      .collection("payments").doc(documentId).set(record, { merge: true })
+  ]);
+}
+
+function stripePriceIdsFromLineItems(lineItems: any[]): string[] {
+  return lineItems.map((line) => objectId(line.price) || stringValue(line.pricing?.price_details?.price));
+}
+
+function stripePriceIdsFromSubscription(subscription: any): string[] {
+  return (subscription.items?.data ?? []).map((item: any) => objectId(item.price));
+}
+
+function stripePriceIdsFromInvoice(invoice: any): string[] {
+  return (invoice.lines?.data ?? []).map((line: any) =>
+    objectId(line.price) || stringValue(line.pricing?.price_details?.price)
+  );
 }
 
 async function firebaseUidForStripeCustomer(customerId: string): Promise<string> {
@@ -2006,10 +2436,33 @@ function normalizeLicenseState(source: Record<string, any>, createdAt: string): 
   };
 }
 
-function licenseStateResponse(state: LicenseState): LicenseState {
+function commercialPricing(): {
+  productPriceCents: number;
+  monthlyPriceCents: number;
+  currency: string;
+} {
+  return {
+    productPriceCents: Math.max(1, billingProductPriceCents.value()),
+    monthlyPriceCents: Math.max(1, billingMonthlyPriceCents.value()),
+    currency: billingCurrency.value().trim().toUpperCase() || "EUR"
+  };
+}
+
+function stripeProductConfig() {
+  return {
+    productPriceAmount: Math.max(1, billingProductPriceCents.value()),
+    monthlyPriceAmount: Math.max(1, billingMonthlyPriceCents.value()),
+    catalogQuestionPriceAmount: Math.max(0, billingCatalogQuestionPriceCents.value()),
+    catalogPriceEndingAmount: Math.max(0, billingCatalogPriceEndingCents.value()),
+    currency: billingCurrency.value().trim().toUpperCase() || "EUR"
+  };
+}
+
+function licenseStateResponse(state: LicenseState): LicenseState & ReturnType<typeof commercialPricing> {
   // MediTest <= 5.0.2 deserializes both fields as non-nullable DateTime values.
   return {
     ...state,
+    ...commercialPricing(),
     trialStartedAt: state.trialStartedAt ?? legacyExpiredTrialDate,
     trialEndsAt: state.trialEndsAt ?? legacyExpiredTrialDate
   };
@@ -2066,6 +2519,91 @@ function validIsoString(value: unknown): string | null {
 
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function objectId(value: any): string {
+  if (typeof value === "string") return value.trim();
+  return value && typeof value === "object" ? stringValue(value.id) : "";
+}
+
+function positiveNumber(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function stripeCreatedAt(value: any): string {
+  const seconds = Number(value?.created);
+  return Number.isFinite(seconds) && seconds > 0
+    ? new Date(seconds * 1000).toISOString()
+    : new Date().toISOString();
+}
+
+function firestoreDocumentId(value: string): string {
+  return createHash("sha256").update(value || "unknown", "utf8").digest("hex");
+}
+
+function secureTokenMatches(provided: string, expected: string): boolean {
+  const normalizedProvided = provided.trim();
+  const normalizedExpected = expected.trim();
+  const providedHash = createHash("sha256").update(normalizedProvided, "utf8").digest();
+  const expectedHash = createHash("sha256").update(normalizedExpected, "utf8").digest();
+  return !!normalizedProvided && !!normalizedExpected && timingSafeEqual(providedHash, expectedHash);
+}
+
+function normalizeSupportCategory(value: unknown): string {
+  const category = stringValue(value).toLowerCase();
+  return ["technical", "account", "license", "billing", "feedback", "privacy", "other"].includes(category)
+    ? category
+    : "other";
+}
+
+function supportCategoryLabel(category: string): string {
+  const labels: Record<string, string> = {
+    technical: "Technisches Problem",
+    account: "Konto und Anmeldung",
+    license: "Lizenz und Geräte",
+    billing: "Kauf und Zahlung",
+    feedback: "Feedback und Verbesserung",
+    privacy: "Datenschutz",
+    other: "Sonstiges"
+  };
+  return labels[category] ?? labels.other;
+}
+
+function supportEmailHtml(
+  displayName: string,
+  userEmail: string,
+  categoryLabel: string,
+  subject: string,
+  message: string,
+  diagnostics: { appVersion: string; currentPage: string; userAgent: string },
+  ticketId: string
+): string {
+  const diagnosticRows = diagnostics.appVersion || diagnostics.currentPage || diagnostics.userAgent
+    ? `<h3>Technische Angaben</h3>
+       <p><strong>Version:</strong> ${htmlEscape(diagnostics.appVersion || "-")}<br>
+       <strong>Seite:</strong> ${htmlEscape(diagnostics.currentPage || "-")}<br>
+       <strong>Browser:</strong> ${htmlEscape(diagnostics.userAgent || "-")}</p>`
+    : "";
+  return `<!doctype html>
+<html lang="de"><body style="font-family:Arial,sans-serif;color:#173536;line-height:1.55">
+  <h2>Neue Meduvalo-Supportanfrage</h2>
+  <p><strong>Von:</strong> ${htmlEscape(displayName)} &lt;${htmlEscape(userEmail)}&gt;<br>
+  <strong>Kategorie:</strong> ${htmlEscape(categoryLabel)}<br>
+  <strong>Betreff:</strong> ${htmlEscape(subject)}</p>
+  <div style="padding:16px;border:1px solid #dce9e6;border-radius:12px;background:#f7faf9;white-space:pre-wrap">${htmlEscape(message)}</div>
+  ${diagnosticRows}
+  <p style="color:#617a7a">Ticket: ${htmlEscape(ticketId)}</p>
+</body></html>`;
+}
+
+function htmlEscape(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 async function reserveUsage(

@@ -69,7 +69,7 @@ public sealed class LicensePolicyTests
 
         Assert.True(result.IsValid);
         Assert.Equal("restricted", result.Status);
-        Assert.Contains("Vorhandene Tests", result.Message);
+        Assert.Contains("vorhandenen Fragenpools", result.Message);
     }
 
     [Fact]

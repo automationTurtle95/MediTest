@@ -117,7 +117,16 @@ public sealed class FirestoreUserDataStore
 
         return docs
             .OrderByDescending(d => d.CreatedAt)
-            .Select(d => new DocumentDto(d.Id, d.FileName, d.FolderPath, d.ContentType, d.CreatedAt, d.QuestionCount, d.TextLength))
+            .Select(d => new DocumentDto(
+                d.Id,
+                d.FileName,
+                d.FolderPath,
+                d.ContentType,
+                d.CreatedAt,
+                d.QuestionCount,
+                DocumentContentPolicy.DisplaySizeBytes(d.FileSizeBytes, d.TextLength),
+                DocumentContentPolicy.ItemType(d.ContentType, d.QuestionCount),
+                DocumentContentPolicy.CanGenerateQuestions(d.ContentType, d.QuestionCount)))
             .ToList();
     }
 
@@ -130,10 +139,14 @@ public sealed class FirestoreUserDataStore
         doc.FolderPath = folderPath;
         var textLength = FirestoreInt(fields.Value, "textLength");
         var questionCount = FirestoreInt(fields.Value, "questionCount");
+        var fileSizeBytes = FirestoreLong(fields.Value, "fileSizeBytes");
+        if (fileSizeBytes <= 0) fileSizeBytes = doc.FileSizeBytes;
+        doc.FileSizeBytes = fileSizeBytes;
         await SetJsonDocAsync($"{UserRoot()}/documents/{id}", ToDocMeta(doc, textLength, questionCount), ct, extraFields: new()
         {
             ["textLength"] = FsInt(textLength),
-            ["questionCount"] = FsInt(questionCount)
+            ["questionCount"] = FsInt(questionCount),
+            ["fileSizeBytes"] = FsLong(fileSizeBytes)
         });
         return doc;
     }
@@ -153,12 +166,18 @@ public sealed class FirestoreUserDataStore
     {
         if (doc.Id <= 0) doc.Id = NewId();
         doc.CreatedAt = doc.CreatedAt == default ? DateTime.UtcNow : doc.CreatedAt;
+        doc.ExtractedText ??= string.Empty;
+        doc.FileSizeBytes = DocumentContentPolicy.DisplaySizeBytes(
+            doc.FileSizeBytes,
+            Encoding.UTF8.GetByteCount(doc.ExtractedText));
 
-        var meta = ToDocMeta(doc, doc.ExtractedText.Length, doc.Questions.Count);
+        var textLength = doc.ExtractedText.Length;
+        var meta = ToDocMeta(doc, textLength, doc.Questions.Count);
         await SetJsonDocAsync($"{UserRoot()}/documents/{doc.Id}", meta, ct, extraFields: new()
         {
-            ["textLength"] = FsInt(doc.ExtractedText.Length),
-            ["questionCount"] = FsInt(doc.Questions.Count)
+            ["textLength"] = FsInt(textLength),
+            ["questionCount"] = FsInt(doc.Questions.Count),
+            ["fileSizeBytes"] = FsLong(doc.FileSizeBytes)
         });
         await SaveTextAsync(doc.Id, doc.ExtractedText, ct);
         return doc;
@@ -705,6 +724,8 @@ public sealed class FirestoreUserDataStore
             var meta = DeserializeDocMeta(e);
             meta.QuestionCount = FirestoreInt(e.GetProperty("fields"), "questionCount");
             meta.TextLength = FirestoreInt(e.GetProperty("fields"), "textLength");
+            var storedFileSize = FirestoreLong(e.GetProperty("fields"), "fileSizeBytes");
+            if (storedFileSize > 0) meta.FileSizeBytes = storedFileSize;
             return meta;
         }).ToList();
     }
@@ -712,7 +733,15 @@ public sealed class FirestoreUserDataStore
     private UploadedDocument DeserializeDoc(JsonElement fields)
     {
         var meta = JsonSerializer.Deserialize<DocMeta>(FirestoreString(fields, "dataJson"), JsonOptions) ?? new DocMeta();
-        return new UploadedDocument { Id = meta.Id, FileName = meta.FileName, FolderPath = meta.FolderPath, ContentType = meta.ContentType, CreatedAt = meta.CreatedAt };
+        return new UploadedDocument
+        {
+            Id = meta.Id,
+            FileName = meta.FileName,
+            FolderPath = meta.FolderPath,
+            ContentType = meta.ContentType,
+            FileSizeBytes = meta.FileSizeBytes,
+            CreatedAt = meta.CreatedAt
+        };
     }
 
     private DocMeta DeserializeDocMeta(JsonElement document)
@@ -727,6 +756,7 @@ public sealed class FirestoreUserDataStore
         FileName = doc.FileName,
         FolderPath = doc.FolderPath,
         ContentType = doc.ContentType,
+        FileSizeBytes = doc.FileSizeBytes,
         CreatedAt = doc.CreatedAt,
         TextLength = textLength,
         QuestionCount = questionCount
@@ -797,7 +827,8 @@ public sealed class FirestoreUserDataStore
         await SetJsonDocAsync($"{UserRoot()}/documents/{documentId}", ToDocMeta(doc, textLength, count), ct, extraFields: new()
         {
             ["textLength"] = FsInt(textLength),
-            ["questionCount"] = FsInt(count)
+            ["questionCount"] = FsInt(count),
+            ["fileSizeBytes"] = FsLong(doc.FileSizeBytes)
         });
     }
 
@@ -976,6 +1007,7 @@ public sealed class FirestoreUserDataStore
 
     private static object FsString(string? value) => new Dictionary<string, object> { ["stringValue"] = value ?? string.Empty };
     private static object FsInt(int value) => new Dictionary<string, object> { ["integerValue"] = value.ToString(CultureInfo.InvariantCulture) };
+    private static object FsLong(long value) => new Dictionary<string, object> { ["integerValue"] = value.ToString(CultureInfo.InvariantCulture) };
     private static object FsBool(bool value) => new Dictionary<string, object> { ["booleanValue"] = value };
     private static object FsTimestamp(DateTime value) => new Dictionary<string, object> { ["timestampValue"] = value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture) };
 
@@ -990,6 +1022,15 @@ public sealed class FirestoreUserDataStore
     {
         if (!fields.TryGetProperty(fieldName, out var field)) return 0;
         if (field.TryGetProperty("integerValue", out var integerValue) && int.TryParse(integerValue.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)) return parsed;
+        return 0;
+    }
+
+    private static long FirestoreLong(JsonElement fields, string fieldName)
+    {
+        if (!fields.TryGetProperty(fieldName, out var field)) return 0;
+        if (field.TryGetProperty("integerValue", out var integerValue) &&
+            long.TryParse(integerValue.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+            return parsed;
         return 0;
     }
 
@@ -1038,6 +1079,7 @@ public sealed class FirestoreUserDataStore
         public string FileName { get; set; } = string.Empty;
         public string FolderPath { get; set; } = string.Empty;
         public string ContentType { get; set; } = string.Empty;
+        public long FileSizeBytes { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public int TextLength { get; set; }
         public int QuestionCount { get; set; }

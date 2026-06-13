@@ -103,5 +103,15 @@ service cloud.firestore {
       allow read: if signedIn();
       allow write: if false;
     }
+
+    match /commerceProducts/{productId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /stripePurchases/{purchaseId} {
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow write: if false;
+    }
   }
 }

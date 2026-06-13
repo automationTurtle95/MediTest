@@ -52,6 +52,26 @@ E-Mail-Bestätigung, Passwort-Reset und Passwortänderung laufen für E-Mail-/Pa
 
 Ruft die geschützte Function `meditestDeleteAccount` auf. Sie entfernt das Firebase-Authentication-Konto, alle Dokumente unter `users/{uid}`, persönliche KI-Nutzungsstände und KI-Ereignisse. Bei Apple-Konten widerruft das Frontend zuvor nach erneuter Apple-Anmeldung das Apple-Zugriffstoken.
 
+## Support
+
+`POST /api/support`
+
+Übermittelt eine authentifizierte Supportanfrage an die Firebase Function
+`meditestSupportRequest`. Das Ticket wird dauerhaft gespeichert und bei
+konfiguriertem IONOS-SMTP-Versand an `support@meduvalo.at` gesendet. Der Endpunkt
+bleibt auch nach Ablauf der Testphase erreichbar.
+
+```json
+{
+  "category": "technical",
+  "subject": "Fehler beim Öffnen eines Tests",
+  "message": "Beim Öffnen erscheint wiederholt eine Fehlermeldung.",
+  "includeDiagnostics": true,
+  "currentPage": "http://127.0.0.1:55000/pages/tests.html",
+  "userAgent": "..."
+}
+```
+
 ## Dokumente
 
 `POST /api/documents/upload`
@@ -174,9 +194,13 @@ Speichert die aktive Zustimmung mit `{ "acceptTerms": true, "acceptPrivacy": tru
 
 Liefert Basiskauf, 7-tägige Testphase, eingeschränkten Modus, Abo-Status sowie Kauf- und Monatspreis.
 
+`GET /api/tests/sources`
+
+Liefert im eingeschränkten Modus ausschließlich ID, Name und Fragenanzahl vorhandener Fragenpools, damit weiterhin Testdurchläufe gestartet werden können, ohne Dokument- oder Fragenfunktionen freizugeben.
+
 `POST /api/license/checkout/subscription`
 
-Erstellt über `meditestCreateCheckout` eine separate Stripe-Checkout-Sitzung für das Monatsabo über 5,99 EUR. Der Basiskauf muss bereits bestätigt sein.
+Erstellt über `meditestCreateCheckout` eine separate Stripe-Checkout-Sitzung für das Monatsabo über 9,99 EUR. Der Basiskauf muss bereits bestätigt sein.
 
 `POST /api/license/portal`
 
@@ -306,15 +330,15 @@ Prüft die konfigurierte GitHub-Release-Quelle oder `latest.json` und liefert di
 ```json
 {
   "configured": true,
-  "currentVersion": "5.0.5",
+  "currentVersion": "5.0.6",
   "currentPlatform": "windows-x64",
-  "latestVersion": "5.0.5",
+  "latestVersion": "5.0.6",
   "updateAvailable": false,
-  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v5.0.5",
+  "releaseUrl": "https://github.com/automationTurtle95/MediTest/releases/tag/v5.0.6",
   "recommendedDownload": {
     "platform": "windows-x64",
-    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.5/MediTest-Setup-5.0.5-win-x64.msi",
-    "fileName": "MediTest-Setup-5.0.5-win-x64.msi",
+    "url": "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.6/MediTest-Setup-5.0.6-win-x64.msi",
+    "fileName": "MediTest-Setup-5.0.6-win-x64.msi",
     "sha256": "...",
     "sizeBytes": 42400000
   }
@@ -324,3 +348,16 @@ Prüft die konfigurierte GitHub-Release-Quelle oder `latest.json` und liefert di
 `POST /api/system/shutdown`
 
 Beendet die lokale App, das zugehörige App-Fenster und weitere Meduvalo-Prozesse derselben Installation. Der Endpunkt ist auf Loopback-Zugriffe beschränkt.
+
+### Stripe-Produktvalidierung
+
+`POST /api/admin/stripe-products/validate` ist ausschließlich für
+Admin-Konten verfügbar. Mit `{ "createMissing": false }` werden lokale
+Kaufprodukte read-only gegen Stripe geprüft. Der Bericht enthält fehlende oder
+inaktive Produkte und Preise, Betrags- und Währungsabweichungen, doppelte
+Treffer sowie fehlende lokale Stripe-IDs.
+
+Mit `{ "createMissing": true }` werden eindeutige vorhandene Stripe-Produkte
+und Preise wiederverwendet und dauerhaft zugeordnet. Nur vollständig fehlende
+Objekte werden idempotent angelegt. Checkouts verwenden danach ausschließlich
+die gespeicherte `stripePriceId`.

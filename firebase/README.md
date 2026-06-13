@@ -17,6 +17,29 @@ Nach erfolgreicher Domain-Verbindung sollte auch `meduvalo.at` unter
 `Authentication -> Settings -> Authorized domains` geprüft beziehungsweise
 ergänzt werden.
 
+Absenderdomain und Aktions-URL sind in Firebase zwei getrennte Einstellungen.
+Damit Bestätigungs- und Passwort-E-Mails keinen sichtbaren Link mit
+`meditest-12354.firebaseapp.com` enthalten:
+
+1. `meduvalo.at` muss im selben Firebase-Projekt unter `Hosting` als verbundene
+   Custom Domain erscheinen.
+2. Unter `Authentication -> Templates` eine E-Mail-Vorlage bearbeiten.
+3. Zusätzlich zu `Domain anpassen` auf `Aktions-URL anpassen` klicken.
+4. Als Aktions-URL exakt `https://meduvalo.at/__/auth/action` speichern.
+
+Diese Aktions-URL gilt anschließend für alle Firebase-Authentifizierungs-
+vorlagen. Die Clients senden
+`https://meduvalo.at/purchase.html?emailVerified=1` als Rückkehradresse.
+
+Firebase kann Änderungen der Aktions-URL vorübergehend mit
+`EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED` ablehnen. Das ist eine serverseitige
+Einschränkung und kein DNS- oder Hostingfehler. Der REST-Parameter
+`linkDomain` ändert bei normalen Web-Bestätigungs-E-Mails nicht die
+Aktions-URL. Für eine dauerhafte Änderung von
+`notification.sendEmail.callbackUri` muss Firebase Support die
+Templateänderung für das Projekt freischalten. Alternativ ist ein eigener
+serverseitiger Mailversand mit Firebase Admin SDK und SMTP erforderlich.
+
 1. Firebase CLI installieren und anmelden:
 
    ```powershell
@@ -45,13 +68,50 @@ ergänzt werden.
    npx firebase-tools functions:secrets:set GEMINI_API_KEY
    ```
 
-5. Function und Firestore-Regeln bereitstellen:
+5. Für den Versand des Supportformulars das Passwort des IONOS-Postfachs
+   `support@meduvalo.at` als Firebase-Secret speichern:
+
+   ```powershell
+   npx firebase-tools functions:secrets:set MEDITEST_SMTP_PASSWORD
+   ```
+
+   Das Passwort wird nicht in einer Konfigurationsdatei gespeichert. Für ein
+   normales IONOS Mail-Basic- oder Mail-Business-Postfach gelten folgende
+   Laufzeitwerte:
+
+   ```dotenv
+   SUPPORT_RECIPIENT_EMAIL=support@meduvalo.at
+   SUPPORT_FROM_EMAIL=Meduvalo Support <support@meduvalo.at>
+   SUPPORT_SMTP_HOST=smtp.ionos.de
+   SUPPORT_SMTP_PORT=465
+   SUPPORT_SMTP_USERNAME=support@meduvalo.at
+   SUPPORT_MAX_DAILY_REQUESTS=5
+   ```
+
+   Port `465` verwendet SSL/TLS. Falls er in der Laufzeitumgebung nicht
+   erreichbar ist, kann `SUPPORT_SMTP_PORT=587` für STARTTLS verwendet werden.
+
+6. Für automatisierte, serverseitige Stripe-Produktprüfungen einen langen
+   zufälligen Wartungstoken als Secret speichern. Der Adminbereich selbst
+   verwendet weiterhin das Firebase-Admin-Konto:
+
+   ```powershell
+   npx firebase-tools functions:secrets:set MEDITEST_STRIPE_VALIDATION_TOKEN
+   ```
+
+7. Function und Firestore-Regeln bereitstellen:
 
    ```powershell
    npx firebase-tools deploy --only functions,firestore:rules
    ```
 
 Zusätzlich zur KI stellt das Projekt `meditestRedeemCatalogCode` für die atomare Einmalverwendung eines Gratis-Codes pro Benutzerkonto und `meditestDeleteAccount` für die vollständige Kontolöschung bereit. Alle geschützten Funktionen prüfen das Firebase-ID-Token; KI und Code-Einlösung verlangen außerdem eine bestätigte E-Mail-Adresse.
+
+`meditestSupportRequest` nimmt authentifizierte Supportanfragen entgegen,
+begrenzt sie pro Konto und UTC-Tag, speichert sie dauerhaft unter
+`supportRequests/{ticketId}` und sendet eine Benachrichtigung direkt über das
+IONOS-Postfach `support@meduvalo.at`. Ohne konfiguriertes SMTP-Passwort bleibt
+das Ticket gespeichert und wird mit dem Status `stored` geführt.
 
 ## KI-Nutzung begrenzen
 
@@ -81,6 +141,7 @@ FREE_CATALOG_CODE_HASHES=<SHA-256-HASH>
 PREMIUM_CODE_HASHES=<SHA-256-HASH>
 STRIPE_PORTAL_CONFIGURATION_ID=bpc_...
 INSTALLATION_AUTHORIZATION_TTL_HOURS=24
+LICENSING_DEFAULT_MAX_DEVICES=2
 ```
 
 Anschließend die Functions erneut bereitstellen:
@@ -158,10 +219,10 @@ Danach läuft die Fragegenerierung über Firebase. Der echte Gemini-Key liegt ni
 
 Meduvalo integriert folgendes Lizenzmodell:
 
-- einmaliger Basiskauf für 14,99 EUR
+- einmaliger Basiskauf für 24,99 EUR
 - 7 Tage vollständige Testphase ab bestätigtem Basiskauf
-- danach optionales Monatsabo für 5,99 EUR
-- ohne Abo eingeschränkter Modus für vorhandene Tests und Auswertungen
+- danach optionales Monatsabo für 9,99 EUR
+- ohne Abo sind ausschließlich Testdurchläufe aus vorhandenen Fragenpools verfügbar
 - Katalogtests als separate Kaufartikel
 - Premium-Freischaltung per administrativem Code ohne Kataloginhalte
 - MedAT-Katalogtests für 49,99 EUR pro Test
@@ -170,7 +231,32 @@ Meduvalo integriert folgendes Lizenzmodell:
 
 Die geschützte Function `meditestLicenseAccess` legt Nutzer-, Lizenz-, Geräte- und Zustimmungsdaten ausschließlich mit dem verifizierten Firebase-Token an. Der Client kann diese sicherheitsrelevanten Dokumente nicht direkt schreiben.
 
-Die geschützte Function `meditestCreateCheckout` erstellt getrennte Stripe-Checkouts für den Basiskauf (`BILLING_PRODUCT_PRICE_CENTS`), das Monatsabo (`BILLING_MONTHLY_PRICE_CENTS`) und Katalogtests. Katalogpreise werden serverseitig als Inline-Preise erzeugt; MedAT verwendet einen Festpreis von 49,99 EUR. `meditestStripeWebhook` prüft jedes Ereignis mit `MEDITEST_STRIPE_WEBHOOK_SECRET` und startet die Testphase erst nach bestätigtem Basiskauf. `meditestDownloadAccess` liefert nach diesem Kauf oder einer administrativen Freischaltung den ausgewählten Windows-, Apple-Silicon- oder Intel-Mac-Download sowie eine einmalige Installationsberechtigung. Die URLs werden über `WINDOWS_DOWNLOAD_URL`, `MACOS_ARM64_DOWNLOAD_URL`, `MACOS_X64_DOWNLOAD_URL` und `CURRENT_APP_VERSION` konfiguriert. `meditestStripePortal` verwendet `STRIPE_PORTAL_CONFIGURATION_ID`.
+Die geschützte Function `meditestCreateCheckout` verwendet für Basiskauf,
+Monatsabo und jeden Katalogtest ausschließlich die dauerhaft gespeicherte
+Stripe Price ID aus `commerceProducts`. Inline-Preise aus lokalen Namen oder
+Beträgen werden nicht mehr erzeugt. Einmalkäufe aktivieren
+`invoice_creation`, Abonnements verwenden die reguläre Stripe-Rechnung.
+`meditestPricing` liefert die gespeicherten Produktpreise an Website und App.
+
+`meditestValidateStripeProducts` gleicht alle lokalen Kaufprodukte mit Stripe
+ab. Die Standardprüfung ist read-only. Ein ausdrücklich angeforderter
+Reparaturlauf verwendet zuerst gespeicherte IDs, Metadata, Produktnamen und
+passende vorhandene Preise. Nur wenn kein eindeutiges passendes Objekt
+existiert, wird idempotent ein neues Stripe-Produkt beziehungsweise ein neuer
+Stripe-Preis erstellt. Doppelte Treffer werden als Fehler gemeldet und nicht
+automatisch aufgelöst.
+
+`meditestStripeWebhook` prüft jedes Ereignis mit
+`MEDITEST_STRIPE_WEBHOOK_SECRET`, beansprucht Webhook-Ereignisse atomar und
+ordnet Käufe anhand der tatsächlichen Stripe Price ID zu. Kauf- und
+Rechnungsdaten werden in `stripePurchases` und
+`customers/{uid}/payments` gespeichert, einschließlich Checkout Session,
+Payment Intent, Customer, Invoice-ID, Rechnungsnummer, PDF-/Hosted-URL und
+Zahlungsstatus. `meditestDownloadAccess` liefert nach dem Basiskauf oder einer
+administrativen Freischaltung den Installer. Die URLs werden über
+`WINDOWS_DOWNLOAD_URL`, `MACOS_ARM64_DOWNLOAD_URL`, `MACOS_X64_DOWNLOAD_URL`
+und `CURRENT_APP_VERSION` konfiguriert. `meditestStripePortal` verwendet
+`STRIPE_PORTAL_CONFIGURATION_ID`.
 
 Die Payments-Extension kann für diese Datenbank nicht verwendet werden, weil ihre Gen-1-Firestore-Trigger mit dem Firestore-Multiregionsstandort `eur3` nicht bereitgestellt werden können. Die direkten Functions liefern denselben Checkout-, Webhook- und Portalablauf ohne diese Standortbeschränkung.
 

@@ -1,21 +1,23 @@
 "use strict";
 
-const SITE_CONFIG = Object.freeze({
+const SITE_CONFIG = {
   brandName: "Meduvalo",
   domain: "meduvalo.at",
   websiteUrl: "https://meduvalo.at",
   claim: "Prüfungsnah lernen. Sicherer bestehen.",
   shortClaim: "Medizinfragen smart trainieren.",
   description: "Meduvalo ist eine Lernsoftware für Medizinstudenten zur prüfungsnahen Vorbereitung mit strukturierten Fragen, Tests, Lernmodulen, Fortschrittsübersicht und KI-gestützter Fragengenerierung.",
-  purchasePrice: "14,99 €",
-  monthlyPrice: "5,99 €",
+  productPriceCents: 2499,
+  monthlyPriceCents: 999,
+  currency: "EUR",
+  pricingUrl: "./api/pricing",
   purchaseUrl: "./purchase.html"
-});
+};
 
 const LEGAL_CONFIG = Object.freeze({
   operatorName: "Lukas Hofer",
   businessName: "Meduvalo",
-  contactEmail: "lhofer9@gmail.com",
+  contactEmail: "support@meduvalo.at",
   postalAddress: "Lerchenweg 21b, 4203 Altenberg bei Linz",
   country: "Österreich"
 });
@@ -47,13 +49,45 @@ document.querySelectorAll("[data-current-year]").forEach((element) => {
   element.textContent = String(new Date().getFullYear());
 });
 
-document.querySelectorAll("[data-purchase-price]").forEach((element) => {
-  element.textContent = SITE_CONFIG.purchasePrice;
-});
+function formatSitePrice(cents) {
+  return new Intl.NumberFormat("de-AT", {
+    style: "currency",
+    currency: SITE_CONFIG.currency
+  }).format((Number(cents) || 0) / 100);
+}
 
-document.querySelectorAll("[data-monthly-price]").forEach((element) => {
-  element.textContent = SITE_CONFIG.monthlyPrice;
-});
+function applySitePricing() {
+  const purchasePrice = formatSitePrice(SITE_CONFIG.productPriceCents);
+  const monthlyPrice = formatSitePrice(SITE_CONFIG.monthlyPriceCents);
+  document.querySelectorAll("[data-purchase-price]").forEach((element) => {
+    element.textContent = purchasePrice;
+  });
+  document.querySelectorAll("[data-monthly-price]").forEach((element) => {
+    element.textContent = monthlyPrice;
+  });
+  document.querySelectorAll("[data-purchase-button]").forEach((element) => {
+    if (!element.textContent.includes("Bereits gekauft")) {
+      element.textContent = `Für ${purchasePrice} kaufen`;
+    }
+  });
+}
+
+async function loadSitePricing() {
+  try {
+    const response = await fetch(SITE_CONFIG.pricingUrl, { headers: { "Accept": "application/json" } });
+    if (!response.ok) return;
+    const pricing = await response.json();
+    if (Number(pricing.productPriceCents) > 0) SITE_CONFIG.productPriceCents = Number(pricing.productPriceCents);
+    if (Number(pricing.monthlyPriceCents) > 0) SITE_CONFIG.monthlyPriceCents = Number(pricing.monthlyPriceCents);
+    if (typeof pricing.currency === "string" && pricing.currency.trim()) SITE_CONFIG.currency = pricing.currency.trim().toUpperCase();
+    applySitePricing();
+  } catch {
+    // The embedded prices remain a fallback when the pricing endpoint is offline.
+  }
+}
+
+applySitePricing();
+loadSitePricing();
 
 document.querySelectorAll("[data-purchase-link]").forEach((link) => {
   link.setAttribute("href", SITE_CONFIG.purchaseUrl);

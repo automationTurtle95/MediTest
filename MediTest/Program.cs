@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Net;
 using System.Globalization;
 using System.Reflection;
@@ -224,7 +224,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     var url = app.Urls.FirstOrDefault(u => u.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase))
         ?? app.Urls.FirstOrDefault()
         ?? "http://127.0.0.1:55000";
-    managedBrowserProcess = OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=5005");
+    managedBrowserProcess = OpenBrowser(url.TrimEnd('/') + "/pages/documents.html?v=5006");
 });
 
 app.Lifetime.ApplicationStopping.Register(() =>
@@ -368,6 +368,8 @@ static bool RequiresLicenseGate(HttpContext context)
            !path.StartsWithSegments("/api/legal-license") &&
            !path.StartsWithSegments("/api/license") &&
            !path.StartsWithSegments("/api/account") &&
+           !path.StartsWithSegments("/api/trial-feedback") &&
+           !path.StartsWithSegments("/api/support") &&
            !path.StartsWithSegments("/api/system");
 }
 
@@ -424,7 +426,7 @@ static AuthUserDto ToFirebaseUserDto(ClaimsPrincipal principal, IConfiguration c
 
     var subscriptionActive = IsTruthy(FirstClaim(principal, "subscriptionActive", "subscribed", "paid"));
     var admin = IsTruthy(FirstClaim(principal, "admin", "isAdmin"));
-    var plan = subscriptionActive || admin ? "Pro" : "Testphase";
+    var plan = subscriptionActive || admin ? "Premium" : "Testphase";
     var licenseStatus = subscriptionActive || admin ? "Aktiv" : "Testphase";
 
     return new AuthUserDto(
@@ -850,7 +852,54 @@ app.MapPost("/api/trial-feedback", async (
     settings.TrialFeedbackSubmittedAt = now;
     settings.TrialFeedbackNextPromptAt = null;
     await store.SaveSettingsAsync(settings, ct);
-    return Results.Ok(new { submitted = true, message = "Vielen Dank für dein Feedback." });
+    return Results.Ok(new { submitted = true, message = "Vielen Dank. Dein Feedback wurde in deinem Konto gespeichert und nicht per E-Mail versendet." });
+});
+
+app.MapPost("/api/support", async (
+    SupportRequest req,
+    HttpContext context,
+    IConfiguration cfg,
+    IHttpClientFactory httpClientFactory,
+    CancellationToken ct) =>
+{
+    var category = TrimTo(req.Category, 40);
+    var subject = TrimTo(req.Subject, 160);
+    var message = TrimTo(req.Message, 5000);
+    if (string.IsNullOrWhiteSpace(subject))
+        return Results.BadRequest(new { error = "Bitte gib einen Betreff ein." });
+    if (message.Length < 10)
+        return Results.BadRequest(new { error = "Bitte beschreibe dein Anliegen mit mindestens 10 Zeichen." });
+
+    var functionUrl = FirebaseFunctionUrl(cfg, "Product:SupportFunctionUrl", "meditestSupportRequest");
+    var functionResult = await SendProtectedFirebaseFunctionAsync(
+        httpClientFactory,
+        context,
+        HttpMethod.Post,
+        functionUrl,
+        new
+        {
+            category,
+            subject,
+            message,
+            diagnostics = req.IncludeDiagnostics
+                ? new
+                {
+                    appVersion = AppVersion(),
+                    currentPage = TrimTo(req.CurrentPage, 500),
+                    userAgent = TrimTo(req.UserAgent, 500)
+                }
+                : null
+        },
+        "Die Supportanfrage konnte nicht übermittelt werden.",
+        ct);
+    if (functionResult.Error != null) return functionResult.Error;
+    using var json = functionResult.Json;
+    var supportEmail = string.IsNullOrWhiteSpace(cfg["Product:SupportEmail"])
+        ? "support@meduvalo.at"
+        : cfg["Product:SupportEmail"]!.Trim();
+    return json == null
+        ? Results.Ok(new { submitted = true, message = $"Deine Supportanfrage wurde an {supportEmail} übermittelt." })
+        : Results.Ok(json.RootElement.Clone());
 });
 
 app.MapGet("/api/license/status", async (HttpContext context, IConfiguration cfg, FirestoreUserDataStore store, CancellationToken ct) =>
@@ -993,10 +1042,11 @@ app.MapPost("/api/documents/upload", async (HttpRequest request, FirestoreUserDa
         FolderPath = DocumentFolderPath(form["folderPath"].ToString()),
         ContentType = file.ContentType ?? string.Empty,
         ExtractedText = text,
+        FileSizeBytes = file.Length,
         CreatedAt = DateTime.UtcNow
     };
     await store.SaveDocumentAsync(doc, ct);
-    return Results.Ok(new { doc.Id, doc.FileName, textLength = doc.ExtractedText.Length });
+    return Results.Ok(new { doc.Id, doc.FileName, doc.FileSizeBytes });
 });
 
 app.MapGet("/api/documents", async (FirestoreUserDataStore store, CancellationToken ct) =>
@@ -1016,7 +1066,7 @@ app.MapGet("/api/documents/{id:int}/preview", async (int id, FirestoreUserDataSt
         doc.FolderPath,
         doc.ContentType,
         doc.CreatedAt,
-        textLength = doc.ExtractedText.Length,
+        fileSizeBytes = DocumentContentPolicy.DisplaySizeBytes(doc.FileSizeBytes, Encoding.UTF8.GetByteCount(doc.ExtractedText)),
         text = doc.ExtractedText
     });
 });
@@ -1057,10 +1107,21 @@ app.MapGet("/api/catalog/tests", async (HttpContext context, IConfiguration cfg,
             var category = CatalogCategory(FirestoreString(fields, "category"));
             var topic = TopicLabel(FirestoreString(fields, "topic"));
             var folderPath = CatalogFolderPath(category, FirestoreString(fields, "folderPath"), topic);
+            var storedPriceAmount = FirestoreInt(fields, "priceAmount");
             var storedPriceCents = FirestoreInt(fields, "priceCents");
-            var priceCents = storedPriceCents > 0
-                ? storedPriceCents
+            var priceCents = storedPriceAmount > 0
+                ? storedPriceAmount
+                : storedPriceCents > 0
+                    ? storedPriceCents
                 : BillingCatalogTestPriceCents(cfg, category, questionCount);
+            var stripeProductId = FirestoreString(fields, "stripeProductId");
+            var stripePriceId = FirestoreString(fields, "stripePriceId");
+            var productCurrency = FirestoreString(fields, "currency");
+            if (string.IsNullOrWhiteSpace(productCurrency)) productCurrency = currency;
+            var active = FirestoreBool(fields, "active", true);
+            var stripeReady = active &&
+                              stripeProductId.StartsWith("prod_", StringComparison.Ordinal) &&
+                              stripePriceId.StartsWith("price_", StringComparison.Ordinal);
             var purchased = licenseState.PurchasedCatalogTestIds.Contains(id, StringComparer.OrdinalIgnoreCase);
 
             tests.Add(new CatalogTestDto(
@@ -1075,9 +1136,15 @@ app.MapGet("/api/catalog/tests", async (HttpContext context, IConfiguration cfg,
                 FirestoreString(fields, "appVersion"),
                 FirestoreTimestamp(fields, "publishedAt"),
                 priceCents,
-                currency,
+                productCurrency,
                 purchased,
-                enforcePurchases && !canPublish && !purchased));
+                enforcePurchases && !canPublish && !purchased,
+                stripeProductId,
+                stripePriceId,
+                priceCents,
+                FirestoreString(fields, "taxCode"),
+                active,
+                stripeReady));
         }
     }
 
@@ -1095,6 +1162,131 @@ app.MapGet("/api/catalog/tests", async (HttpContext context, IConfiguration cfg,
         !string.IsNullOrWhiteSpace(licenseState.FreeCatalogCreditRedeemedCatalogId),
         licenseState.FreeCatalogCreditRedeemedCatalogId,
         tests));
+});
+
+app.MapGet("/api/catalog/tests/{catalogId}/questions", async (string catalogId, HttpContext context, IConfiguration cfg, IHttpClientFactory httpClientFactory, CancellationToken ct) =>
+{
+    if (!UserCanPublishCatalog(context, cfg))
+        return Results.Json(new { error = "Nur Admin-Konten dürfen Katalogfragen bearbeiten." }, statusCode: StatusCodes.Status403Forbidden);
+
+    catalogId = (catalogId ?? string.Empty).Trim();
+    if (string.IsNullOrWhiteSpace(catalogId)) return Results.BadRequest(new { error = "Katalog-ID fehlt." });
+
+    var client = httpClientFactory.CreateClient();
+    JsonDocument? loadedPayload = null;
+    foreach (var collection in CatalogCollections())
+    {
+        var path = $"documents/{collection}/{Uri.EscapeDataString(catalogId)}";
+        var (json, error) = await SendFirestoreAsync(client, cfg, context, HttpMethod.Get, path, null, "Katalogfragen konnten nicht geladen werden.", ct, allowNotFound: true);
+        if (error != null) return error;
+        if (json == null) continue;
+        loadedPayload = json;
+        break;
+    }
+
+    if (loadedPayload == null) return Results.NotFound(new { error = "Katalogtest nicht gefunden." });
+    using var payload = loadedPayload;
+    if (!payload.RootElement.TryGetProperty("fields", out var fields))
+        return Results.BadRequest(new { error = "Katalogtest enthält keine gültigen Felder." });
+
+    var questions = DeserializeCatalogQuestions(FirestoreString(fields, "questionsJson"))
+        .Select((question, index) => new CatalogQuestionDto(
+            index,
+            question.QuestionText,
+            question.Options,
+            question.CorrectOptionIndex,
+            question.Explanation,
+            question.Topic,
+            question.Difficulty,
+            question.IsAiGenerated))
+        .ToList();
+
+    return Results.Ok(new CatalogQuestionListDto(
+        catalogId,
+        FirestoreString(fields, "title"),
+        questions.Count,
+        questions));
+});
+
+app.MapPut("/api/catalog/tests/{catalogId}/questions/{questionIndex:int}", async (string catalogId, int questionIndex, UpdateCatalogQuestionRequest req, HttpContext context, IConfiguration cfg, IHttpClientFactory httpClientFactory, CancellationToken ct) =>
+{
+    if (!UserCanPublishCatalog(context, cfg))
+        return Results.Json(new { error = "Nur Admin-Konten dürfen Katalogfragen bearbeiten." }, statusCode: StatusCodes.Status403Forbidden);
+    if (string.IsNullOrWhiteSpace(req.QuestionText)) return Results.BadRequest(new { error = "Fragetext fehlt." });
+    if (req.Options == null || req.Options.Count is < 2 or > 5 || req.Options.Any(string.IsNullOrWhiteSpace))
+        return Results.BadRequest(new { error = "Zwischen 2 und 5 ausgefüllte Antwortmöglichkeiten sind erforderlich." });
+    if (req.CorrectOptionIndex < 0 || req.CorrectOptionIndex >= req.Options.Count)
+        return Results.BadRequest(new { error = "Die richtige Antwort liegt außerhalb der Antwortmöglichkeiten." });
+
+    catalogId = (catalogId ?? string.Empty).Trim();
+    if (string.IsNullOrWhiteSpace(catalogId)) return Results.BadRequest(new { error = "Katalog-ID fehlt." });
+
+    var client = httpClientFactory.CreateClient();
+    JsonDocument? loadedPayload = null;
+    var collection = string.Empty;
+    foreach (var candidate in CatalogCollections())
+    {
+        var path = $"documents/{candidate}/{Uri.EscapeDataString(catalogId)}";
+        var (json, error) = await SendFirestoreAsync(client, cfg, context, HttpMethod.Get, path, null, "Katalogfragen konnten nicht geladen werden.", ct, allowNotFound: true);
+        if (error != null) return error;
+        if (json == null) continue;
+        loadedPayload = json;
+        collection = candidate;
+        break;
+    }
+
+    if (loadedPayload == null) return Results.NotFound(new { error = "Katalogtest nicht gefunden." });
+    using var payload = loadedPayload;
+    var fields = payload.RootElement.GetProperty("fields");
+    var questions = DeserializeCatalogQuestions(FirestoreString(fields, "questionsJson"));
+    if (questionIndex < 0 || questionIndex >= questions.Count)
+        return Results.NotFound(new { error = "Katalogfrage nicht gefunden." });
+
+    var previous = questions[questionIndex];
+    questions[questionIndex] = new CatalogQuestionPayload(
+        req.QuestionText.Trim(),
+        req.Options.Select(option => option.Trim()).ToList(),
+        req.CorrectOptionIndex,
+        string.IsNullOrWhiteSpace(req.Explanation) ? "Keine Erklärung hinterlegt." : req.Explanation.Trim(),
+        TopicLabel(req.Topic),
+        DifficultyLabel(req.Difficulty),
+        previous.IsAiGenerated);
+
+    var questionsJson = JsonSerializer.Serialize(questions, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+    if (Encoding.UTF8.GetByteCount(questionsJson) > 900_000)
+        return Results.BadRequest(new { error = "Der aktualisierte Katalogtest ist für einen einzelnen Firestore-Eintrag zu groß." });
+
+    var user = ToFirebaseUserDto(context.User, cfg);
+    var body = new
+    {
+        fields = new Dictionary<string, object>
+        {
+            ["questionsJson"] = FirestoreValue(questionsJson),
+            ["questionCount"] = FirestoreIntValue(questions.Count),
+            ["updatedByUid"] = FirestoreValue(user.UserId),
+            ["updatedByEmail"] = FirestoreValue(user.Email),
+            ["updatedAt"] = FirestoreTimestampValue(DateTime.UtcNow)
+        }
+    };
+    var updateMask = "?updateMask.fieldPaths=questionsJson&updateMask.fieldPaths=questionCount&updateMask.fieldPaths=updatedByUid&updateMask.fieldPaths=updatedByEmail&updateMask.fieldPaths=updatedAt";
+    var updatePath = $"documents/{collection}/{Uri.EscapeDataString(catalogId)}{updateMask}";
+    var (_, updateError) = await SendFirestoreAsync(client, cfg, context, HttpMethod.Patch, updatePath, body, "Katalogfrage konnte nicht gespeichert werden.", ct);
+    if (updateError != null) return updateError;
+
+    var saved = questions[questionIndex];
+    return Results.Ok(new
+    {
+        saved = true,
+        question = new CatalogQuestionDto(
+            questionIndex,
+            saved.QuestionText,
+            saved.Options,
+            saved.CorrectOptionIndex,
+            saved.Explanation,
+            saved.Topic,
+            saved.Difficulty,
+            saved.IsAiGenerated)
+    });
 });
 
 app.MapPost("/api/catalog/tests/{catalogId}/download", async (string catalogId, CatalogDownloadRequest req, HttpContext context, IConfiguration cfg, IHttpClientFactory httpClientFactory, FirestoreUserDataStore store, CancellationToken ct) =>
@@ -1181,6 +1373,7 @@ app.MapPost("/api/catalog/tests/{catalogId}/download", async (string catalogId, 
         FolderPath = DocumentFolderPath($"Katalog/{catalogFolderPath}"),
         ContentType = "firestore/catalog-test",
         ExtractedText = $"Aus Firestore heruntergeladener Test: {documentName}",
+        FileSizeBytes = Encoding.UTF8.GetByteCount(questionsJson),
         CreatedAt = DateTime.UtcNow
     };
     await store.SaveDocumentAsync(doc, ct);
@@ -1195,7 +1388,7 @@ app.MapPost("/api/catalog/tests/{catalogId}/download", async (string catalogId, 
             Explanation = string.IsNullOrWhiteSpace(item.Explanation) ? "Aus Firestore importierte Frage." : item.Explanation.Trim(),
             Topic = TopicLabel(item.Topic),
             Difficulty = DifficultyLabel(item.Difficulty),
-            IsAiGenerated = false,
+            IsAiGenerated = item.IsAiGenerated,
             CreatedAt = DateTime.UtcNow,
             Options = item.Options.Select((text, index) => new AnswerOption { Text = text.Trim(), OptionIndex = index }).ToList()
         }, ct);
@@ -1264,6 +1457,12 @@ app.MapPost("/api/catalog/tests/publish", async (CatalogPublishRequest req, Http
             ["difficulty"] = FirestoreValue(difficulty),
             ["questionCount"] = FirestoreIntValue(questions.Count),
             ["priceCents"] = FirestoreIntValue(BillingCatalogTestPriceCents(cfg, category, questions.Count)),
+            ["priceAmount"] = FirestoreIntValue(BillingCatalogTestPriceCents(cfg, category, questions.Count)),
+            ["currency"] = FirestoreValue(BillingCurrency(cfg)),
+            ["stripeProductId"] = FirestoreValue(string.Empty),
+            ["stripePriceId"] = FirestoreValue(string.Empty),
+            ["taxCode"] = FirestoreValue(string.Empty),
+            ["active"] = FirestoreBoolValue(true),
             ["schemaVersion"] = FirestoreIntValue(1),
             ["appVersion"] = FirestoreValue(AppVersion()),
             ["questionsJson"] = FirestoreValue(questionsJson),
@@ -1325,6 +1524,10 @@ app.MapPut("/api/catalog/tests/{catalogId}", async (string catalogId, CatalogUpd
     if (Encoding.UTF8.GetByteCount(questionsJson) > 900_000)
         return Results.BadRequest(new { error = "Dieser Fragenpool ist für einen einzelnen Firestore-Katalogeintrag zu groß." });
 
+    var updatedPriceAmount = BillingCatalogTestPriceCents(cfg, category, questions.Count);
+    var previousPriceAmount = FirestoreInt(existingFields, "priceAmount");
+    if (previousPriceAmount <= 0) previousPriceAmount = FirestoreInt(existingFields, "priceCents");
+    var preserveStripePrice = previousPriceAmount == updatedPriceAmount;
     var body = new
     {
         fields = new Dictionary<string, object>
@@ -1336,7 +1539,13 @@ app.MapPut("/api/catalog/tests/{catalogId}", async (string catalogId, CatalogUpd
             ["topic"] = FirestoreValue(topic),
             ["difficulty"] = FirestoreValue(difficulty),
             ["questionCount"] = FirestoreIntValue(questions.Count),
-            ["priceCents"] = FirestoreIntValue(BillingCatalogTestPriceCents(cfg, category, questions.Count)),
+            ["priceCents"] = FirestoreIntValue(updatedPriceAmount),
+            ["priceAmount"] = FirestoreIntValue(updatedPriceAmount),
+            ["currency"] = FirestoreValue(FirestoreString(existingFields, "currency") is { Length: > 0 } productCurrency ? productCurrency : BillingCurrency(cfg)),
+            ["stripeProductId"] = FirestoreValue(FirestoreString(existingFields, "stripeProductId")),
+            ["stripePriceId"] = FirestoreValue(preserveStripePrice ? FirestoreString(existingFields, "stripePriceId") : string.Empty),
+            ["taxCode"] = FirestoreValue(FirestoreString(existingFields, "taxCode")),
+            ["active"] = FirestoreBoolValue(FirestoreBool(existingFields, "active", true)),
             ["schemaVersion"] = FirestoreIntValue(1),
             ["appVersion"] = FirestoreValue(AppVersion()),
             ["questionsJson"] = FirestoreValue(questionsJson),
@@ -1579,6 +1788,7 @@ app.MapPost("/api/documents/import-txt", async (HttpRequest request, FirestoreUs
         FolderPath = folderPath,
         ContentType = "text/imported-question-pool",
         ExtractedText = "Importierter Fragenpool aus TXT.",
+        FileSizeBytes = file.Length,
         CreatedAt = DateTime.UtcNow
     };
     await store.SaveDocumentAsync(doc, ct);
@@ -1612,8 +1822,10 @@ app.MapPost("/api/documents/{id:int}/generate-questions", async (int id, Generat
     var defaultCount = settings.DefaultGenerateQuestionCount;
     var maxCount = Math.Clamp(cfg.GetValue<int?>("AI:MaxQuestionsPerGeneration") ?? 25, 1, 100);
     var count = Math.Clamp(req.Count <= 0 ? defaultCount : req.Count, 1, maxCount);
-    var doc = await store.GetDocumentAsync(id, ct, includeText: true);
+    var doc = await store.GetDocumentAsync(id, ct, includeQuestions: true, includeText: true);
     if (doc == null) return Results.NotFound(new { error = "Dokument nicht gefunden." });
+    if (!DocumentContentPolicy.CanGenerateQuestions(doc.ContentType, doc.Questions.Count))
+        return Results.BadRequest(new { error = "Aus einem bestehenden Test können keine weiteren KI-Fragen generiert werden." });
 
     List<GeneratedQuestion> generated;
     try
@@ -1668,6 +1880,35 @@ app.MapGet("/api/admin/ai-usage", async (HttpContext context, IConfiguration cfg
     return Results.Content(raw, "application/json; charset=utf-8", Encoding.UTF8, (int)response.StatusCode);
 });
 
+app.MapPost("/api/admin/stripe-products/validate", async (
+    ValidateStripeProductsRequest req,
+    HttpContext context,
+    IConfiguration cfg,
+    IHttpClientFactory httpClientFactory,
+    CancellationToken ct) =>
+{
+    if (!UserCanPublishCatalog(context, cfg))
+        return Results.Json(new { error = "Nur Admin-Konten dürfen Stripe-Produkte prüfen." }, statusCode: StatusCodes.Status403Forbidden);
+
+    var functionUrl = FirebaseFunctionUrl(
+        cfg,
+        "Billing:StripeProductValidationFunctionUrl",
+        "meditestValidateStripeProducts");
+    var functionResult = await SendProtectedFirebaseFunctionAsync(
+        httpClientFactory,
+        context,
+        HttpMethod.Post,
+        functionUrl,
+        new { createMissing = req.CreateMissing },
+        "Die Stripe-Produkte konnten nicht validiert werden.",
+        ct);
+    if (functionResult.Error != null) return functionResult.Error;
+    using var json = functionResult.Json;
+    return json == null
+        ? Results.Ok(new { valid = false, issues = new[] { new { message = "Stripe hat keinen Prüfbericht geliefert." } } })
+        : Results.Ok(json.RootElement.Clone());
+});
+
 app.MapGet("/api/ai/status", async (HttpContext context, IConfiguration cfg, IHttpClientFactory httpClientFactory, CancellationToken ct) =>
 {
     var token = FirebaseBearerToken(context);
@@ -1686,6 +1927,19 @@ app.MapGet("/api/ai/status", async (HttpContext context, IConfiguration cfg, IHt
 app.MapGet("/api/tests", async (FirestoreUserDataStore store, CancellationToken ct) =>
 {
     return Results.Ok(await store.ListTestsAsync(ct));
+});
+
+app.MapGet("/api/tests/sources", async (FirestoreUserDataStore store, CancellationToken ct) =>
+{
+    var sources = (await store.ListDocumentsAsync(ct, seedDemo: false))
+        .Where(document => document.QuestionCount > 0)
+        .Select(document => new
+        {
+            documentId = document.Id,
+            documentName = document.FileName,
+            document.QuestionCount
+        });
+    return Results.Ok(sources);
 });
 
 app.MapGet("/api/tests/{id:int}/resume", async (int id, FirestoreUserDataStore store, CancellationToken ct) =>
@@ -1923,7 +2177,7 @@ static LicenseStatusDto ToLicenseStatusDto(UserLicenseState state, HttpContext c
         trialActive ? "trial" :
         restrictedMode ? "restricted" : "inactive";
     var plan = premiumActive ? "Premium" :
-        subscriptionActive ? "Pro" :
+        subscriptionActive ? "Premium" :
         trialActive ? "Testphase" :
         restrictedMode ? "Basis" : "Nicht gekauft";
     var checkoutConfigured = cfg.GetValue<bool?>("Billing:StripeEnabled") ?? false;
@@ -1932,7 +2186,7 @@ static LicenseStatusDto ToLicenseStatusDto(UserLicenseState state, HttpContext c
         "premium" => "Premium aktiv. Katalogtests bleiben separate Kaufartikel.",
         "active" => $"Monatsabo aktiv. Alle {Brand.ProductName}-Funktionen sind verfügbar.",
         "trial" => $"7-tägige Testphase aktiv: noch {daysRemaining} Tag(e).",
-        "restricted" => "Testphase beendet. Vorhandene Tests bleiben nutzbar; neue Inhalte und KI-Funktionen benötigen ein Abo.",
+        "restricted" => "Testphase beendet. Tests aus vorhandenen Fragenpools bleiben ausführbar; alle anderen Funktionen benötigen ein Abo.",
         _ => $"{Brand.ProductName} wurde für dieses Konto noch nicht gekauft."
     };
 
@@ -1948,13 +2202,13 @@ static LicenseStatusDto ToLicenseStatusDto(UserLicenseState state, HttpContext c
         state.TrialStartedAt,
         state.TrialEndsAt,
         daysRemaining,
-        BillingProductPriceCents(cfg),
-        BillingMonthlyPriceCents(cfg),
+        state.ProductPriceCents > 0 ? state.ProductPriceCents : BillingProductPriceCents(cfg),
+        state.MonthlyPriceCents > 0 ? state.MonthlyPriceCents : BillingMonthlyPriceCents(cfg),
         BillingCatalogExamplePriceCents(cfg),
         BillingCatalogQuestionPriceCents(cfg),
         BillingCatalogPriceEndingCents(cfg),
         BillingCatalogExampleQuestionCount(cfg),
-        BillingCurrency(cfg),
+        string.IsNullOrWhiteSpace(state.Currency) ? BillingCurrency(cfg) : state.Currency.Trim().ToUpperInvariant(),
         checkoutConfigured,
         FreeCatalogCreditAvailable(state),
         !string.IsNullOrWhiteSpace(state.FreeCatalogCreditRedeemedCatalogId),
@@ -2065,8 +2319,8 @@ static string? ValidateQuestionImage(string? imageDataUrl)
 static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
 static int BillingTrialDays(IConfiguration cfg) => Math.Clamp(cfg.GetValue<int?>("Billing:TrialDays") ?? 7, 1, 60);
-static int BillingProductPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:ProductPriceCents") ?? 1499);
-static int BillingMonthlyPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:MonthlyPriceCents") ?? 599);
+static int BillingProductPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:ProductPriceCents") ?? CommercialPricing.ProductPriceCents);
+static int BillingMonthlyPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:MonthlyPriceCents") ?? CommercialPricing.MonthlyPriceCents);
 static int BillingCatalogQuestionPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:CatalogQuestionPriceCents") ?? 10);
 static int BillingCatalogPriceEndingCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:CatalogPriceEndingCents") ?? 9);
 static int BillingCatalogExampleQuestionCount(IConfiguration cfg) => Math.Clamp(cfg.GetValue<int?>("Billing:CatalogPriceExampleQuestionCount") ?? 25, 1, 1000);
@@ -2080,7 +2334,7 @@ static int BillingCatalogTestPriceCents(IConfiguration cfg, string category, int
     var cents = (long)questionCount * BillingCatalogQuestionPriceCents(cfg) + BillingCatalogPriceEndingCents(cfg);
     return cents > int.MaxValue ? int.MaxValue : (int)cents;
 }
-static string BillingCurrency(IConfiguration cfg) => string.IsNullOrWhiteSpace(cfg["Billing:Currency"]) ? "EUR" : cfg["Billing:Currency"]!.Trim().ToUpperInvariant();
+static string BillingCurrency(IConfiguration cfg) => string.IsNullOrWhiteSpace(cfg["Billing:Currency"]) ? CommercialPricing.Currency : cfg["Billing:Currency"]!.Trim().ToUpperInvariant();
 static bool BillingEnforcesCatalogPurchases(IConfiguration cfg) => cfg.GetValue<bool?>("Billing:EnforceCatalogPurchases") ?? true;
 
 static bool FreeCatalogCreditAvailable(UserLicenseState state)
@@ -2272,6 +2526,15 @@ static int FirestoreInt(JsonElement fields, string fieldName)
     return 0;
 }
 
+static bool FirestoreBool(JsonElement fields, string fieldName, bool fallback = false)
+{
+    if (!fields.TryGetProperty(fieldName, out var field)) return fallback;
+    return field.TryGetProperty("booleanValue", out var booleanValue) &&
+           (booleanValue.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        ? booleanValue.GetBoolean()
+        : fallback;
+}
+
 static DateTime? FirestoreTimestamp(JsonElement fields, string fieldName)
 {
     var raw = FirestoreString(fields, fieldName);
@@ -2288,6 +2551,11 @@ static object FirestoreValue(string? value) => new Dictionary<string, object>
 static object FirestoreIntValue(int value) => new Dictionary<string, object>
 {
     ["integerValue"] = value.ToString(CultureInfo.InvariantCulture)
+};
+
+static object FirestoreBoolValue(bool value) => new Dictionary<string, object>
+{
+    ["booleanValue"] = value
 };
 
 static object FirestoreTimestampValue(DateTime value) => new Dictionary<string, object>
@@ -2345,7 +2613,7 @@ static List<CatalogQuestionPayload> BuildCatalogQuestions(UploadedDocument doc)
             string.IsNullOrWhiteSpace(question.Explanation) ? $"Aus {Brand.ProductName} veröffentlichte Frage." : question.Explanation.Trim(),
             TopicLabel(question.Topic),
             DifficultyLabel(question.Difficulty),
-            false));
+            question.IsAiGenerated));
     }
 
     return result;
@@ -2368,7 +2636,7 @@ static List<CatalogQuestionPayload> DeserializeCatalogQuestions(string questions
                 (q.Explanation ?? string.Empty).Trim(),
                 TopicLabel(q.Topic),
                 DifficultyLabel(q.Difficulty),
-                false))
+                q.IsAiGenerated))
             .Where(q => !string.IsNullOrWhiteSpace(q.QuestionText) &&
                         q.Options.Count >= 2 &&
                         q.Options.All(o => !string.IsNullOrWhiteSpace(o)))

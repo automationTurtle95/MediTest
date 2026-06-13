@@ -11,6 +11,13 @@
     "trailingSlash": false,
     "rewrites": [
       {
+        "source": "/api/pricing",
+        "function": {
+          "functionId": "meditestPricing",
+          "region": "europe-west3"
+        }
+      },
+      {
         "source": "/api/purchase/checkout",
         "function": {
           "functionId": "meditestCreateCheckout",
