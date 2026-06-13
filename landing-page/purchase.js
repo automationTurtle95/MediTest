@@ -79,6 +79,7 @@ const applePlatformIcon = document.getElementById("applePlatformIcon");
 let authMode = "login";
 let productPurchased = false;
 let pendingSecuredDownload = null;
+let productCodeRedemptionPending = false;
 
 function applySelectedProduct() {
   productKicker.textContent = downloadProduct.kicker;
@@ -194,7 +195,7 @@ async function authorizedRequest(url, options = {}) {
 function updateCheckoutButton() {
   const consentMissing = !(termsConsent.checked && deliveryConsent.checked);
   checkoutButton.disabled = productPurchased || consentMissing;
-  redeemProductCode.disabled = productPurchased || consentMissing || !freeProductCode.value.trim();
+  redeemProductCode.disabled = productCodeRedemptionPending || !freeProductCode.value.trim();
 }
 
 function setAuthenticated(session) {
@@ -207,6 +208,7 @@ function setAuthenticated(session) {
 function setLoggedOut() {
   productPurchased = false;
   pendingSecuredDownload = null;
+  productCodeRedemptionPending = false;
   authPanel.classList.remove("hidden");
   checkoutPanel.classList.add("hidden");
   purchaseSuccess.classList.add("hidden");
@@ -318,6 +320,7 @@ async function refreshPurchaseAccess() {
   if (!(state.baseProductPurchased || state.subscriptionActive || state.premiumActive)) return false;
   productPurchased = true;
   checkoutButton.textContent = "Bereits gekauft";
+  redeemProductCode.textContent = "Mit Gratis-Code erneut herunterladen";
   updateCheckoutButton();
   await requestSecuredDownload();
   showMessage("Meduvalo ist für dieses Konto bereits freigeschaltet.", "success");
@@ -412,7 +415,8 @@ checkoutButton.addEventListener("click", async () => {
 });
 
 redeemProductCode.addEventListener("click", async () => {
-  redeemProductCode.disabled = true;
+  productCodeRedemptionPending = true;
+  updateCheckoutButton();
   showMessage("Gratis-Code wird geprüft...");
   try {
     const result = await authorizedRequest(PURCHASE_CONFIG.redeemCodeEndpoint, {
@@ -421,12 +425,13 @@ redeemProductCode.addEventListener("click", async () => {
     });
     productPurchased = true;
     checkoutButton.textContent = "Bereits freigeschaltet";
-    redeemProductCode.textContent = "Code eingelöst";
-    updateCheckoutButton();
+    redeemProductCode.textContent = "Erneut herunterladen";
     await requestSecuredDownload();
     showMessage(result.message || "Meduvalo wurde kostenlos freigeschaltet.", "success");
   } catch (error) {
     showMessage(error.message, "error");
+  } finally {
+    productCodeRedemptionPending = false;
     updateCheckoutButton();
   }
 });
