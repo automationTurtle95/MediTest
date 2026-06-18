@@ -42,12 +42,9 @@ const DOWNLOAD_PRODUCTS = Object.freeze({
   }
 });
 
-function selectedDownloadPlatform() {
-  const requested = new URLSearchParams(location.search).get("platform") || "";
-  return Object.prototype.hasOwnProperty.call(DOWNLOAD_PRODUCTS, requested) ? requested : "windows-x64";
-}
-
-const downloadPlatform = selectedDownloadPlatform();
+const requestedDownloadPlatform = location.hash.slice(1) || new URLSearchParams(location.search).get("platform") || "";
+const hasRequestedDownloadPlatform = Object.prototype.hasOwnProperty.call(DOWNLOAD_PRODUCTS, requestedDownloadPlatform);
+const downloadPlatform = hasRequestedDownloadPlatform ? requestedDownloadPlatform : "windows-x64";
 const downloadProduct = DOWNLOAD_PRODUCTS[downloadPlatform];
 const authPanel = document.getElementById("authPanel");
 const checkoutPanel = document.getElementById("checkoutPanel");
@@ -91,7 +88,9 @@ function applySelectedProduct() {
   securedDownload.textContent = downloadProduct.downloadLabel;
   windowsPlatformIcon.classList.toggle("hidden", downloadProduct.apple);
   applePlatformIcon.classList.toggle("hidden", !downloadProduct.apple);
-  document.title = `${downloadProduct.name} kaufen | Meduvalo`;
+  if (hasRequestedDownloadPlatform) {
+    document.title = `${downloadProduct.name} kaufen | Meduvalo`;
+  }
 }
 
 function showMessage(message, type = "") {

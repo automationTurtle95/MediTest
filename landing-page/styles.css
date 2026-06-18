@@ -362,8 +362,9 @@ button {
   color: var(--ink-soft);
 }
 
-.hero-price-hint strong {
+.hero-price {
   color: var(--ink);
+  font-weight: 700;
 }
 
 .trust-row {
@@ -569,9 +570,11 @@ button {
   font-size: 8px;
 }
 
-.progress-card strong {
+.progress-value {
+  display: block;
   color: var(--green-950);
   font-size: 13px;
+  font-weight: 700;
 }
 
 .progress-ring {
@@ -664,14 +667,15 @@ button {
   background: #f1efff;
 }
 
-.module-card strong,
+.module-card .module-title,
 .module-card small {
   display: block;
 }
 
-.module-card strong {
+.module-card .module-title {
   color: #365151;
   font-size: 8px;
+  font-weight: 700;
 }
 
 .module-card small {
@@ -700,10 +704,11 @@ button {
   font-weight: 700;
 }
 
-.question-card > strong {
+.question-card > .mock-question {
   display: block;
   color: #365151;
   font-size: 8px;
+  font-weight: 700;
 }
 
 .answer-lines {
@@ -739,15 +744,16 @@ button {
   backdrop-filter: blur(10px);
 }
 
-.floating-card strong,
+.floating-card .floating-title,
 .floating-card small {
   display: block;
   white-space: nowrap;
 }
 
-.floating-card strong {
+.floating-card .floating-title {
   color: var(--green-950);
   font-size: 10px;
+  font-weight: 700;
 }
 
 .floating-card small {
@@ -880,10 +886,11 @@ button {
   letter-spacing: 0.12em;
 }
 
-.problem-card h3 {
+.problem-card .card-title {
   margin: 0 0 10px;
   color: var(--green-950);
   font-size: 17px;
+  font-weight: 700;
   letter-spacing: -0.02em;
 }
 
@@ -972,10 +979,11 @@ button {
   text-transform: uppercase;
 }
 
-.study-card h3 {
+.study-question {
   margin: 0;
   color: var(--green-950);
   font-size: 18px;
+  font-weight: 700;
   line-height: 1.45;
 }
 
@@ -1022,9 +1030,10 @@ button {
   border-color: var(--mint-500);
 }
 
-.study-options b {
+.answer-check {
   margin-left: auto;
   color: var(--mint-500);
+  font-weight: 700;
 }
 
 .study-footer {
@@ -1035,8 +1044,9 @@ button {
   font-size: 9px;
 }
 
-.study-footer b {
+.study-progress {
   color: var(--green-700);
+  font-weight: 700;
 }
 
 .next-button {
@@ -1188,9 +1198,10 @@ button {
   text-transform: uppercase;
 }
 
-.question-preview b {
+.preview-question {
   color: #3a5555;
   font-size: 11px;
+  font-weight: 700;
 }
 
 .preview-answer {
@@ -1526,10 +1537,11 @@ button {
   place-items: center;
 }
 
-.audience-list h3 {
+.audience-title {
   margin: 0 0 5px;
   color: var(--green-950);
   font-size: 18px;
+  font-weight: 700;
 }
 
 .audience-list p {
@@ -1645,10 +1657,11 @@ button {
   gap: 10px;
 }
 
-.footer-links h2 {
+.footer-heading {
   margin: 0 0 8px;
   color: var(--white);
   font-size: 12px;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -2605,7 +2618,7 @@ button {
   padding-top: 16px;
 }
 
-.testimonial-card footer strong {
+.testimonial-name {
   font-size: 14px;
   font-weight: 700;
   color: var(--ink);
