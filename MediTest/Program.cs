@@ -10,6 +10,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using MediTest;
 using MediTest.Dtos;
+using MediTest.Endpoints;
 using MediTest.Models;
 using MediTest.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -1954,74 +1955,7 @@ app.MapGet("/api/ai/status", async (HttpContext context, IConfiguration cfg, IHt
     return Results.Content(raw, "application/json; charset=utf-8", Encoding.UTF8, (int)response.StatusCode);
 });
 
-app.MapGet("/api/tests", async (FirestoreUserDataStore store, CancellationToken ct) =>
-{
-    return Results.Ok(await store.ListTestsAsync(ct));
-});
-
-app.MapGet("/api/tests/sources", async (FirestoreUserDataStore store, CancellationToken ct) =>
-{
-    var sources = (await store.ListDocumentsAsync(ct, seedDemo: false))
-        .Where(document => document.QuestionCount > 0)
-        .Select(document => new
-        {
-            documentId = document.Id,
-            documentName = document.FileName,
-            document.QuestionCount
-        });
-    return Results.Ok(sources);
-});
-
-app.MapGet("/api/tests/{id:int}/resume", async (int id, FirestoreUserDataStore store, CancellationToken ct) =>
-{
-    try
-    {
-        return Results.Ok(await store.ResumeTestAsync(id, ct));
-    }
-    catch (KeyNotFoundException)
-    {
-        return Results.NotFound(new { error = "Test nicht gefunden." });
-    }
-    catch (InvalidOperationException ex)
-    {
-        return Results.BadRequest(new { error = ex.Message });
-    }
-});
-
-app.MapPut("/api/tests/{id:int}/draft", async (int id, SubmitTestRequest req, FirestoreUserDataStore store, CancellationToken ct) =>
-{
-    try
-    {
-        var (answered, total) = await store.SaveDraftAsync(id, req, ct);
-        return Results.Ok(new { saved = true, answered, total });
-    }
-    catch (KeyNotFoundException)
-    {
-        return Results.NotFound(new { error = "Test nicht gefunden." });
-    }
-    catch (InvalidOperationException ex)
-    {
-        return Results.BadRequest(new { error = ex.Message });
-    }
-});
-
-app.MapPut("/api/tests/{id:int}/name", async (int id, RenameTestRequest req, FirestoreUserDataStore store, CancellationToken ct) =>
-{
-    try
-    {
-        await store.RenameTestAsync(id, req.TestName, ct);
-        var session = await store.GetTestAsync(id, ct);
-        return Results.Ok(new { saved = true, testSessionId = id, testName = session?.TestName ?? TrimTo(req.TestName, 200) });
-    }
-    catch (KeyNotFoundException)
-    {
-        return Results.NotFound(new { error = "Test nicht gefunden." });
-    }
-    catch (InvalidOperationException ex)
-    {
-        return Results.BadRequest(new { error = ex.Message });
-    }
-});
+app.MapTestEndpoints();
 
 app.MapGet("/api/tests/{id:int}/pdf", async (int id, FirestoreUserDataStore store, CancellationToken ct) =>
 {
@@ -2041,129 +1975,7 @@ app.MapGet("/api/tests/{id:int}/pdf", async (int id, FirestoreUserDataStore stor
     return Results.File(pdf, "application/pdf", $"{safeName}_{Brand.ProductName}.pdf");
 });
 
-app.MapDelete("/api/tests", async (FirestoreUserDataStore store, CancellationToken ct) =>
-{
-    var (testsDeleted, answersDeleted) = await store.DeleteAllTestsAsync(ct);
-    return Results.Ok(new { reset = true, testsDeleted, answersDeleted });
-});
-
-app.MapDelete("/api/tests/{id:int}", async (int id, FirestoreUserDataStore store, CancellationToken ct) =>
-{
-    try
-    {
-        var answersDeleted = await store.DeleteOpenTestAsync(id, ct);
-        return Results.Ok(new { deleted = true, testSessionId = id, answersDeleted });
-    }
-    catch (KeyNotFoundException)
-    {
-        return Results.NotFound(new { error = "Test nicht gefunden." });
-    }
-    catch (InvalidOperationException ex)
-    {
-        return Results.BadRequest(new { error = ex.Message });
-    }
-});
-
-app.MapGet("/api/stats/overview", async (int? testSessionId, FirestoreUserDataStore store, CancellationToken ct) =>
-{
-    return Results.Ok(await store.BuildStatsAsync(testSessionId, ct));
-});
-
-app.MapGet("/api/stats/export/tests", async (FirestoreUserDataStore store, CancellationToken ct) =>
-{
-    var tests = await store.ListTestsAsync(ct);
-    var completed = tests.Where(t => t.SubmittedAt.HasValue).ToList();
-    var csv = new StringBuilder();
-    csv.AppendLine("Testname;Dokument;Datum;Richtig;Fragen;Prozent;Bestanden");
-    foreach (var t in completed.OrderBy(t => t.SubmittedAt))
-        csv.AppendLine($"{CsvEsc(t.TestName)};{CsvEsc(t.DocumentName)};{t.SubmittedAt!.Value.ToLocalTime():dd.MM.yyyy HH:mm};{t.Score};{t.QuestionCount};{t.Percent:0.0};{(t.Passed ? "Ja" : "Nein")}");
-    return CsvResult(csv, "Meduvalo-Testverlauf.csv");
-});
-
-app.MapGet("/api/stats/export/topics", async (FirestoreUserDataStore store, CancellationToken ct) =>
-{
-    var stats = await store.BuildStatsAsync(null, ct);
-    var csv = new StringBuilder();
-    csv.AppendLine("Thema;Versuche;Richtig;Fehler;Fehlerquote %;Fragen im Pool;Fragenpool-Anzahl");
-    foreach (var t in stats.TopicPerformance.OrderBy(t => t.Topic))
-        csv.AppendLine($"{CsvEsc(t.Topic)};{t.Attempts};{t.Correct};{t.Errors};{t.Percent:0.0};{t.QuestionCount};{t.DocumentCount}");
-    return CsvResult(csv, "Meduvalo-Themen.csv");
-});
-
-app.MapGet("/api/stats/export/weak-questions", async (FirestoreUserDataStore store, CancellationToken ct) =>
-{
-    var stats = await store.BuildStatsAsync(null, ct);
-    var csv = new StringBuilder();
-    csv.AppendLine("Frage;Thema;Schwierigkeit;Dokument;Versuche;Fehler;Fehlerquote %;Zuletzt beantwortet");
-    foreach (var q in stats.WeakQuestions)
-        csv.AppendLine($"{CsvEsc(q.QuestionText)};{CsvEsc(q.Topic)};{CsvEsc(q.Difficulty)};{CsvEsc(q.DocumentName)};{q.Attempts};{q.Errors};{q.ErrorRate:0.0};{(q.LastAnsweredAt.HasValue ? q.LastAnsweredAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm") : "-")}");
-    return CsvResult(csv, "Meduvalo-SchwacheFragen.csv");
-});
-
-app.MapGet("/api/dashboard/stats", async (FirestoreUserDataStore store, CancellationToken ct) =>
-{
-    return Results.Ok(await store.GetDashboardStatsAsync(ct));
-});
-
-app.MapPost("/api/tests/start", async (StartTestRequest req, FirestoreUserDataStore store, CancellationToken ct) =>
-{
-    try
-    {
-        return Results.Ok(await store.StartTestAsync(req, ct));
-    }
-    catch (InvalidOperationException ex) when (ex.Message.StartsWith("Zu wenig Fragen", StringComparison.OrdinalIgnoreCase))
-    {
-        var available = await store.CountQuestionsAsync(req.DocumentId, ct);
-        var settings = await store.GetSettingsAsync(ct);
-        var required = Math.Clamp(req.QuestionCount <= 0 ? settings.DefaultTestQuestionCount : req.QuestionCount, 1, 100);
-        return Results.BadRequest(new { error = "Zu wenig Fragen vorhanden.", available, required, offerGenerate = true });
-    }
-    catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException)
-    {
-        return Results.BadRequest(new { error = ex.Message });
-    }
-});
-
-app.MapPost("/api/tests/start-weak", async (StartWeakTestRequest req, FirestoreUserDataStore store, CancellationToken ct) =>
-{
-    try
-    {
-        return Results.Ok(await store.StartWeakTestAsync(req, ct));
-    }
-    catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException)
-    {
-        return Results.BadRequest(new { error = ex.Message });
-    }
-});
-
-app.MapPost("/api/tests/{id:int}/submit", async (int id, SubmitTestRequest req, FirestoreUserDataStore store, CancellationToken ct) =>
-{
-    try
-    {
-        var session = await store.SubmitTestAsync(id, req, ct);
-        return Results.Ok(new { session.Id, session.Score, session.QuestionCount, session.Percent, session.Passed });
-    }
-    catch (KeyNotFoundException)
-    {
-        return Results.NotFound(new { error = "Test nicht gefunden." });
-    }
-    catch (InvalidOperationException ex)
-    {
-        return Results.BadRequest(new { error = ex.Message });
-    }
-});
-
-app.MapGet("/api/tests/{id:int}/review", async (int id, FirestoreUserDataStore store, CancellationToken ct) =>
-{
-    try
-    {
-        return Results.Ok(await store.ReviewAsync(id, ct));
-    }
-    catch (KeyNotFoundException)
-    {
-        return Results.NotFound(new { error = "Test nicht gefunden." });
-    }
-});
+app.MapStatsEndpoints();
 
 app.Run();
 
@@ -2737,21 +2549,6 @@ static string Slugify(string value)
     var slug = Regex.Replace(value, "[^a-z0-9]+", "-").Trim('-');
     if (string.IsNullOrWhiteSpace(slug)) slug = "test";
     return slug.Length <= 80 ? slug : slug[..80].Trim('-');
-}
-
-static string CsvEsc(string? value)
-{
-    if (string.IsNullOrEmpty(value)) return "";
-    value = value.Replace("\"", "\"\"").Replace("\n", " ").Replace("\r", "");
-    return value.Contains(';') || value.Contains('"') || value.Contains('\n') ? $"\"{value}\"" : value;
-}
-
-static IResult CsvResult(StringBuilder csv, string filename)
-{
-    var bom = Encoding.UTF8.GetPreamble();
-    var content = Encoding.UTF8.GetBytes(csv.ToString());
-    var bytes = bom.Concat(content).ToArray();
-    return Results.File(bytes, "text/csv; charset=utf-8", filename);
 }
 
 static string MaskApiKey(string apiKey)
