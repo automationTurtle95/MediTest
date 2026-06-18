@@ -5,21 +5,316 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Meduvalo</title>
   <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .stat-card {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .stat-card .eyebrow {
+      margin-bottom: 6px;
+    }
+    .stat-score {
+      font-size: 38px;
+      font-weight: 900;
+      color: var(--primary-dark);
+      line-height: 1;
+    }
+    .resume-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 10%, var(--card));
+      margin-bottom: 20px;
+    }
+    .resume-banner-text {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .resume-banner-text strong {
+      font-size: 17px;
+    }
+    .quicknav-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .quicknav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 20px 12px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      text-decoration: none;
+      color: var(--text);
+      font-weight: 800;
+      font-size: 14px;
+      text-align: center;
+      transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+    }
+    .quicknav-item:hover {
+      transform: translateY(-2px);
+      border-color: var(--accent);
+      box-shadow: 0 9px 22px rgba(8,47,48,.09);
+    }
+    .quicknav-icon {
+      font-size: 26px;
+      line-height: 1;
+    }
+    .recent-test {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .recent-test:last-child {
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+    .recent-test:first-child {
+      padding-top: 0;
+    }
+    .recent-test-info {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+    }
+    .recent-test-info strong {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .mini-progress {
+      display: flex;
+      align-items: flex-end;
+      gap: 6px;
+      height: 60px;
+      padding: 8px 0 0;
+    }
+    .mini-bar {
+      flex: 1;
+      border-radius: 4px 4px 0 0;
+      background: linear-gradient(180deg, var(--accent), var(--primary-dark));
+      min-height: 6px;
+    }
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+    @media(max-width: 700px) {
+      .two-col { grid-template-columns: 1fr; }
+      .resume-banner { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
 </head>
 <body>
-<header class="topbar"><a class="brand" href="/pages/documents.html">Meduvalo</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
-<main class="hero">
-  <section class="card hero-card">
-    <p class="eyebrow">Medizinstudium · MC-Training</p>
-    <h1>Multiple-Choice-Tests aus Skripten, PDFs und Folien.</h1>
-    <p>Lade Unterlagen im Dokumentenbereich hoch, generiere prüfungsnahe Fragen mit KI und starte direkt einen Test.</p>
-    <div class="actions">
-      <a class="button primary" href="/pages/documents.html#uploadPanel">Dokumente verwalten</a>
-      <a class="button" href="/pages/tests.html">Tests anzeigen</a>
-      <button class="button danger" type="button" onclick="shutdownApp()">Programm schließen</button>
+
+<header class="topbar">
+  <a class="brand" href="/index.html">
+    <span class="brand-mark"><img src="/assets/meduvalo-logo.svg" alt=""></span>
+    Meduvalo
+  </a>
+  <nav>
+    <a href="/index.html" class="active">Start</a>
+    <a href="/pages/documents.html">Dokumente</a>
+    <a href="/pages/manual.html">Manuell</a>
+    <a href="/pages/tests.html">Tests</a>
+    <a href="/pages/stats.html">Statistik</a>
+    <button class="button nav-shutdown danger" type="button" onclick="shutdownApp()">Beenden</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- Offener Test Banner (wird dynamisch eingeblendet) -->
+  <div id="resumeBanner" class="card resume-banner hidden">
+    <div class="resume-banner-text">
+      <span class="eyebrow">Offen</span>
+      <strong id="resumeTestName">Test fortsetzen</strong>
+      <span class="muted" id="resumeTestMeta"></span>
     </div>
-  </section>
+    <a id="resumeTestLink" class="button primary" href="#">▶ Weitermachen</a>
+  </div>
+
+  <!-- Statistik-Kacheln -->
+  <div class="dashboard-grid" id="statsGrid">
+    <div class="card stat-card">
+      <span class="eyebrow">Tests gesamt</span>
+      <span class="stat-score" id="statTotal">–</span>
+      <span class="muted" id="statOpen"></span>
+    </div>
+    <div class="card stat-card">
+      <span class="eyebrow">Durchschnitt</span>
+      <span class="stat-score" id="statAvg">–</span>
+      <span class="muted">alle abgeschlossenen Tests</span>
+    </div>
+    <div class="card stat-card">
+      <span class="eyebrow">Bestehensquote</span>
+      <span class="stat-score" id="statPass">–</span>
+      <span class="muted" id="statPassDetail"></span>
+    </div>
+    <div class="card stat-card">
+      <span class="eyebrow">Prüfungsstand</span>
+      <span class="stat-score" id="statReadiness">–</span>
+      <span class="muted" id="statReadinessLabel"></span>
+    </div>
+  </div>
+
+  <!-- Schnellnavigation -->
+  <div class="quicknav-grid">
+    <a class="quicknav-item" href="/pages/documents.html#uploadPanel">
+      <span class="quicknav-icon">📄</span>
+      Dokumente
+    </a>
+    <a class="quicknav-item" href="/pages/documents.html">
+      <span class="quicknav-icon">🚀</span>
+      Neuer Test
+    </a>
+    <a class="quicknav-item" href="/pages/manual.html">
+      <span class="quicknav-icon">✏️</span>
+      Manuell
+    </a>
+    <a class="quicknav-item" href="/pages/tests.html">
+      <span class="quicknav-icon">📋</span>
+      Alle Tests
+    </a>
+    <a class="quicknav-item" href="/pages/stats.html">
+      <span class="quicknav-icon">📊</span>
+      Statistik
+    </a>
+    <a class="quicknav-item" href="/pages/catalog.html">
+      <span class="quicknav-icon">🗂️</span>
+      Katalog
+    </a>
+  </div>
+
+  <div class="two-col">
+
+    <!-- Letzte Tests -->
+    <div class="card">
+      <h2>Letzte Tests</h2>
+      <div id="recentTests"><p class="muted">Noch keine Tests vorhanden.</p></div>
+      <div class="actions" style="margin-top:16px">
+        <a class="button" href="/pages/tests.html">Alle Tests anzeigen</a>
+      </div>
+    </div>
+
+    <!-- Testverlauf -->
+    <div class="card">
+      <h2>Testverlauf</h2>
+      <div id="progressChart"><p class="muted">Noch keine Daten.</p></div>
+    </div>
+
+  </div>
+
+  <div id="msg" class="hidden" style="margin-top:12px"></div>
+
 </main>
+
 <script src="/js/api.js"></script>
+<script>
+function pct(v) {
+  return `${Number(v || 0).toFixed(1).replace('.0', '')}%`;
+}
+
+function formatDate(v) {
+  if (!v) return '';
+  return new Date(v).toLocaleDateString('de-AT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function passColor(passed) {
+  return passed ? 'color:var(--ok)' : 'color:var(--danger)';
+}
+
+async function loadDashboard() {
+  const [tests, stats] = await Promise.all([
+    api('/api/tests'),
+    api('/api/stats/overview').catch(() => null)
+  ]);
+
+  // ── Offener Test ──────────────────────────────────────────────
+  const openTest = tests.find(t => !t.submittedAt);
+  if (openTest) {
+    document.getElementById('resumeBanner').classList.remove('hidden');
+    document.getElementById('resumeTestName').textContent = openTest.testName || 'Test fortsetzen';
+    document.getElementById('resumeTestMeta').textContent =
+      `${openTest.documentName} · gestartet ${formatDate(openTest.startedAt)}`;
+    document.getElementById('resumeTestLink').href = `/pages/test.html?id=${openTest.testSessionId}`;
+  }
+
+  // ── Statistik-Kacheln ─────────────────────────────────────────
+  if (stats) {
+    document.getElementById('statTotal').textContent = stats.completedTests ?? '0';
+    document.getElementById('statOpen').textContent =
+      stats.openTests ? `${stats.openTests} offen` : 'Alle abgeschlossen';
+    document.getElementById('statAvg').textContent = pct(stats.averagePercent);
+    document.getElementById('statPass').textContent = pct(stats.passRate);
+    document.getElementById('statPassDetail').textContent =
+      `${stats.passedTests ?? 0} bestanden · ${stats.failedTests ?? 0} nicht bestanden`;
+    document.getElementById('statReadiness').textContent = pct(stats.readinessPercent);
+    document.getElementById('statReadinessLabel').textContent = stats.readinessLabel ?? '';
+  }
+
+  // ── Letzte 5 Tests ────────────────────────────────────────────
+  const done = tests.filter(t => t.submittedAt).slice(0, 5);
+  const recentBox = document.getElementById('recentTests');
+  if (done.length) {
+    recentBox.innerHTML = done.map(t => `
+      <div class="recent-test">
+        <div class="recent-test-info">
+          <strong>${esc(t.testName)}</strong>
+          <span class="muted">${esc(t.documentName)} · ${formatDate(t.submittedAt)}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+          <span style="font-weight:900;${passColor(t.passed)}">${t.score}/${t.questionCount} (${t.percent}%)</span>
+          <a class="button" href="/pages/review.html?id=${t.testSessionId}">Auswertung</a>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // ── Mini-Verlaufsdiagramm ─────────────────────────────────────
+  const progressPoints = (stats?.progress ?? []).slice(-8);
+  const progressBox = document.getElementById('progressChart');
+  if (progressPoints.length) {
+    const bars = progressPoints.map(p => {
+      const h = Math.max(6, Math.min(100, Number(p.percent) || 0));
+      return `<a class="mini-bar" href="/pages/review.html?id=${p.testSessionId}"
+        title="${esc(p.testName)} · ${pct(p.percent)}"
+        style="height:${h}%"
+      ></a>`;
+    }).join('');
+    progressBox.innerHTML = `
+      <div class="mini-progress">${bars}</div>
+      <p class="muted" style="margin-top:8px;font-size:13px">Letzte ${progressPoints.length} Tests · Klick öffnet Auswertung</p>
+    `;
+  }
+}
+
+loadDashboard().catch(e => {
+  status(document.getElementById('msg'), e.message, 'status error');
+});
+</script>
+
 </body>
 </html>
