@@ -1,5 +1,9 @@
+using System.Text.RegularExpressions;
+using MediTest;
 using MediTest.Dtos;
+using MediTest.Models;
 using MediTest.Services;
+using static MediTest.AppSupport;
 
 namespace MediTest.Endpoints;
 
@@ -157,6 +161,24 @@ public static class TestEndpoints
             {
                 return Results.NotFound(new { error = "Test nicht gefunden." });
             }
+        });
+
+        app.MapGet("/api/tests/{id:int}/pdf", async (int id, FirestoreUserDataStore store, CancellationToken ct) =>
+        {
+            TestSession session;
+            try
+            {
+                session = await store.GetTestWithGraphAsync(id, ct);
+            }
+            catch (KeyNotFoundException)
+            {
+                return Results.NotFound(new { error = "Test nicht gefunden." });
+            }
+
+            var settings = await store.GetSettingsAsync(ct);
+            var pdf = BuildTestPdf(session, settings);
+            var safeName = Regex.Replace(string.IsNullOrWhiteSpace(session.TestName) ? $"Test-{session.Id}" : session.TestName, "[^A-Za-z0-9äöüÄÖÜß _.-]", "_");
+            return Results.File(pdf, "application/pdf", $"{safeName}_{Brand.ProductName}.pdf");
         });
 
         return app;
