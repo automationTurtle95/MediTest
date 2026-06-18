@@ -356,6 +356,16 @@ button {
   margin-top: 34px;
 }
 
+.hero-price-hint {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.hero-price-hint strong {
+  color: var(--ink);
+}
+
 .trust-row {
   display: flex;
   padding: 0;
@@ -2554,6 +2564,56 @@ button {
     gap: 4px;
     grid-template-columns: 1fr;
   }
+}
+
+/* ── Testimonials ───────────────────────────────────────────── */
+.testimonials-section {
+  background: var(--mint-50);
+}
+
+.testimonials-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  margin-top: 48px;
+}
+
+.testimonial-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.testimonial-text {
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--ink);
+  margin: 0;
+  flex: 1;
+}
+
+.testimonial-card footer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.testimonial-card footer strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.testimonial-card footer span {
+  font-size: 12px;
+  color: var(--ink-soft);
 }
 
 @media (prefers-reduced-motion: reduce) {
