@@ -1,113 +1,130 @@
-<!DOCTYPE HTML>
+<!DOCTYPE html>
 <html lang="de">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Support kontaktieren · Meduvalo</title>
-  <link rel="stylesheet" href="/css/styles.css">
-</head>
-<body>
-<header class="topbar"><a class="brand" href="/pages/documents.html">Meduvalo</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/catalog.html">Katalog</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
-<main>
-  <section class="card">
-    <p class="eyebrow">Hilfe &amp; Kontakt</p>
-    <h1>Support kontaktieren</h1>
-    <p class="muted">Sende dein Anliegen direkt an den Meduvalo-Support. Jede Anfrage wird als Ticket gespeichert und, sofern der Mailversand eingerichtet ist, an <a href="mailto:support@meduvalo.at">support@meduvalo.at</a> gesendet.</p>
-  </section>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Support kontaktieren · Meduvalo</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/pages/documents.html">Meduvalo</a>
+      <nav>
+        <a href="/pages/documents.html">Dokumente</a><a href="/pages/catalog.html">Katalog</a
+        ><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a
+        ><a href="/pages/stats.html">Statistik</a>
+      </nav>
+    </header>
+    <main>
+      <section class="card">
+        <p class="eyebrow">Hilfe &amp; Kontakt</p>
+        <h1>Support kontaktieren</h1>
+        <p class="muted">
+          Sende dein Anliegen direkt an den Meduvalo-Support. Jede Anfrage wird als Ticket gespeichert und, sofern der
+          Mailversand eingerichtet ist, an <a href="mailto:support@meduvalo.at">support@meduvalo.at</a> gesendet.
+        </p>
+      </section>
 
-  <section class="support-grid">
-    <article class="card support-form-card">
-      <h2>Neue Supportanfrage</h2>
-      <form id="supportForm">
-        <label for="supportEmail">Deine Konto-E-Mail</label>
-        <input id="supportEmail" type="email" readonly>
+      <section class="support-grid">
+        <article class="card support-form-card">
+          <h2>Neue Supportanfrage</h2>
+          <form id="supportForm">
+            <label for="supportEmail">Deine Konto-E-Mail</label>
+            <input id="supportEmail" type="email" readonly />
 
-        <label for="supportCategory">Kategorie</label>
-        <select id="supportCategory" required>
-          <option value="technical">Technisches Problem</option>
-          <option value="account">Konto und Anmeldung</option>
-          <option value="license">Lizenz und Geräte</option>
-          <option value="billing">Kauf und Zahlung</option>
-          <option value="feedback">Feedback und Verbesserung</option>
-          <option value="privacy">Datenschutz</option>
-          <option value="other">Sonstiges</option>
-        </select>
+            <label for="supportCategory">Kategorie</label>
+            <select id="supportCategory" required>
+              <option value="technical">Technisches Problem</option>
+              <option value="account">Konto und Anmeldung</option>
+              <option value="license">Lizenz und Geräte</option>
+              <option value="billing">Kauf und Zahlung</option>
+              <option value="feedback">Feedback und Verbesserung</option>
+              <option value="privacy">Datenschutz</option>
+              <option value="other">Sonstiges</option>
+            </select>
 
-        <label for="supportSubject">Betreff</label>
-        <input id="supportSubject" type="text" maxlength="160" required placeholder="Wobei können wir helfen?">
+            <label for="supportSubject">Betreff</label>
+            <input id="supportSubject" type="text" maxlength="160" required placeholder="Wobei können wir helfen?" />
 
-        <label for="supportMessage">Nachricht</label>
-        <textarea id="supportMessage" rows="9" minlength="10" maxlength="5000" required placeholder="Beschreibe dein Anliegen möglichst genau."></textarea>
-        <p class="subtle">Bitte sende keine Passwörter, Zahlungsdaten oder medizinischen Patientendaten.</p>
+            <label for="supportMessage">Nachricht</label>
+            <textarea
+              id="supportMessage"
+              rows="9"
+              minlength="10"
+              maxlength="5000"
+              required
+              placeholder="Beschreibe dein Anliegen möglichst genau."
+            ></textarea>
+            <p class="subtle">Bitte sende keine Passwörter, Zahlungsdaten oder medizinischen Patientendaten.</p>
 
-        <label class="checkline">
-          <input id="supportDiagnostics" type="checkbox" checked>
-          App-Version, aktuelle Seite und Browserangaben zur Fehleranalyse mitsenden
-        </label>
+            <label class="checkline">
+              <input id="supportDiagnostics" type="checkbox" checked />
+              App-Version, aktuelle Seite und Browserangaben zur Fehleranalyse mitsenden
+            </label>
 
-        <div class="actions">
-          <button id="supportSubmit" class="primary" type="submit">An Support senden</button>
-        </div>
-        <div id="supportStatus" class="hidden" aria-live="polite"></div>
-      </form>
-    </article>
+            <div class="actions">
+              <button id="supportSubmit" class="primary" type="submit">An Support senden</button>
+            </div>
+            <div id="supportStatus" class="hidden" aria-live="polite"></div>
+          </form>
+        </article>
 
-    <aside class="card support-contact-card">
-      <span class="badge">Direkter Kontakt</span>
-      <h2>support@meduvalo.at</h2>
-      <p>Für Fragen zu Konto, Lizenz, Kauf, Funktionen, Datenschutz oder technischen Problemen.</p>
-      <div class="actions"><a class="button" href="mailto:support@meduvalo.at">E-Mail-Programm öffnen</a></div>
-      <hr>
-      <h3>Hilfreiche Angaben</h3>
-      <ul>
-        <li>Was wolltest du gerade tun?</li>
-        <li>Welche Fehlermeldung wurde angezeigt?</li>
-        <li>Seit wann tritt das Problem auf?</li>
-      </ul>
-    </aside>
-  </section>
-</main>
-<script src="/js/api.js"></script>
-<script>
-async function initSupport(){
-  const user=await currentAuthUser(false);
-  if(user?.email)document.getElementById('supportEmail').value=user.email;
-}
+        <aside class="card support-contact-card">
+          <span class="badge">Direkter Kontakt</span>
+          <h2>support@meduvalo.at</h2>
+          <p>Für Fragen zu Konto, Lizenz, Kauf, Funktionen, Datenschutz oder technischen Problemen.</p>
+          <div class="actions"><a class="button" href="mailto:support@meduvalo.at">E-Mail-Programm öffnen</a></div>
+          <hr />
+          <h3>Hilfreiche Angaben</h3>
+          <ul>
+            <li>Was wolltest du gerade tun?</li>
+            <li>Welche Fehlermeldung wurde angezeigt?</li>
+            <li>Seit wann tritt das Problem auf?</li>
+          </ul>
+        </aside>
+      </section>
+    </main>
+    <script src="/js/api.js"></script>
+    <script>
+      async function initSupport() {
+        const user = await currentAuthUser(false);
+        if (user?.email) document.getElementById("supportEmail").value = user.email;
+      }
 
-document.getElementById('supportForm').addEventListener('submit',async event=>{
-  event.preventDefault();
-  const button=document.getElementById('supportSubmit');
-  const msg=document.getElementById('supportStatus');
-  const payload={
-    category:document.getElementById('supportCategory').value,
-    subject:document.getElementById('supportSubject').value.trim(),
-    message:document.getElementById('supportMessage').value.trim(),
-    includeDiagnostics:document.getElementById('supportDiagnostics').checked,
-    currentPage:location.href,
-    userAgent:navigator.userAgent
-  };
-  status(msg,'Supportanfrage wird übermittelt...');
-  button.disabled=true;
-  button.setAttribute('aria-busy','true');
-  try{
-    const result=await api('/api/support',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(payload)
-    });
-    const ticket=result.ticketId?` Ticketnummer: ${result.ticketId}.`:'';
-    status(msg,`${result.message||'Deine Supportanfrage wurde übermittelt.'}${ticket}`,'status success');
-    document.getElementById('supportSubject').value='';
-    document.getElementById('supportMessage').value='';
-  }catch(error){
-    status(msg,error.message,'status error');
-  }finally{
-    button.disabled=false;
-    button.setAttribute('aria-busy','false');
-  }
-});
+      document.getElementById("supportForm").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const button = document.getElementById("supportSubmit");
+        const msg = document.getElementById("supportStatus");
+        const payload = {
+          category: document.getElementById("supportCategory").value,
+          subject: document.getElementById("supportSubject").value.trim(),
+          message: document.getElementById("supportMessage").value.trim(),
+          includeDiagnostics: document.getElementById("supportDiagnostics").checked,
+          currentPage: location.href,
+          userAgent: navigator.userAgent,
+        };
+        status(msg, "Supportanfrage wird übermittelt...");
+        button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+        try {
+          const result = await api("/api/support", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const ticket = result.ticketId ? ` Ticketnummer: ${result.ticketId}.` : "";
+          status(msg, `${result.message || "Deine Supportanfrage wurde übermittelt."}${ticket}`, "status success");
+          document.getElementById("supportSubject").value = "";
+          document.getElementById("supportMessage").value = "";
+        } catch (error) {
+          status(msg, error.message, "status error");
+        } finally {
+          button.disabled = false;
+          button.setAttribute("aria-busy", "false");
+        }
+      });
 
-initSupport().catch(error=>status(document.getElementById('supportStatus'),error.message,'status error'));
-</script>
-</body>
+      initSupport().catch((error) => status(document.getElementById("supportStatus"), error.message, "status error"));
+    </script>
+  </body>
 </html>
