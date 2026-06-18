@@ -165,7 +165,7 @@
             : s.status === "trial"
               ? `Der Kauf enthält 7 Tage Vollzugang. Danach kostet das optionale Abo <b>${priceLabel(s.monthlyPriceCents, s.currency)} pro Monat</b>. Katalogtests sind nicht enthalten.`
               : isRestricted
-                ? `Tests aus vorhandenen Fragenpools können gestartet, fortgesetzt und ausgewertet werden. Dokument-, Fragen-, Katalog-, Statistik-, Bearbeitungs- und KI-Funktionen werden mit dem Abo für <b>${priceLabel(s.monthlyPriceCents, s.currency)} pro Monat</b> wieder freigeschaltet.`
+                ? `Tests und Lernrunden aus vorhandenen Fragenpools können weiter genutzt werden. Dokument-, Fragen-, Katalog-, Statistik-, Bearbeitungs- und KI-Funktionen werden mit dem Abo für <b>${priceLabel(s.monthlyPriceCents, s.currency)} pro Monat</b> wieder freigeschaltet.`
                 : `${APP_BRAND.productName} muss zuerst einmalig für <b>${priceLabel(s.productPriceCents, s.currency)}</b> gekauft werden. Der Kauf startet die 7-tägige Testphase und schaltet den Installer frei.`
       }</p>
       <div class="actions">${
@@ -180,14 +180,14 @@
     </article>
     <article class="card doc-card">
       <span class="badge">Deine Funktionen</span>
-      <h2>${isRestricted ? "Tests bleiben verfügbar" : fullAccess ? "Voller Funktionsumfang" : "Nach dem Kauf verfügbar"}</h2>
+      <h2>${isRestricted ? "Tests & Lernmodus bleiben verfügbar" : fullAccess ? "Voller Funktionsumfang" : "Nach dem Kauf verfügbar"}</h2>
       <ul class="license-feature-list">
-        <li class="${testsAvailable ? "available" : "locked"}"><strong>Tests durchführen &amp; auswerten</strong><span>${testsAvailable ? "Verfügbar" : "Nach dem Kauf verfügbar"}</span></li>
+        <li class="${testsAvailable ? "available" : "locked"}"><strong>Tests &amp; Lernmodus aus vorhandenen Fragenpools</strong><span>${testsAvailable ? "Verfügbar" : "Nach dem Kauf verfügbar"}</span></li>
         <li class="${fullAccess ? "available" : "locked"}"><strong>Dokumente &amp; Fragenpools verwalten</strong><span>${fullAccess ? "Verfügbar" : isRestricted ? "Premium erforderlich" : "Nach dem Kauf verfügbar"}</span></li>
         <li class="${fullAccess ? "available" : "locked"}"><strong>KI-Fragen erstellen</strong><span>${fullAccess ? "Verfügbar" : isRestricted ? "Premium erforderlich" : "Nach dem Kauf verfügbar"}</span></li>
         <li class="${fullAccess ? "available" : "locked"}"><strong>Katalog &amp; Statistik öffnen</strong><span>${fullAccess ? "Verfügbar" : isRestricted ? "Premium erforderlich" : "Nach dem Kauf verfügbar"}</span></li>
       </ul>
-      ${isRestricted ? `<p class="muted">Nach Ablauf der Testphase können vorhandene Tests weiterhin gestartet, fortgesetzt und ausgewertet werden. Alle anderen Funktionen werden mit Premium wieder freigeschaltet.</p>` : ""}
+      ${isRestricted ? `<p class="muted">Nach Ablauf der Testphase können vorhandene Tests und Lernrunden mit bestehenden Fragenpools weiter genutzt werden. Alle anderen Funktionen werden mit Premium wieder freigeschaltet.</p>` : ""}
     </article>
     <article class="card doc-card">
       <span class="badge">Katalog</span>

@@ -188,7 +188,7 @@ app.Use(async (context, next) =>
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
         await context.Response.WriteAsJsonAsync(new
         {
-            error = "Diese Funktion ist nach der 7-tägigen Testphase im Monatsabo verfügbar. Vorhandene Tests bleiben weiterhin nutzbar.",
+            error = "Diese Funktion ist nach der 7-tägigen Testphase im Monatsabo verfügbar. Vorhandene Tests und Lernrunden mit bestehenden Fragenpools bleiben weiterhin nutzbar.",
             subscriptionRequired = true,
             restrictedMode = true,
             licenseStatus = access.Result.Status
@@ -2265,7 +2265,7 @@ static LicenseStatusDto ToLicenseStatusDto(UserLicenseState state, HttpContext c
         "premium" => "Premium aktiv. Katalogtests bleiben separate Kaufartikel.",
         "active" => $"Monatsabo aktiv. Alle {Brand.ProductName}-Funktionen sind verfügbar.",
         "trial" => $"7-tägige Testphase aktiv: noch {daysRemaining} Tag(e).",
-        "restricted" => "Testphase beendet. Tests aus vorhandenen Fragenpools bleiben ausführbar; alle anderen Funktionen benötigen ein Abo.",
+        "restricted" => "Testphase beendet. Tests und Lernrunden aus vorhandenen Fragenpools bleiben ausführbar; alle anderen Funktionen benötigen ein Abo.",
         _ => $"{Brand.ProductName} wurde für dieses Konto noch nicht gekauft."
     };
 

@@ -70,11 +70,12 @@
           "applicationCategory": "EducationalApplication",
           "applicationSubCategory": "Medizinische Prüfungsvorbereitung",
           "operatingSystem": "Windows 10, Windows 11, macOS 11 oder neuer",
-          "softwareVersion": "5.0.14",
+          "softwareVersion": "5.0.15",
           "inLanguage": "de-AT",
           "featureList": [
             "Prüfungsnahe Multiple-Choice-Fragen",
             "Lernmodule nach Fächern und Themen",
+            "Karteikarten-Lernmodus für vorhandene Fragenpools",
             "Testmodus mit zeitlich begrenzten Prüfungsabläufen",
             "Fortschrittsübersicht für Stärken und Wissenslücken",
             "KI-gestützte Fragengenerierung aus eigenen Lernunterlagen",
@@ -102,7 +103,15 @@
               "name": "Was bietet Meduvalo aktuell?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Meduvalo bietet aktuell prüfungsnahe Multiple-Choice-Fragen, Lernmodule, einen Testmodus, Fortschrittsauswertungen, einen KI-Fragengenerator, ein sicheres Benutzerkonto und einen Offline-Modus für vorhandene Lerninhalte."
+                "text": "Meduvalo bietet aktuell prüfungsnahe Multiple-Choice-Fragen, Lernmodule, einen Karteikarten-Lernmodus, einen Testmodus, Fortschrittsauswertungen, einen KI-Fragengenerator, ein sicheres Benutzerkonto und einen Offline-Modus für vorhandene Lerninhalte."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Was ist der neue Lernmodus?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Der Lernmodus zeigt Fragen wie Karteikarten an. Du deckst die Antwort auf, bewertest sie als gewusst oder nicht gewusst und kannst falsch beantwortete Karten gezielt wiederholen."
               }
             },
             {
@@ -118,7 +127,7 @@
               "name": "Ist Meduvalo ein Abo?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Der Einmalkauf verlängert sich nicht automatisch. Optional kann ein Vollzugang für monatliche Nutzung gewählt werden, wenn du Meduvalo über die Testphase hinaus weiter verwenden möchtest."
+                "text": "Der Einmalkauf verlängert sich nicht automatisch. Optional kann ein Vollzugang für monatliche Nutzung gewählt werden, wenn du Meduvalo über die Testphase hinaus weiter verwenden möchtest. Ohne Abo bleiben Tests und Lernrunden aus vorhandenen Fragenpools nutzbar."
               }
             },
             {
@@ -418,6 +427,13 @@
           </article>
           <article class="feature-card" data-reveal>
             <span class="feature-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"></path><path d="M8 9h8M8 13h5"></path></svg>
+            </span>
+            <h3>Karteikarten-Lernmodus</h3>
+            <p>Wiederhole vorhandene Fragen als Kartenrunde, decke Antworten bewusst auf und übe falsch beantwortete Karten direkt noch einmal.</p>
+          </article>
+          <article class="feature-card" data-reveal>
+            <span class="feature-icon">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
             </span>
             <h3>Testmodus</h3>
@@ -484,7 +500,7 @@
             <tbody>
               <tr>
                 <th scope="row">Kostenlos testen</th>
-                <td>7 Tage vollständiger Zugang zu Lern-, Test- und KI-Funktionen.</td>
+                <td>7 Tage vollständiger Zugang zu Lernmodus, Tests, Statistik, Bearbeitung, Katalogansicht und KI-Funktionen.</td>
                 <td>Der Testzugang startet nach dem Kauf und ist kein automatisches Abo.</td>
               </tr>
               <tr>
@@ -506,6 +522,11 @@
                 <th scope="row">Testmodus</th>
                 <td>Realistische Prüfungsabläufe mit fokussierter Bearbeitung und Auswertung.</td>
                 <td>Hilft dir, Routine und Zeitgefühl vor der Prüfung aufzubauen.</td>
+              </tr>
+              <tr>
+                <th scope="row">Lernmodus</th>
+                <td>Karteikartenrunde mit Aufdecken, Selbstbewertung und Wiederholung falscher Karten.</td>
+                <td>Vorhandene Fragenpools bleiben auch nach der Testphase für Lernrunden nutzbar.</td>
               </tr>
               <tr>
                 <th scope="row">KI-Fragen</th>
@@ -534,7 +555,11 @@
         <div class="faq-grid">
           <details class="faq-item" open data-reveal>
             <summary>Was bietet Meduvalo aktuell?</summary>
-            <p>Meduvalo bietet aktuell prüfungsnahe Multiple-Choice-Fragen, Lernmodule, einen Testmodus, Fortschrittsauswertungen, einen KI-Fragengenerator, ein sicheres Benutzerkonto und einen Offline-Modus für vorhandene Lerninhalte.</p>
+            <p>Meduvalo bietet aktuell prüfungsnahe Multiple-Choice-Fragen, Lernmodule, einen Karteikarten-Lernmodus, einen Testmodus, Fortschrittsauswertungen, einen KI-Fragengenerator, ein sicheres Benutzerkonto und einen Offline-Modus für vorhandene Lerninhalte.</p>
+          </details>
+          <details class="faq-item" data-reveal>
+            <summary>Was ist der neue Lernmodus?</summary>
+            <p>Der Lernmodus zeigt Fragen wie Karteikarten an. Du deckst die Antwort auf, bewertest sie als gewusst oder nicht gewusst und kannst falsch beantwortete Karten gezielt wiederholen.</p>
           </details>
           <details class="faq-item" data-reveal>
             <summary>Kann ich Meduvalo kostenlos testen?</summary>
@@ -542,7 +567,7 @@
           </details>
           <details class="faq-item" data-reveal>
             <summary>Ist Meduvalo ein Abo?</summary>
-            <p>Der Einmalkauf verlängert sich nicht automatisch. Optional kann ein Vollzugang für monatliche Nutzung gewählt werden, wenn du Meduvalo über die Testphase hinaus weiter verwenden möchtest.</p>
+            <p>Der Einmalkauf verlängert sich nicht automatisch. Optional kann ein Vollzugang für monatliche Nutzung gewählt werden, wenn du Meduvalo über die Testphase hinaus weiter verwenden möchtest. Ohne Abo bleiben Tests und Lernrunden aus vorhandenen Fragenpools nutzbar.</p>
           </details>
           <details class="faq-item" data-reveal>
             <summary>Für welche Systeme ist Meduvalo verfügbar?</summary>
@@ -636,8 +661,8 @@
             <p class="pricing-trial">Inklusive 7 Tagen vollständigem Zugang ab Kauf</p>
             <ul>
               <li>Windows-MSI oder notarisiertes macOS-DMG nach bestätigter Zahlung</li>
-              <li>7 Tage alle Lern-, Test- und KI-Funktionen</li>
-              <li>Danach vorhandene Tests dauerhaft ausführbar</li>
+              <li>7 Tage alle Lern-, Test-, Statistik- und KI-Funktionen</li>
+              <li>Danach vorhandene Tests und Lernrunden weiter nutzbar</li>
               <li>Optionaler Vollzugang für <span data-monthly-price>9,99 €</span> pro Monat</li>
             </ul>
             <a class="button button-light button-large checkout-button" href="./purchase" data-purchase-link>Meduvalo kaufen</a>

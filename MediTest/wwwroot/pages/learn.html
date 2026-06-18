@@ -123,6 +123,23 @@
         flex-wrap: wrap;
         margin-top: 28px;
       }
+      .learn-exit-button {
+        flex-shrink: 0;
+        padding: 7px 12px;
+        font-size: 12px;
+      }
+      @media (max-width: 640px) {
+        .learn-progress {
+          flex-wrap: wrap;
+        }
+        .learn-progress-bar {
+          flex-basis: calc(100% - 88px);
+        }
+        .learn-exit-button {
+          width: 100%;
+          justify-content: center;
+        }
+      }
     </style>
   </head>
   <body>
@@ -146,6 +163,7 @@
         <div class="learn-progress">
           <div class="learn-progress-bar"><div class="learn-progress-fill" id="bar"></div></div>
           <span id="counter" class="muted" style="white-space: nowrap; font-size: 13px">0 / 0</span>
+          <button class="learn-exit-button" id="exitLearnBtn" type="button">Beenden</button>
         </div>
         <p>
           <span id="topic" class="pill"></span>
@@ -195,12 +213,14 @@
       let correct = 0; // Gewusst-Zähler
       let revealed = false; // Antwort bereits aufgedeckt?
       let wrongIds = new Set(); // IDs der falsch beantworteten Karten
+      let exitHref = '/index.html'; // Ziel nach manuellem Beenden
 
       // ---- Karten laden ----
       async function loadCards() {
         const params = new URLSearchParams(location.search);
         const docId = params.get("id");
         const weakMode = params.get("weak") === "1";
+        exitHref = weakMode ? '/pages/stats.html' : docId ? '/pages/documents.html' : '/index.html';
 
         if (docId) {
           // Dokument-Modus: alle Fragen eines Fragenpool-Dokuments
@@ -426,10 +446,23 @@
         startQueue(shuffle([...allCards]));
       }
 
+      function exitLearnMode() {
+        const answered = current;
+        const hasProgress = answered > 0 || revealed;
+        if (
+          hasProgress &&
+          !confirm('Lernmodus wirklich beenden? Dein Fortschritt in dieser Kartenrunde wird nicht gespeichert.')
+        ) {
+          return;
+        }
+        location.href = exitHref;
+      }
+
       // ---- Event-Listener ----
       document.getElementById('revealBtn').onclick = reveal;
       document.getElementById('rightBtn').onclick = () => rate(true);
       document.getElementById('wrongBtn').onclick = () => rate(false);
+      document.getElementById('exitLearnBtn').onclick = exitLearnMode;
       document.getElementById('repeatWrongBtn').onclick = function () {
         const wrong = allCards.filter((c) => wrongIds.has(c.id));
         if (!wrong.length) return;
