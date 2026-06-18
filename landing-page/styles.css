@@ -161,7 +161,7 @@ button {
 .site-nav {
   display: flex;
   align-items: center;
-  gap: 34px;
+  gap: 24px;
 }
 
 .site-nav > a:not(.button) {
@@ -1278,6 +1278,134 @@ button {
   text-transform: uppercase;
 }
 
+.offer-section {
+  background:
+    radial-gradient(circle at 12% 12%, rgba(94, 217, 183, 0.16), transparent 34%),
+    linear-gradient(180deg, #f7fbfa 0%, #ffffff 100%);
+}
+
+.offer-table-wrap {
+  overflow: hidden;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 26px;
+  box-shadow: var(--shadow-sm);
+}
+
+.offer-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.offer-table caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.offer-table th,
+.offer-table td {
+  padding: 22px 24px;
+  border-bottom: 1px solid #e1ece9;
+  font-size: 14px;
+  line-height: 1.65;
+  text-align: left;
+  vertical-align: top;
+}
+
+.offer-table thead th {
+  color: var(--green-950);
+  background: #eef8f5;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.offer-table tbody th {
+  width: 24%;
+  color: var(--green-950);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.offer-table tbody td {
+  color: #617a7a;
+}
+
+.offer-table tbody tr:last-child th,
+.offer-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.offer-table [data-purchase-price],
+.offer-table [data-monthly-price] {
+  color: var(--green-900);
+  font-weight: 800;
+}
+
+.faq-section {
+  background: var(--blue-50);
+}
+
+.faq-grid {
+  display: grid;
+  max-width: 940px;
+  margin: 0 auto;
+  gap: 14px;
+}
+
+.faq-item {
+  background: var(--white);
+  border: 1px solid #d8e8e4;
+  border-radius: 20px;
+  box-shadow: 0 14px 40px rgba(8, 47, 48, 0.05);
+}
+
+.faq-item summary {
+  position: relative;
+  padding: 22px 64px 22px 24px;
+  color: var(--green-950);
+  cursor: pointer;
+  font-size: 17px;
+  font-weight: 800;
+  list-style: none;
+}
+
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-item summary::after {
+  position: absolute;
+  top: 50%;
+  right: 24px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  color: var(--green-800);
+  background: var(--mint-100);
+  border-radius: 10px;
+  content: "+";
+  transform: translateY(-50%);
+}
+
+.faq-item[open] summary::after {
+  content: "−";
+}
+
+.faq-item p {
+  margin: -6px 24px 24px;
+  color: #617a7a;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
 .audience-section {
   background: var(--blue-50);
 }
@@ -2366,6 +2494,14 @@ button {
     margin-top: 18px;
   }
 
+  .offer-table-wrap {
+    overflow-x: auto;
+  }
+
+  .offer-table {
+    min-width: 760px;
+  }
+
   .cta-panel {
     padding: 48px;
     grid-template-columns: 1fr;
@@ -2519,6 +2655,25 @@ button {
 
   .feature-card-wide {
     grid-template-columns: auto 1fr;
+  }
+
+  .offer-table th,
+  .offer-table td {
+    padding: 18px;
+  }
+
+  .faq-item summary {
+    padding: 20px 58px 20px 20px;
+    font-size: 16px;
+  }
+
+  .faq-item summary::after {
+    right: 18px;
+  }
+
+  .faq-item p {
+    margin-right: 20px;
+    margin-left: 20px;
   }
 
   .audience-grid {

@@ -30,7 +30,7 @@
   <meta name="twitter:image:alt" content="Meduvalo – prüfungsnahe Lernsoftware für Medizinstudierende">
   <link rel="icon" href="./logo.svg?v=5011" type="image/svg+xml">
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=5015">
-  <link rel="stylesheet" href="./styles.css?v=5015">
+  <link rel="stylesheet" href="./styles.css?v=5016">
   <script src="./script.js?v=5015" defer></script>
   <script id="softwareStructuredData" type="application/ld+json">
     {
@@ -72,6 +72,15 @@
           "operatingSystem": "Windows 10, Windows 11, macOS 11 oder neuer",
           "softwareVersion": "5.0.14",
           "inLanguage": "de-AT",
+          "featureList": [
+            "Prüfungsnahe Multiple-Choice-Fragen",
+            "Lernmodule nach Fächern und Themen",
+            "Testmodus mit zeitlich begrenzten Prüfungsabläufen",
+            "Fortschrittsübersicht für Stärken und Wissenslücken",
+            "KI-gestützte Fragengenerierung aus eigenen Lernunterlagen",
+            "Offline-Modus für vorhandene Fragen und Testergebnisse",
+            "Sicheres Benutzerkonto"
+          ],
           "image": "https://meduvalo.at/meduvalo-social-preview.png",
           "publisher": {
             "@id": "https://meduvalo.at/#organization"
@@ -83,6 +92,60 @@
             "priceCurrency": "EUR",
             "availability": "https://schema.org/InStock"
           }
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://meduvalo.at/#faq",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "Was bietet Meduvalo aktuell?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Meduvalo bietet aktuell prüfungsnahe Multiple-Choice-Fragen, Lernmodule, einen Testmodus, Fortschrittsauswertungen, einen KI-Fragengenerator, ein sicheres Benutzerkonto und einen Offline-Modus für vorhandene Lerninhalte."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Kann ich Meduvalo kostenlos testen?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Ja. Nach dem Kauf ist ein vollständiger Zugang für sieben Tage enthalten, damit du die Lern-, Test- und KI-Funktionen strukturiert ausprobieren kannst."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Ist Meduvalo ein Abo?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Der Einmalkauf verlängert sich nicht automatisch. Optional kann ein Vollzugang für monatliche Nutzung gewählt werden, wenn du Meduvalo über die Testphase hinaus weiter verwenden möchtest."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Für welche Systeme ist Meduvalo verfügbar?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Meduvalo wird aktuell für Windows 10 und 11 sowie für macOS ab Version 11 angeboten. Für macOS gibt es Downloads für Apple-Silicon- und Intel-Macs."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Was macht der KI-Fragengenerator?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Der KI-Fragengenerator erstellt aus eigenen Lernunterlagen passende Übungsfragen, damit du deinen persönlichen Fragenpool schneller erweitern und gezielter wiederholen kannst."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Kann ich mit Meduvalo offline lernen?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Ja. Vorhandene Fragen und Testergebnisse werden lokal gespeichert, sodass du auch ohne aktive Internetverbindung weiterlernen und später an deine Vorbereitung anknüpfen kannst."
+              }
+            }
+          ]
         }
       ]
     }
@@ -112,6 +175,8 @@
       <nav class="site-nav" id="site-navigation" aria-label="Hauptnavigation" data-nav>
         <a href="#loesung">Lernweg</a>
         <a href="#funktionen">Funktionen</a>
+        <a href="#angebot">Angebot</a>
+        <a href="#faq">FAQ</a>
         <a href="#zielgruppen">Zielgruppen</a>
         <a class="button button-small button-primary" href="./purchase" data-purchase-link>Kostenlos testen</a>
       </nav>
@@ -396,6 +461,105 @@
       </div>
     </section>
 
+    <section class="offer-section section" id="angebot" aria-labelledby="offer-title">
+      <div class="container">
+        <div class="section-heading" data-reveal>
+          <div>
+            <p class="eyebrow">Aktuell angeboten</p>
+            <h2 id="offer-title">Was du mit Meduvalo bekommst.</h2>
+          </div>
+          <p>Die Tabelle zeigt den aktuellen Leistungsumfang der Lernsoftware, damit du vor dem Start klar einschätzen kannst, welche Funktionen und Plattformen derzeit verfügbar sind.</p>
+        </div>
+
+        <div class="offer-table-wrap" data-reveal>
+          <table class="offer-table">
+            <caption>Aktueller Leistungsumfang von Meduvalo</caption>
+            <thead>
+              <tr>
+                <th scope="col">Bereich</th>
+                <th scope="col">Gerade enthalten</th>
+                <th scope="col">Hinweis</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Kostenlos testen</th>
+                <td>7 Tage vollständiger Zugang zu Lern-, Test- und KI-Funktionen.</td>
+                <td>Der Testzugang startet nach dem Kauf und ist kein automatisches Abo.</td>
+              </tr>
+              <tr>
+                <th scope="row">Preis</th>
+                <td>Einmalig <span data-purchase-price>24,99 €</span> für den Einstieg.</td>
+                <td>Optionaler Vollzugang für <span data-monthly-price>9,99 €</span> pro Monat.</td>
+              </tr>
+              <tr>
+                <th scope="row">Plattformen</th>
+                <td>Windows 10/11 sowie macOS für Apple Silicon und Intel.</td>
+                <td>Installer werden nach bestätigter Zahlung im Konto freigeschaltet.</td>
+              </tr>
+              <tr>
+                <th scope="row">Fragen &amp; Module</th>
+                <td>Prüfungsnahe Multiple-Choice-Fragen, Fächer, Themen und Lernmodule.</td>
+                <td>Gedacht für strukturierte Prüfungsvorbereitung im Medizinstudium.</td>
+              </tr>
+              <tr>
+                <th scope="row">Testmodus</th>
+                <td>Realistische Prüfungsabläufe mit fokussierter Bearbeitung und Auswertung.</td>
+                <td>Hilft dir, Routine und Zeitgefühl vor der Prüfung aufzubauen.</td>
+              </tr>
+              <tr>
+                <th scope="row">KI-Fragen</th>
+                <td>KI-gestützte Fragengenerierung aus eigenen Lernunterlagen.</td>
+                <td>Ideal, wenn du zusätzliche Übungen aus Skripten oder Notizen erstellen möchtest.</td>
+              </tr>
+              <tr>
+                <th scope="row">Offline lernen</th>
+                <td>Vorhandene Fragen und Testergebnisse bleiben lokal verfügbar.</td>
+                <td>Praktisch für Bibliothek, Zugfahrt oder Lernphasen ohne stabile Verbindung.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="faq-section section" id="faq" aria-labelledby="faq-title">
+      <div class="container">
+        <div class="section-heading centered" data-reveal>
+          <p class="eyebrow">Häufige Fragen</p>
+          <h2 id="faq-title">Antworten, bevor du startest.</h2>
+          <p>Diese FAQ beantwortet die wichtigsten Fragen zu Meduvalo, dem aktuellen Angebot, den unterstützten Systemen und dem Einstieg in die Prüfungsvorbereitung.</p>
+        </div>
+
+        <div class="faq-grid">
+          <details class="faq-item" open data-reveal>
+            <summary>Was bietet Meduvalo aktuell?</summary>
+            <p>Meduvalo bietet aktuell prüfungsnahe Multiple-Choice-Fragen, Lernmodule, einen Testmodus, Fortschrittsauswertungen, einen KI-Fragengenerator, ein sicheres Benutzerkonto und einen Offline-Modus für vorhandene Lerninhalte.</p>
+          </details>
+          <details class="faq-item" data-reveal>
+            <summary>Kann ich Meduvalo kostenlos testen?</summary>
+            <p>Ja. Nach dem Kauf ist ein vollständiger Zugang für sieben Tage enthalten, damit du die Lern-, Test- und KI-Funktionen strukturiert ausprobieren kannst.</p>
+          </details>
+          <details class="faq-item" data-reveal>
+            <summary>Ist Meduvalo ein Abo?</summary>
+            <p>Der Einmalkauf verlängert sich nicht automatisch. Optional kann ein Vollzugang für monatliche Nutzung gewählt werden, wenn du Meduvalo über die Testphase hinaus weiter verwenden möchtest.</p>
+          </details>
+          <details class="faq-item" data-reveal>
+            <summary>Für welche Systeme ist Meduvalo verfügbar?</summary>
+            <p>Meduvalo wird aktuell für Windows 10 und 11 sowie für macOS ab Version 11 angeboten. Für macOS gibt es Downloads für Apple-Silicon- und Intel-Macs.</p>
+          </details>
+          <details class="faq-item" data-reveal>
+            <summary>Was macht der KI-Fragengenerator?</summary>
+            <p>Der KI-Fragengenerator erstellt aus eigenen Lernunterlagen passende Übungsfragen, damit du deinen persönlichen Fragenpool schneller erweitern und gezielter wiederholen kannst.</p>
+          </details>
+          <details class="faq-item" data-reveal>
+            <summary>Kann ich mit Meduvalo offline lernen?</summary>
+            <p>Ja. Vorhandene Fragen und Testergebnisse werden lokal gespeichert, sodass du auch ohne aktive Internetverbindung weiterlernen und später an deine Vorbereitung anknüpfen kannst.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
     <section class="audience-section section" id="zielgruppen" aria-labelledby="audience-title">
       <div class="container audience-grid">
         <div class="audience-copy" data-reveal>
@@ -517,6 +681,8 @@
           <p class="footer-heading">Produkt</p>
           <a href="#loesung">So funktioniert Meduvalo</a>
           <a href="#funktionen">Alle Lernfunktionen</a>
+          <a href="#angebot">Aktuelles Angebot</a>
+          <a href="#faq">Häufige Fragen</a>
           <a href="#zielgruppen">Geeignet für Studierende</a>
           <a href="#download">Downloads und Preise</a>
         </div>
