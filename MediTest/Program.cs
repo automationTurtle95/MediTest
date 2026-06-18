@@ -224,7 +224,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     var url = app.Urls.FirstOrDefault(u => u.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase))
         ?? app.Urls.FirstOrDefault()
         ?? "http://127.0.0.1:55000";
-    managedBrowserProcess = OpenBrowser(url.TrimEnd('/') + "/index.html?v=5013");
+    managedBrowserProcess = OpenBrowser(url.TrimEnd('/') + "/index.html?v=5014");
 });
 
 app.Lifetime.ApplicationStopping.Register(() =>
@@ -345,6 +345,7 @@ static bool IsPublicRequest(HttpContext context)
 {
     var path = context.Request.Path;
     if (path.Equals("/api/auth/config")) return true;
+    if (path.Equals("/api/app/info")) return true;
     if (path.StartsWithSegments("/api/system/shutdown")) return true;
     if (path.StartsWithSegments("/api/system/update")) return true;
     if (path.StartsWithSegments("/css")) return true;

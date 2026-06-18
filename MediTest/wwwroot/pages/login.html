@@ -230,7 +230,7 @@
         .then((r) => r.json())
         .then((d) => {
           const el = document.getElementById("appVersion");
-          if (el) el.textContent = "Version " + d.version;
+          if (el && d.version) el.textContent = "Version " + d.version;
         })
         .catch(() => {});
       if (qs("verificationRequired") === "1") {
