@@ -1347,6 +1347,118 @@ button {
   font-weight: 800;
 }
 
+.plan-comparison {
+  display: grid;
+  margin-top: 34px;
+  gap: 18px;
+}
+
+.section-heading.compact {
+  margin-bottom: 0;
+  align-items: start;
+}
+
+.section-heading.compact h3 {
+  margin: 0;
+  color: var(--green-950);
+  font-size: clamp(26px, 3vw, 36px);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+}
+
+.comparison-table tbody th {
+  width: 22%;
+}
+
+.content-section {
+  background: var(--white);
+}
+
+.content-grid,
+.comparison-grid,
+.guide-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.content-card,
+.comparison-card,
+.guide-card {
+  min-height: 100%;
+  padding: 28px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 26px;
+  box-shadow: var(--shadow-sm);
+}
+
+.content-card {
+  background:
+    linear-gradient(180deg, rgba(94, 217, 183, 0.08), rgba(255, 255, 255, 0) 44%),
+    var(--white);
+}
+
+.content-number,
+.guide-label {
+  display: inline-flex;
+  margin-bottom: 18px;
+  align-items: center;
+  gap: 8px;
+  color: var(--green-800);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.content-card h3,
+.comparison-card h3,
+.guide-card h3 {
+  margin: 0 0 12px;
+  color: var(--green-950);
+  font-size: 21px;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+.content-card p,
+.comparison-card p,
+.guide-card p {
+  margin: 0;
+  color: #617a7a;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.comparison-section {
+  background:
+    radial-gradient(circle at 85% 15%, rgba(94, 217, 183, 0.16), transparent 30%),
+    var(--blue-50);
+}
+
+.comparison-card {
+  background: #ffffff;
+}
+
+.guide-section {
+  background: var(--white);
+}
+
+.guide-card {
+  background:
+    linear-gradient(180deg, #f8fbfa 0%, #ffffff 100%);
+}
+
+.guide-label {
+  color: var(--mint-700);
+}
+
+.guide-card .guide-label + h3 {
+  margin-top: 0;
+}
+
 .faq-section {
   background: var(--blue-50);
 }
@@ -1587,6 +1699,23 @@ button {
   position: relative;
   z-index: 1;
   width: 100%;
+}
+
+.pricing-demo-link {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  width: 100%;
+  margin-top: 14px;
+  justify-content: center;
+  color: var(--mint-200);
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.pricing-demo-link:hover {
+  color: var(--white);
 }
 
 .pricing-card small {
@@ -2377,6 +2506,12 @@ button {
 
   .feature-card-large {
     grid-row: span 1;
+  }
+
+  .content-grid,
+  .comparison-grid,
+  .guide-grid {
+    grid-template-columns: 1fr;
   }
 }
 

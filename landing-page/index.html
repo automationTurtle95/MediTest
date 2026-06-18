@@ -91,7 +91,8 @@
             "url": "https://meduvalo.at/purchase",
             "price": "24.99",
             "priceCurrency": "EUR",
-            "availability": "https://schema.org/InStock"
+            "availability": "https://schema.org/InStock",
+            "description": "Einmalkauf mit 7 Tagen Vollzugang ab Kauf; keine automatische Verlängerung."
           }
         },
         {
@@ -108,18 +109,26 @@
             },
             {
               "@type": "Question",
-              "name": "Was ist der neue Lernmodus?",
+              "name": "Kann ich Meduvalo vor dem Kauf testen?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Der Lernmodus zeigt Fragen wie Karteikarten an. Du deckst die Antwort auf, bewertest sie als gewusst oder nicht gewusst und kannst falsch beantwortete Karten gezielt wiederholen."
+                "text": "Eine automatische Gratisversion vor dem Kauf ist aktuell nicht freigeschaltet. Du kannst aber eine kostenlose Demo per E-Mail anfragen; der Kauf enthält zusätzlich sieben Tage Vollzugang ohne automatische Verlängerung."
               }
             },
             {
               "@type": "Question",
-              "name": "Kann ich Meduvalo kostenlos testen?",
+              "name": "Was ist der Unterschied zwischen Basis und Vollzugang?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Ja. Nach dem Kauf ist ein vollständiger Zugang für sieben Tage enthalten, damit du die Lern-, Test- und KI-Funktionen strukturiert ausprobieren kannst."
+                "text": "Nach der Testphase bleiben vorhandene Fragenpools für Tests, Lernrunden, Entwürfe und Reviews nutzbar. Der Vollzugang schaltet neue Inhalte, Katalogfunktionen, KI-Fragengenerierung, Downloads und weitere Online-Funktionen frei."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Wie viele Fragen und Fächer sind enthalten?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Die Anzahl hängt vom jeweiligen Katalog, deinen eigenen Dokumenten und freigeschalteten Fragenpools ab. Meduvalo bewirbt deshalb keine erfundene Gesamtzahl, sondern zeigt konkrete Fragenzahlen am jeweiligen Inhalt an."
               }
             },
             {
@@ -140,10 +149,10 @@
             },
             {
               "@type": "Question",
-              "name": "Was macht der KI-Fragengenerator?",
+              "name": "Funktioniert Meduvalo für meine Universität?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Der KI-Fragengenerator erstellt aus eigenen Lernunterlagen passende Übungsfragen, damit du deinen persönlichen Fragenpool schneller erweitern und gezielter wiederholen kannst."
+                "text": "Meduvalo ist flexibel nach Fächern, Themen und Modulen aufgebaut und nicht auf eine einzelne Universität beschränkt. Ob ein konkreter Katalog oder Fragenpool zu deiner Lehrveranstaltung passt, solltest du bei Bedarf vor dem Kauf über die Demo-Anfrage prüfen."
               }
             },
             {
@@ -203,12 +212,12 @@
           <p class="hero-lead">Meduvalo ist die Lernsoftware für Medizinprüfungen, mit der Medizinstudierende strukturiert und gezielt trainieren. Du kannst prüfungsnah lernen, Wissenslücken früh erkennen und mit realistischen Tests sicherer bestehen, ohne deine Vorbereitung über verstreute Unterlagen organisieren zu müssen.</p>
           <div class="hero-actions">
             <a class="button button-primary button-large" href="./purchase" data-purchase-link>
-              7 Tage kostenlos starten
+              Kaufen und 7 Tage testen
               <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 6 6-6 6"></path></svg>
             </a>
-            <a class="button button-secondary button-large" href="#loesung">Mehr erfahren</a>
+            <a class="button button-secondary button-large" href="mailto:support@meduvalo.at?subject=Meduvalo%20Demo%20anfragen">Kostenlose Demo anfragen</a>
           </div>
-          <p class="hero-price-hint">Danach einmalig <span class="hero-price" data-purchase-price>24,99 €</span> · kein Abo-Zwang</p>
+          <p class="hero-price-hint">Einmalig <span class="hero-price" data-purchase-price>24,99 €</span> · enthält 7 Tage Vollzugang · kein Abo-Zwang</p>
           <ul class="trust-row">
             <li><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 4 4 8-9"></path></svg> Windows &amp; macOS</li>
             <li><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 4 4 8-9"></path></svg> KI-Fragengenerator</li>
@@ -499,9 +508,9 @@
             </thead>
             <tbody>
               <tr>
-                <th scope="row">Kostenlos testen</th>
-                <td>7 Tage vollständiger Zugang zu Lernmodus, Tests, Statistik, Bearbeitung, Katalogansicht und KI-Funktionen.</td>
-                <td>Der Testzugang startet nach dem Kauf und ist kein automatisches Abo.</td>
+                <th scope="row">Einstieg &amp; Demo</th>
+                <td>Eine kostenlose Demo kann vor dem Kauf per E-Mail angefragt werden. Der Kauf startet zusätzlich 7 Tage Vollzugang.</td>
+                <td>Der Testzugang nach Kauf ist kein automatisches Abo und verlängert sich nicht von selbst.</td>
               </tr>
               <tr>
                 <th scope="row">Preis</th>
@@ -515,8 +524,8 @@
               </tr>
               <tr>
                 <th scope="row">Fragen &amp; Module</th>
-                <td>Prüfungsnahe Multiple-Choice-Fragen, Fächer, Themen und Lernmodule.</td>
-                <td>Gedacht für strukturierte Prüfungsvorbereitung im Medizinstudium.</td>
+                <td>Prüfungsnahe Multiple-Choice-Fragen, eigene Fragenpools, Fächer, Themen und Lernmodule.</td>
+                <td>Konkrete Fragenzahlen werden je Katalog oder Fragenpool ausgewiesen, sobald der Inhalt verfügbar ist.</td>
               </tr>
               <tr>
                 <th scope="row">Testmodus</th>
@@ -541,6 +550,85 @@
             </tbody>
           </table>
         </div>
+
+        <div class="plan-comparison" data-reveal>
+          <div class="section-heading compact">
+            <div>
+              <p class="eyebrow">Basis vs. Vollzugang</p>
+              <h3>Was bleibt nutzbar, was braucht Premium?</h3>
+            </div>
+            <p>Nach der Testphase bleibt der Basiskauf nicht wertlos: vorhandene Fragenpools können weiter für Tests und Lernrunden genutzt werden. Neue Inhalte, Katalog, KI und Vollfunktionen gehören zum Vollzugang.</p>
+          </div>
+          <div class="offer-table-wrap">
+            <table class="offer-table comparison-table">
+              <caption>Vergleich von Basiszugang und Vollzugang</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Funktion</th>
+                  <th scope="col">Basis nach Testphase</th>
+                  <th scope="col">Vollzugang</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">Vorhandene Fragenpools</th>
+                  <td>Tests starten, Entwürfe speichern, Ergebnisse ansehen und Fragen aus vorhandenen Dokumenten wiederholen.</td>
+                  <td>Alle Basisfunktionen plus aktive Erweiterung und komfortable Bearbeitung deiner Inhalte.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Lernmodus &amp; Testmodus</th>
+                  <td>Lernrunden und Tests mit bestehenden Fragenpools bleiben ausführbar.</td>
+                  <td>Zusätzlich vollständige Nutzung neuer Lern-, Test- und Auswertungsfunktionen.</td>
+                </tr>
+                <tr>
+                  <th scope="row">KI-Fragengenerator</th>
+                  <td>Nicht enthalten.</td>
+                  <td>Erstellt Übungsfragen aus eigenen Lernunterlagen.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Katalog &amp; neue Downloads</th>
+                  <td>Bereits gekaufte und geladene Katalogtests bleiben als vorhandener Fragenpool nutzbar.</td>
+                  <td>Katalogansicht, neue Downloads und Freischaltungen sind verfügbar. Katalogtests können separate Kaufartikel sein.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Online-Abgleich</th>
+                  <td>Lokale Inhalte bleiben verfügbar, Online-Funktionen sind eingeschränkt.</td>
+                  <td>Anmeldung, Synchronisation, KI und Katalogfunktionen sind vollständig nutzbar.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="content-section section" id="inhalte" aria-labelledby="content-title">
+      <div class="container">
+        <div class="section-heading" data-reveal>
+          <div>
+            <p class="eyebrow">Inhalte &amp; Abdeckung</p>
+            <h2 id="content-title">Was du über Fragen, Fächer und Unis wissen solltest.</h2>
+          </div>
+          <p>Meduvalo ist bewusst flexibel aufgebaut: Du kannst vorhandene Fragenpools nutzen, eigene Unterlagen strukturieren und Kataloginhalte ergänzen, ohne an ein einzelnes Curriculum gebunden zu sein.</p>
+        </div>
+
+        <div class="content-grid">
+          <article class="content-card" data-reveal>
+            <span class="content-number">01</span>
+            <h3>Fragenanzahl transparent je Inhalt</h3>
+            <p>Es werden keine fiktiven Gesamtzahlen beworben. Die konkrete Anzahl wird je Katalog, Dokument oder Fragenpool angezeigt, sobald der jeweilige Inhalt in Meduvalo verfügbar ist.</p>
+          </article>
+          <article class="content-card" data-reveal>
+            <span class="content-number">02</span>
+            <h3>Fächer, Themen und Module</h3>
+            <p>Fragen lassen sich nach Fächern, Themen, Modulen und persönlichen Lernzielen organisieren. Dadurch kannst du sowohl einzelne Prüfungen als auch längere Semesterphasen strukturieren.</p>
+          </article>
+          <article class="content-card" data-reveal>
+            <span class="content-number">03</span>
+            <h3>Uni- und Curriculum-Prüfung</h3>
+            <p>Meduvalo ist nicht auf eine einzige Universität beschränkt. Wenn du wissen möchtest, ob ein bestimmter Fragenpool zu deiner Uni oder Lehrveranstaltung passt, kannst du vor dem Kauf eine Demo anfragen.</p>
+          </article>
+        </div>
       </div>
     </section>
 
@@ -558,12 +646,16 @@
             <p>Meduvalo bietet aktuell prüfungsnahe Multiple-Choice-Fragen, Lernmodule, einen Karteikarten-Lernmodus, einen Testmodus, Fortschrittsauswertungen, einen KI-Fragengenerator, ein sicheres Benutzerkonto und einen lokalen Cache für vorhandene Lerninhalte.</p>
           </details>
           <details class="faq-item" data-reveal>
-            <summary>Was ist der neue Lernmodus?</summary>
-            <p>Der Lernmodus zeigt Fragen wie Karteikarten an. Du deckst die Antwort auf, bewertest sie als gewusst oder nicht gewusst und kannst falsch beantwortete Karten gezielt wiederholen.</p>
+            <summary>Kann ich Meduvalo vor dem Kauf testen?</summary>
+            <p>Eine automatische Gratisversion vor dem Kauf ist aktuell nicht freigeschaltet. Du kannst aber eine kostenlose Demo per E-Mail anfragen; der Kauf enthält zusätzlich sieben Tage Vollzugang ohne automatische Verlängerung.</p>
           </details>
           <details class="faq-item" data-reveal>
-            <summary>Kann ich Meduvalo kostenlos testen?</summary>
-            <p>Ja. Nach dem Kauf ist ein vollständiger Zugang für sieben Tage enthalten, damit du die Lern-, Test- und KI-Funktionen strukturiert ausprobieren kannst.</p>
+            <summary>Was ist der Unterschied zwischen Basis und Vollzugang?</summary>
+            <p>Nach der Testphase bleiben vorhandene Fragenpools für Tests, Lernrunden, Entwürfe und Reviews nutzbar. Der Vollzugang schaltet neue Inhalte, Katalogfunktionen, KI-Fragengenerierung, Downloads und weitere Online-Funktionen frei.</p>
+          </details>
+          <details class="faq-item" data-reveal>
+            <summary>Wie viele Fragen und Fächer sind enthalten?</summary>
+            <p>Die Anzahl hängt vom jeweiligen Katalog, deinen eigenen Dokumenten und freigeschalteten Fragenpools ab. Meduvalo bewirbt deshalb keine erfundene Gesamtzahl, sondern zeigt konkrete Fragenzahlen am jeweiligen Inhalt an.</p>
           </details>
           <details class="faq-item" data-reveal>
             <summary>Ist Meduvalo ein Abo?</summary>
@@ -574,8 +666,8 @@
             <p>Meduvalo wird aktuell für Windows 10 und 11 sowie für macOS ab Version 11 angeboten. Für macOS gibt es Downloads für Apple-Silicon- und Intel-Macs.</p>
           </details>
           <details class="faq-item" data-reveal>
-            <summary>Was macht der KI-Fragengenerator?</summary>
-            <p>Der KI-Fragengenerator erstellt aus eigenen Lernunterlagen passende Übungsfragen, damit du deinen persönlichen Fragenpool schneller erweitern und gezielter wiederholen kannst.</p>
+            <summary>Funktioniert Meduvalo für meine Universität?</summary>
+            <p>Meduvalo ist flexibel nach Fächern, Themen und Modulen aufgebaut und nicht auf eine einzelne Universität beschränkt. Ob ein konkreter Katalog oder Fragenpool zu deiner Lehrveranstaltung passt, solltest du bei Bedarf vor dem Kauf über die Demo-Anfrage prüfen.</p>
           </details>
           <details class="faq-item" data-reveal>
             <summary>Was ist ohne stabile Internetverbindung nutzbar?</summary>
@@ -598,6 +690,61 @@
           <article><span>02</span><div><p class="audience-title">Vor Modulprüfungen</p><p>Bereite dich fokussiert auf Modulprüfungen vor, indem du relevante Themen bündelst und deinen aktuellen Wissensstand realistisch überprüfst.</p></div></article>
           <article><span>03</span><div><p class="audience-title">MC- und Altfragen-Lernende</p><p>Festige medizinisches Wissen aktiv mit Multiple-Choice- und Altfragen, statt Inhalte ausschließlich passiv zu lesen.</p></div></article>
           <article><span>04</span><div><p class="audience-title">Strukturierte Selbstlerner</p><p>Verfolge deinen Fortschritt anhand nachvollziehbarer Ergebnisse und ersetze ein ungenaues Lerngefühl durch konkrete nächste Schritte.</p></div></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="comparison-section section" id="vergleich" aria-labelledby="comparison-title">
+      <div class="container">
+        <div class="section-heading centered" data-reveal>
+          <p class="eyebrow">Vergleich</p>
+          <h2 id="comparison-title">Warum nicht nur PDFs oder Anki?</h2>
+          <p>Meduvalo soll bewährte Lernmethoden nicht ersetzen, sondern die medizinische Prüfungsvorbereitung strukturierter machen: Fragen, Tests, Lernmodus und Fortschritt liegen an einem Ort.</p>
+        </div>
+
+        <div class="comparison-grid">
+          <article class="comparison-card" data-reveal>
+            <h3>Gegenüber Altfragen-PDFs</h3>
+            <p>PDFs sind schnell gesammelt, aber schwer auszuwerten. Meduvalo macht aus Fragen aktive Tests, Lernrunden und nachvollziehbare Ergebnisse.</p>
+          </article>
+          <article class="comparison-card" data-reveal>
+            <h3>Gegenüber reinen Karteikarten</h3>
+            <p>Karteikarten helfen beim Wiederholen. Meduvalo ergänzt sie um prüfungsnahe Testabläufe, Themenauswertung und vorhandene Fragenpools.</p>
+          </article>
+          <article class="comparison-card" data-reveal>
+            <h3>Gegenüber allgemeinen Lern-Tools</h3>
+            <p>Meduvalo ist auf medizinische Multiple-Choice-Vorbereitung, Katalogtests, KI-Fragen aus Unterlagen und messbaren Lernfortschritt ausgerichtet.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="guide-section section" id="ratgeber" aria-labelledby="guide-title">
+      <div class="container">
+        <div class="section-heading" data-reveal>
+          <div>
+            <p class="eyebrow">Lernratgeber</p>
+            <h2 id="guide-title">Drei Strategien für bessere Prüfungsvorbereitung.</h2>
+          </div>
+          <p>Diese Kurzratgeber geben Studierenden konkrete Such- und Einstiegspunkte und stärken gleichzeitig die thematische Sichtbarkeit der Website.</p>
+        </div>
+
+        <div class="guide-grid">
+          <article class="guide-card" data-reveal>
+            <p class="guide-label">Medizin effektiv lernen</p>
+            <h3>Vom Skript zur aktiven Abfrage</h3>
+            <p>Medizinische Inhalte bleiben besser hängen, wenn du sie regelmäßig abrufst. Statt Skripten nur zu markieren, solltest du zentrale Aussagen in Fragen umwandeln und sie wiederholt testen.</p>
+          </article>
+          <article class="guide-card" data-reveal>
+            <p class="guide-label">Altfragen-Strategie</p>
+            <h3>Altfragen nicht nur auswendig lernen</h3>
+            <p>Altfragen sind wertvoll, wenn du sie nach Thema, Fehlerursache und Wiederholungsbedarf sortierst. So erkennst du Muster und trainierst nicht nur einzelne Antworten.</p>
+          </article>
+          <article class="guide-card" data-reveal>
+            <p class="guide-label">Prüfungssimulation</p>
+            <h3>Realistisch testen, bevor es ernst wird</h3>
+            <p>Regelmäßige Testläufe mit Zeitdruck zeigen, ob Wissen wirklich abrufbar ist. Besonders hilfreich ist danach eine Auswertung nach Themen und unsicheren Fragen.</p>
+          </article>
         </div>
       </div>
     </section>
@@ -665,7 +812,8 @@
               <li>Danach vorhandene Tests und Lernrunden weiter nutzbar</li>
               <li>Optionaler Vollzugang für <span data-monthly-price>9,99 €</span> pro Monat</li>
             </ul>
-            <a class="button button-light button-large checkout-button" href="./purchase" data-purchase-link>Meduvalo kaufen</a>
+            <a class="button button-light button-large checkout-button" href="./purchase" data-purchase-link>Kaufen und 7 Tage testen</a>
+            <a class="pricing-demo-link" href="mailto:support@meduvalo.at?subject=Meduvalo%20Demo%20anfragen">Vorher kostenlose Demo anfragen</a>
             <small>Keine automatische Verlängerung durch den Einmalkauf. Katalogtests sind separate Kaufartikel.</small>
           </aside>
         </div>
@@ -707,8 +855,11 @@
           <a href="#loesung">So funktioniert Meduvalo</a>
           <a href="#funktionen">Alle Lernfunktionen</a>
           <a href="#angebot">Aktuelles Angebot</a>
+          <a href="#inhalte">Inhalte und Abdeckung</a>
           <a href="#faq">Häufige Fragen</a>
           <a href="#zielgruppen">Geeignet für Studierende</a>
+          <a href="#vergleich">Vergleich mit Alternativen</a>
+          <a href="#ratgeber">Lernratgeber</a>
           <a href="#download">Downloads und Preise</a>
         </div>
         <div>
