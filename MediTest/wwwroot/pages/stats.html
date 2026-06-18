@@ -50,6 +50,10 @@
   <section class="card">
     <h2>Schwache Fragen</h2>
     <div id="weakQuestions"></div>
+    <div id="weakTestActions" class="actions hidden" style="margin-top:16px">
+      <button class="button primary" type="button" onclick="startWeakTest()">Test aus schwachen Fragen starten</button>
+    </div>
+    <div id="weakTestMsg" class="hidden" style="margin-top:8px"></div>
   </section>
 </main>
 <script src="/js/api.js"></script>
@@ -144,11 +148,23 @@ function renderTopics(s){
       }).join('')}
     </div>`:'<p class="muted">Keine Themendaten.</p>';
 }
+async function startWeakTest(){
+  const msg=document.getElementById('weakTestMsg');
+  const ids=weakQuestionCache.map(q=>q.questionId);
+  if(!ids.length) return;
+  status(msg,'Test wird zusammengestellt...');
+  try{
+    const test=await api('/api/tests/start-weak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({questionIds:ids,testName:'Schwache Fragen'})});
+    sessionStorage.setItem('currentTest',JSON.stringify(test));
+    location.href=`/pages/test.html?id=${test.testSessionId}`;
+  }catch(e){status(msg,e.message,'status error');}
+}
 function renderWeakQuestions(s){
   const questions=s.weakQuestions||[];
   weakQuestionCache=questions;
   if(!questions.length){
     document.getElementById('weakQuestions').innerHTML='<p class="muted">Keine wiederholt falschen Fragen.</p>';
+    document.getElementById('weakTestActions').classList.add('hidden');
     return;
   }
   document.getElementById('weakQuestions').innerHTML=`
@@ -158,6 +174,7 @@ function renderWeakQuestions(s){
     </select>
     <div id="weakQuestionDetails"></div>`;
   showWeakQuestion(0);
+  document.getElementById('weakTestActions').classList.remove('hidden');
 }
 function showWeakQuestion(index){
   const q=weakQuestionCache[Number(index)||0];

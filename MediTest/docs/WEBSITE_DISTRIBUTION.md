@@ -7,13 +7,13 @@ Ordners.
 
 ## Release-Dateien
 
-Version 5.0.10 veröffentlicht:
+Version 5.0.11 veröffentlicht:
 
 ```text
-MediTest-Setup-5.0.10-win-x64.msi
-MediTest-5.0.10-win-x64-portable.zip
-MediTest-Setup-5.0.10-macos-arm64.dmg
-MediTest-Setup-5.0.10-macos-x64.dmg
+MediTest-Setup-5.0.11-win-x64.msi
+MediTest-5.0.11-win-x64-portable.zip
+MediTest-Setup-5.0.11-macos-arm64.dmg
+MediTest-Setup-5.0.11-macos-x64.dmg
 SHA256SUMS.txt
 ```
 

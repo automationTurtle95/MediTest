@@ -111,6 +111,7 @@ public sealed record UpdateQuestionRequest(
     string? ImageFileName = null,
     bool ClearImage = false);
 public sealed record StartTestRequest(int DocumentId, int QuestionCount = 25, string? TestName = null);
+public sealed record StartWeakTestRequest(List<int> QuestionIds, string? TestName = null);
 public sealed record RenameTestRequest(string? TestName);
 public sealed record SubmitTestRequest(List<SubmitAnswerDto> Answers);
 public sealed record SubmitAnswerDto(int QuestionId, int? SelectedAnswerOptionId);

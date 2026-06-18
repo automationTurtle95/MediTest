@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
-<header class="topbar"><a class="brand" href="/pages/documents.html">Meduvalo</a><nav><a href="/pages/documents.html">Dokumente</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
+<header class="topbar"><a class="brand" href="/index.html">Meduvalo</a><nav><a href="/index.html">Start</a><a href="/pages/documents.html">Dokumente</a><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html" class="active">Tests</a><a href="/pages/stats.html">Statistik</a></nav></header>
 <main>
   <section class="card">
     <div class="progress"><div id="bar"></div></div>
@@ -16,7 +16,8 @@
     <figure id="questionImage" class="question-image hidden"></figure>
     <p><span id="topic" class="pill"></span> <span id="difficulty" class="pill"></span> <span id="aiBadge" class="badge ai-badge hidden">KI</span></p>
     <div id="options" role="radiogroup" aria-label="Antwortmöglichkeiten"></div>
-    <div class="actions"><button id="prev" type="button">Zurück</button><button id="next" class="primary" type="button">Weiter</button><button id="submit" class="primary hidden" type="button">Test abgeben</button><a id="pdf" class="button" href="#">PDF herunterladen</a></div>
+    <div class="actions"><button id="prev" type="button">← Zurück</button><button id="next" class="primary" type="button">Weiter →</button><button id="submit" class="primary hidden" type="button">Test abgeben</button><a id="pdf" class="button" href="#">PDF herunterladen</a></div>
+    <p class="muted" style="font-size:12px;margin-top:8px">Tastatur: <kbd>A</kbd>–<kbd>D</kbd> Antwort wählen · <kbd>Enter</kbd> / <kbd>→</kbd> Weiter · <kbd>←</kbd> Zurück</p>
     <div id="msg" class="hidden"></div>
   </section>
 </main>
@@ -89,6 +90,37 @@ async function init(){
   syncLocal();
   render();
 }
+document.addEventListener('keydown', e => {
+  if (!test) return;
+  // Nicht auslösen wenn User in einem Eingabefeld tippt
+  if (e.target && ['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+  const key = e.key.toUpperCase();
+  // A/B/C/D → Antwort wählen
+  if (['A','B','C','D'].includes(key)) {
+    const idx = key.charCodeAt(0) - 65; // A=0, B=1, C=2, D=3
+    const inputs = document.querySelectorAll('input[name="answer"]');
+    if (inputs[idx]) {
+      inputs[idx].checked = true;
+      inputs[idx].dispatchEvent(new Event('change'));
+    }
+    return;
+  }
+  // Enter oder → → nächste Frage / abgeben
+  if (e.key === 'Enter' || e.key === 'ArrowRight') {
+    e.preventDefault();
+    const next = document.getElementById('next');
+    const submit = document.getElementById('submit');
+    if (next && !next.classList.contains('hidden')) next.click();
+    else if (submit && !submit.classList.contains('hidden')) submit.click();
+    return;
+  }
+  // ← → vorherige Frage
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    const prev = document.getElementById('prev');
+    if (prev && !prev.disabled) prev.click();
+  }
+});
 init().catch(e=>status(document.getElementById('msg'),e.message,'status error'));
 </script>
 </body>

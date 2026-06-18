@@ -416,6 +416,53 @@ public sealed class FirestoreUserDataStore
         return ToTestSessionDto(session.Id, req.DocumentId, questions, session.Answers);
     }
 
+    public async Task<TestSessionDto> StartWeakTestAsync(StartWeakTestRequest req, CancellationToken ct)
+    {
+        if (req.QuestionIds == null || req.QuestionIds.Count == 0)
+            throw new InvalidOperationException("Keine Fragen angegeben.");
+
+        // Alle Fragen aus allen Dokumenten laden und nach IDs filtern
+        var allQuestions = new List<Question>();
+        foreach (var doc in await ListDocumentMetasAsync(ct))
+        {
+            var qs = await GetDocumentQuestionsAsync(doc.Id, ct);
+            foreach (var q in qs) q.Document = new UploadedDocument { Id = doc.Id, FileName = doc.FileName };
+            allQuestions.AddRange(qs);
+        }
+
+        var idSet = new HashSet<int>(req.QuestionIds);
+        var questions = allQuestions.Where(q => idSet.Contains(q.Id)).OrderBy(_ => Random.Shared.Next()).ToList();
+        if (questions.Count == 0)
+            throw new InvalidOperationException("Keine der angegebenen Fragen gefunden.");
+
+        // Dokument-ID der ersten Frage als Anker verwenden
+        var documentId = questions[0].Document?.Id ?? 0;
+
+        var session = new TestSession
+        {
+            Id = NewId(),
+            UploadedDocumentId = documentId,
+            TestName = string.IsNullOrWhiteSpace(req.TestName) ? $"Schwache Fragen {DateTime.Now:yyyy-MM-dd HH:mm}" : req.TestName.Trim(),
+            QuestionCount = questions.Count,
+            StartedAt = DateTime.UtcNow
+        };
+
+        for (var i = 0; i < questions.Count; i++)
+        {
+            session.Answers.Add(new TestAnswer
+            {
+                Id = NewId(),
+                TestSessionId = session.Id,
+                QuestionId = questions[i].Id,
+                DisplayOrder = i + 1,
+                ShuffledOptionIdsJson = JsonSerializer.Serialize(questions[i].Options.OrderBy(_ => Random.Shared.Next()).Select(o => o.Id).ToList(), JsonOptions)
+            });
+        }
+
+        await SaveTestAsync(session, ct);
+        return ToTestSessionDto(session.Id, documentId, questions, session.Answers);
+    }
+
     public async Task<TestSessionDto> ResumeTestAsync(int id, CancellationToken ct)
     {
         var session = await GetTestAsync(id, ct) ?? throw new KeyNotFoundException("Test nicht gefunden.");

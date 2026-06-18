@@ -224,7 +224,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     var url = app.Urls.FirstOrDefault(u => u.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase))
         ?? app.Urls.FirstOrDefault()
         ?? "http://127.0.0.1:55000";
-    managedBrowserProcess = OpenBrowser(url.TrimEnd('/') + "/index.html?v=5010");
+    managedBrowserProcess = OpenBrowser(url.TrimEnd('/') + "/index.html?v=5011");
 });
 
 app.Lifetime.ApplicationStopping.Register(() =>
@@ -2079,6 +2079,18 @@ app.MapPost("/api/tests/start", async (StartTestRequest req, FirestoreUserDataSt
         var settings = await store.GetSettingsAsync(ct);
         var required = Math.Clamp(req.QuestionCount <= 0 ? settings.DefaultTestQuestionCount : req.QuestionCount, 1, 100);
         return Results.BadRequest(new { error = "Zu wenig Fragen vorhanden.", available, required, offerGenerate = true });
+    }
+    catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/tests/start-weak", async (StartWeakTestRequest req, FirestoreUserDataStore store, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await store.StartWeakTestAsync(req, ct));
     }
     catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException)
     {
