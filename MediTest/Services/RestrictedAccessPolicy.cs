@@ -11,14 +11,26 @@ public static class RestrictedAccessPolicy
             return path.Equals("/api/settings", StringComparison.OrdinalIgnoreCase) ||
                    path.Equals("/api/tests", StringComparison.OrdinalIgnoreCase) ||
                    path.Equals("/api/tests/sources", StringComparison.OrdinalIgnoreCase) ||
+                   path.Equals("/api/stats/overview", StringComparison.OrdinalIgnoreCase) ||
                    MatchesTestAction(path, "resume") ||
-                   MatchesTestAction(path, "review");
+                   MatchesTestAction(path, "review") ||
+                   MatchesDocumentAction(path, "questions");
 
         if (normalizedMethod == "POST")
             return path.Equals("/api/tests/start", StringComparison.OrdinalIgnoreCase) ||
                    MatchesTestAction(path, "submit");
 
         return normalizedMethod == "PUT" && MatchesTestAction(path, "draft");
+    }
+
+    private static bool MatchesDocumentAction(string path, string action)
+    {
+        var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return segments.Length == 4 &&
+               segments[0].Equals("api", StringComparison.OrdinalIgnoreCase) &&
+               segments[1].Equals("documents", StringComparison.OrdinalIgnoreCase) &&
+               int.TryParse(segments[2], out _) &&
+               segments[3].Equals(action, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool MatchesTestAction(string path, string action)

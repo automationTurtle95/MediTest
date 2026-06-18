@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Lernen · Meduvalo</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+    <style>
+      .learn-progress {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+      .learn-progress-bar {
+        flex: 1;
+        height: 6px;
+        background: var(--border, #e5e7eb);
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      .learn-progress-fill {
+        height: 100%;
+        background: var(--accent, #6366f1);
+        border-radius: 3px;
+        transition: width 0.3s ease;
+      }
+      .learn-option {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 10px 14px;
+        border: 1.5px solid var(--border, #e5e7eb);
+        border-radius: 8px;
+        margin-bottom: 8px;
+        font-size: 14px;
+        line-height: 1.55;
+        transition: border-color 0.2s, background 0.2s;
+      }
+      .learn-option-label {
+        flex-shrink: 0;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--border, #e5e7eb);
+        color: var(--text-muted, #6b7280);
+        font-weight: 700;
+        font-size: 11px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s, color 0.2s;
+      }
+      .learn-option--correct {
+        border-color: #22c55e;
+        background: rgba(34, 197, 94, 0.08);
+      }
+      .learn-option--correct .learn-option-label {
+        background: #22c55e;
+        color: #fff;
+      }
+      .learn-explanation {
+        margin-top: 16px;
+        padding: 12px 16px;
+        background: var(--surface-2, #f9fafb);
+        border-radius: 8px;
+        font-size: 14px;
+        line-height: 1.65;
+        color: var(--text-muted, #6b7280);
+        border-left: 3px solid var(--accent, #6366f1);
+      }
+      .learn-rating-row {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        margin-top: 20px;
+        flex-wrap: wrap;
+      }
+      .learn-rating-row button {
+        min-width: 150px;
+        font-size: 15px;
+        padding: 10px 20px;
+      }
+      .learn-kbd {
+        font-size: 11px;
+        color: var(--text-muted, #6b7280);
+        margin-top: 12px;
+        text-align: center;
+      }
+      .learn-result-box {
+        text-align: center;
+        padding: 24px 0 8px;
+      }
+      .learn-result-score {
+        font-size: 52px;
+        font-weight: 800;
+        line-height: 1;
+        color: var(--text, #111827);
+      }
+      .learn-result-sublabel {
+        font-size: 15px;
+        color: var(--text-muted, #6b7280);
+        margin-top: 6px;
+      }
+      .learn-result-bar {
+        margin: 20px auto 0;
+        max-width: 280px;
+        height: 10px;
+        background: var(--border, #e5e7eb);
+        border-radius: 5px;
+        overflow: hidden;
+      }
+      .learn-result-fill {
+        height: 100%;
+        background: #22c55e;
+        border-radius: 5px;
+        transition: width 0.6s ease;
+      }
+      .learn-done-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-top: 28px;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/index.html">Meduvalo</a>
+      <nav>
+        <a href="/index.html">Start</a><a href="/pages/documents.html">Dokumente</a
+        ><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a
+        ><a href="/pages/stats.html">Statistik</a>
+      </nav>
+    </header>
+    <main>
+      <!-- Loading state -->
+      <section id="loadingCard" class="card">
+        <p class="muted">Karten werden geladen...</p>
+        <div id="loadingMsg" class="hidden"></div>
+      </section>
+
+      <!-- Learn card (question) -->
+      <section id="learnCard" class="card hidden">
+        <div class="learn-progress">
+          <div class="learn-progress-bar"><div class="learn-progress-fill" id="bar"></div></div>
+          <span id="counter" class="muted" style="white-space: nowrap; font-size: 13px">0 / 0</span>
+        </div>
+        <p>
+          <span id="topic" class="pill"></span>
+          <span id="difficulty" class="pill"></span>
+          <span id="aiBadge" class="badge ai-badge hidden">KI</span>
+        </p>
+        <h1 id="questionText" style="margin: 12px 0 18px; font-size: 20px; line-height: 1.4"></h1>
+        <figure id="questionImage" class="question-image hidden"></figure>
+        <div id="optionsArea"></div>
+        <div id="explanationArea" class="hidden">
+          <div class="learn-explanation" id="explanationText"></div>
+        </div>
+        <div class="actions" id="revealActions" style="margin-top: 20px">
+          <button class="primary" id="revealBtn" type="button">Antwort aufdecken</button>
+        </div>
+        <div class="learn-rating-row hidden" id="ratingActions">
+          <button class="danger" id="wrongBtn" type="button">✗ Nicht gewusst</button>
+          <button class="primary" id="rightBtn" type="button">✓ Gewusst</button>
+        </div>
+        <p class="learn-kbd" id="kbdReveal">Tastatur: <kbd>Leertaste</kbd> oder <kbd>Enter</kbd> aufdecken</p>
+        <p class="learn-kbd hidden" id="kbdRate">
+          Tastatur: <kbd>J</kbd> Gewusst · <kbd>N</kbd> Nicht gewusst
+        </p>
+        <div id="learnMsg" class="hidden" style="margin-top: 12px"></div>
+      </section>
+
+      <!-- Done card (results) -->
+      <section id="doneCard" class="card hidden">
+        <p class="eyebrow">Lerneinheit abgeschlossen</p>
+        <div class="learn-result-box">
+          <div class="learn-result-score" id="resultScore">–</div>
+          <div class="learn-result-sublabel" id="resultLabel"></div>
+          <div class="learn-result-bar"><div class="learn-result-fill" id="resultFill" style="width: 0%"></div></div>
+        </div>
+        <div class="learn-done-actions">
+          <button id="repeatWrongBtn" type="button" class="hidden">Falsche Karten wiederholen</button>
+          <button type="button" onclick="restartAll()">Alle Karten neu starten</button>
+          <a class="button" href="/index.html">Zum Dashboard</a>
+        </div>
+      </section>
+    </main>
+    <script src="/js/api.js"></script>
+    <script>
+      let allCards = []; // alle geladenen Karten (zum Neustart)
+      let queue = []; // aktuelle Lernrunde
+      let current = 0; // Index in queue
+      let correct = 0; // Gewusst-Zähler
+      let revealed = false; // Antwort bereits aufgedeckt?
+      let wrongIds = new Set(); // IDs der falsch beantworteten Karten
+
+      // ---- Karten laden ----
+      async function loadCards() {
+        const params = new URLSearchParams(location.search);
+        const docId = params.get("id");
+        const weakMode = params.get("weak") === "1";
+
+        if (docId) {
+          // Dokument-Modus: alle Fragen eines Fragenpool-Dokuments
+          const data = await api(`/api/documents/${docId}/questions`);
+          allCards = buildCards(data.questions || []);
+        } else if (weakMode) {
+          // Schwache-Fragen-Modus: Stats laden → nach Dokument gruppieren → Fragen holen
+          const stats = await api("/api/stats/overview");
+          const weak = stats.weakQuestions || [];
+          if (!weak.length) {
+            showLoadError(
+              'Keine schwachen Fragen gefunden. Mach mehr Tests, dann erscheinen sie hier automatisch.',
+              '/pages/stats.html',
+              'Zur Statistik',
+            );
+            return;
+          }
+          // Gruppiere weak-Question-IDs nach Dokument
+          const byDoc = {};
+          weak.forEach((wq) => {
+            (byDoc[wq.documentId] = byDoc[wq.documentId] || []).push(wq.questionId);
+          });
+          const weakSet = new Set(weak.map((wq) => wq.questionId));
+          // Lade Fragen parallel, filtere auf schwache IDs
+          const results = await Promise.all(
+            Object.keys(byDoc).map((did) =>
+              api(`/api/documents/${did}/questions`)
+                .then((d) => (d.questions || []).filter((q) => weakSet.has(q.questionId)))
+                .catch(() => []),
+            ),
+          );
+          allCards = buildCards(results.flat());
+        } else {
+          showLoadError('Kein Fragenpool gewählt.', '/pages/documents.html', 'Zu den Dokumenten');
+          return;
+        }
+
+        if (!allCards.length) {
+          showLoadError(
+            'Dieser Fragenpool enthält noch keine Fragen.',
+            '/pages/documents.html',
+            'Zu den Dokumenten',
+          );
+          return;
+        }
+
+        startQueue(shuffle([...allCards]));
+      }
+
+      function showLoadError(message, href, linkLabel) {
+        const card = document.getElementById('loadingCard');
+        card.innerHTML = `<p class="muted">${esc(message)}</p><div class="actions"><a class="button" href="${esc(href)}">${esc(linkLabel)}</a></div>`;
+      }
+
+      // ---- Karten aufbauen (normalisiert aus verschiedenen API-Antworten) ----
+      function buildCards(questions) {
+        return (questions || [])
+          .filter((q) => q.options && q.options.length >= 2)
+          .map((q) => ({
+            id: q.questionId,
+            text: q.questionText,
+            topic: q.topic || 'Allgemein',
+            difficulty: q.difficulty || 'mittel',
+            isAiGenerated: !!q.isAiGenerated,
+            explanation: q.explanation || 'Keine Erklärung hinterlegt.',
+            correctIndex: q.correctOptionIndex ?? 0,
+            options: (q.options || [])
+              .slice()
+              .sort((a, b) => (a.optionIndex ?? 0) - (b.optionIndex ?? 0))
+              .map((o) => o.text),
+            imageDataUrl: q.imageDataUrl || null,
+            imageAltText: q.imageAltText || null,
+            imageFileName: q.imageFileName || null,
+          }));
+      }
+
+      function shuffle(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+      }
+
+      // ---- Lernrunde starten ----
+      function startQueue(cards) {
+        queue = cards;
+        current = 0;
+        correct = 0;
+        wrongIds.clear();
+        document.getElementById('loadingCard').classList.add('hidden');
+        document.getElementById('doneCard').classList.add('hidden');
+        document.getElementById('learnCard').classList.remove('hidden');
+        renderCard();
+      }
+
+      // ---- Karte rendern ----
+      function renderCard() {
+        revealed = false;
+        const card = queue[current];
+        const labels = ['A', 'B', 'C', 'D', 'E'];
+
+        // Fortschritt
+        const progress = ((current + 1) / queue.length) * 100;
+        document.getElementById('bar').style.width = `${progress}%`;
+        document.getElementById('counter').textContent = `${current + 1} / ${queue.length}`;
+
+        // Metadaten
+        document.getElementById('topic').textContent = card.topic;
+        document.getElementById('difficulty').textContent = card.difficulty;
+        document.getElementById('aiBadge').classList.toggle('hidden', !card.isAiGenerated);
+
+        // Fragetext
+        document.getElementById('questionText').textContent = card.text;
+
+        // Bild
+        const img = document.getElementById('questionImage');
+        if (card.imageDataUrl) {
+          img.innerHTML = `<img src="${esc(card.imageDataUrl)}" alt="${esc(card.imageAltText || 'Fragebild')}">${card.imageFileName ? `<figcaption>${esc(card.imageFileName)}</figcaption>` : ''}`;
+          img.classList.remove('hidden');
+        } else {
+          img.innerHTML = '';
+          img.classList.add('hidden');
+        }
+
+        // Antwortoptionen – neutral (noch nicht aufgedeckt)
+        document.getElementById('optionsArea').innerHTML = card.options
+          .map(
+            (text, i) =>
+              `<div class="learn-option" id="opt-${i}"><span class="learn-option-label">${labels[i] || String.fromCharCode(65 + i)}</span><span>${esc(text)}</span></div>`,
+          )
+          .join('');
+
+        // Erklärung ausblenden
+        document.getElementById('explanationArea').classList.add('hidden');
+        document.getElementById('explanationText').textContent = '';
+
+        // Buttons: Aufdecken anzeigen, Bewerten ausblenden
+        document.getElementById('revealActions').classList.remove('hidden');
+        document.getElementById('ratingActions').classList.add('hidden');
+        document.getElementById('kbdReveal').classList.remove('hidden');
+        document.getElementById('kbdRate').classList.add('hidden');
+
+        document.getElementById('revealBtn').focus();
+        enhanceTooltips();
+      }
+
+      // ---- Antwort aufdecken ----
+      function reveal() {
+        if (revealed) return;
+        revealed = true;
+        const card = queue[current];
+
+        // Richtige Antwort grün markieren
+        const correctEl = document.getElementById(`opt-${card.correctIndex}`);
+        if (correctEl) correctEl.classList.add('learn-option--correct');
+
+        // Erklärung zeigen
+        document.getElementById('explanationText').textContent = card.explanation;
+        document.getElementById('explanationArea').classList.remove('hidden');
+
+        // Buttons tauschen
+        document.getElementById('revealActions').classList.add('hidden');
+        document.getElementById('ratingActions').classList.remove('hidden');
+        document.getElementById('kbdReveal').classList.add('hidden');
+        document.getElementById('kbdRate').classList.remove('hidden');
+
+        document.getElementById('rightBtn').focus();
+      }
+
+      // ---- Karte bewerten ----
+      function rate(knew) {
+        if (!revealed) return;
+        const card = queue[current];
+        if (knew) {
+          correct++;
+          wrongIds.delete(card.id);
+        } else {
+          wrongIds.add(card.id);
+        }
+        current++;
+        if (current >= queue.length) {
+          showDone();
+        } else {
+          renderCard();
+        }
+      }
+
+      // ---- Ergebnis-Bildschirm ----
+      function showDone() {
+        document.getElementById('learnCard').classList.add('hidden');
+        const done = document.getElementById('doneCard');
+        done.classList.remove('hidden');
+
+        const total = queue.length;
+        const pct = total ? Math.round((correct / total) * 100) : 0;
+        document.getElementById('resultScore').textContent = `${correct} / ${total}`;
+        document.getElementById('resultLabel').textContent =
+          pct >= 90
+            ? 'Ausgezeichnet! Alles sitzt.'
+            : pct >= 70
+              ? 'Gut! Noch ein paar wiederholen.'
+              : pct >= 50
+                ? 'Solide Grundlage – übe die falsch beantworteten Karten.'
+                : 'Übe die Karten noch einmal, du schaffst das.';
+
+        // Balken mit kurzer Verzögerung für Animation
+        setTimeout(() => {
+          document.getElementById('resultFill').style.width = `${pct}%`;
+        }, 50);
+
+        // "Falsche wiederholen"-Button nur zeigen wenn es falsche gibt
+        const repeatBtn = document.getElementById('repeatWrongBtn');
+        if (wrongIds.size > 0) {
+          repeatBtn.textContent = `Falsche Karten wiederholen (${wrongIds.size})`;
+          repeatBtn.classList.remove('hidden');
+        } else {
+          repeatBtn.classList.add('hidden');
+        }
+      }
+
+      function restartAll() {
+        startQueue(shuffle([...allCards]));
+      }
+
+      // ---- Event-Listener ----
+      document.getElementById('revealBtn').onclick = reveal;
+      document.getElementById('rightBtn').onclick = () => rate(true);
+      document.getElementById('wrongBtn').onclick = () => rate(false);
+      document.getElementById('repeatWrongBtn').onclick = function () {
+        const wrong = allCards.filter((c) => wrongIds.has(c.id));
+        if (!wrong.length) return;
+        startQueue(shuffle(wrong));
+      };
+
+      // Tastaturkürzel
+      document.addEventListener('keydown', (e) => {
+        if (e.target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+        if (!document.getElementById('learnCard').classList.contains('hidden')) {
+          if (!revealed) {
+            if (e.key === ' ' || e.key === 'Enter') {
+              e.preventDefault();
+              reveal();
+            }
+          } else {
+            if (e.key === 'j' || e.key === 'J' || e.key === 'y' || e.key === 'Y' || e.key === 'ArrowRight') {
+              e.preventDefault();
+              rate(true);
+            } else if (e.key === 'n' || e.key === 'N') {
+              e.preventDefault();
+              rate(false);
+            }
+          }
+        }
+      });
+
+      loadCards().catch((err) => {
+        document.getElementById('loadingCard').innerHTML = `<p class="muted">Fehler beim Laden: ${esc(err?.message || 'Unbekannter Fehler')}</p><div class="actions"><a class="button" href="/index.html">Zum Dashboard</a></div>`;
+      });
+    </script>
+  </body>
+</html>

@@ -231,7 +231,7 @@
       <div class="field-row"><div><label>Fragen generieren</label><select id="count-${d.id}">${questionCountOptions(generateDefault)}</select></div></div>`
             : "";
         const primaryActions = isTest
-          ? `<a class="button" href="/pages/questions.html?id=${d.id}">Fragen ansehen</a><button type="button" class="primary" onclick="startTest(${d.id})">Test starten</button><button type="button" onclick="exportTxt(${d.id})">Export .txt</button>`
+          ? `<a class="button" href="/pages/questions.html?id=${d.id}">Fragen ansehen</a><a class="button" href="/pages/learn.html?id=${d.id}">Lernen</a><button type="button" class="primary" onclick="startTest(${d.id})">Test starten</button><button type="button" onclick="exportTxt(${d.id})">Export .txt</button>`
           : `${!pageRestrictedMode && d.canGenerateQuestions ? `<button class="primary" type="button" onclick="openAiGenerationModal(${d.id})">Test mit KI generieren</button>` : ""}`;
         const previewAction = `<button type="button" onclick="openDocumentPreview(${d.id})">${isTest ? "Inhalt ansehen" : "Dokument ansehen"}</button>`;
         const managementActions = pageRestrictedMode
