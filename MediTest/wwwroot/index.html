@@ -121,9 +121,87 @@
       gap: 20px;
       align-items: start;
     }
+    /* Streak & Lernziel */
+    .streak-bar {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .streak-block {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .streak-flame {
+      font-size: 36px;
+      line-height: 1;
+    }
+    .streak-count {
+      font-size: 36px;
+      font-weight: 900;
+      color: var(--primary-dark);
+      line-height: 1;
+    }
+    .streak-label {
+      font-size: 13px;
+      color: var(--muted, #6b7280);
+      margin-top: 2px;
+    }
+    .goal-block {
+      flex: 1;
+      min-width: 180px;
+    }
+    .goal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .goal-progress-track {
+      height: 10px;
+      border-radius: 99px;
+      background: var(--border);
+      overflow: hidden;
+    }
+    .goal-progress-fill {
+      height: 100%;
+      border-radius: 99px;
+      background: linear-gradient(90deg, var(--accent), var(--primary-dark));
+      transition: width .4s ease;
+      min-width: 4px;
+    }
+    .goal-edit-btn {
+      background: none;
+      border: none;
+      color: var(--accent);
+      font-size: 12px;
+      cursor: pointer;
+      padding: 0;
+      font-weight: 600;
+    }
+    .goal-edit-btn:hover { text-decoration: underline; }
+    .goal-edit-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .goal-edit-row input[type=number] {
+      width: 72px;
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 14px;
+    }
     @media(max-width: 700px) {
       .two-col { grid-template-columns: 1fr; }
       .resume-banner { flex-direction: column; align-items: flex-start; }
+      .streak-bar { flex-direction: column; align-items: flex-start; gap: 16px; }
+      .goal-block { width: 100%; }
     }
   </style>
 </head>
@@ -153,6 +231,31 @@
       <span class="muted" id="resumeTestMeta"></span>
     </div>
     <a id="resumeTestLink" class="button primary" href="#">▶ Weitermachen</a>
+  </div>
+
+  <!-- Streak & Lernziel -->
+  <div class="card streak-bar" id="streakCard" style="display:none">
+    <div class="streak-block">
+      <span class="streak-flame" id="streakFlame">🔥</span>
+      <div>
+        <div class="streak-count" id="streakCount">0</div>
+        <div class="streak-label">Tage am Stück</div>
+      </div>
+    </div>
+    <div class="goal-block">
+      <div class="goal-header">
+        <span>Heute: <span id="todayCount">0</span> / <span id="goalCount">20</span> Fragen</span>
+        <button class="goal-edit-btn" onclick="toggleGoalEdit()">Ziel ändern</button>
+      </div>
+      <div class="goal-progress-track">
+        <div class="goal-progress-fill" id="goalFill" style="width:0%"></div>
+      </div>
+      <div class="goal-edit-row hidden" id="goalEditRow">
+        <input type="number" id="goalInput" min="1" max="500" value="20">
+        <button class="button" onclick="saveGoal()">Speichern</button>
+        <button class="button" onclick="toggleGoalEdit()">Abbrechen</button>
+      </div>
+    </div>
   </div>
 
   <!-- Statistik-Kacheln -->
@@ -245,11 +348,63 @@ function passColor(passed) {
   return passed ? 'color:var(--ok)' : 'color:var(--danger)';
 }
 
+let currentDailyGoal = 20;
+
+function toggleGoalEdit() {
+  const row = document.getElementById('goalEditRow');
+  row.classList.toggle('hidden');
+  if (!row.classList.contains('hidden')) {
+    document.getElementById('goalInput').value = currentDailyGoal;
+    document.getElementById('goalInput').focus();
+  }
+}
+
+async function saveGoal() {
+  const val = parseInt(document.getElementById('goalInput').value, 10);
+  if (isNaN(val) || val < 1 || val > 500) return;
+  try {
+    // Settings laden, DailyGoalQuestions updaten
+    const settings = await api('/api/settings');
+    await api('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...settings, dailyGoalQuestions: val, openAiApiKey: null, clearOpenAiApiKey: false })
+    });
+    currentDailyGoal = val;
+    document.getElementById('goalCount').textContent = val;
+    document.getElementById('goalInput').value = val;
+    updateGoalBar(parseInt(document.getElementById('todayCount').textContent, 10) || 0, val);
+    document.getElementById('goalEditRow').classList.add('hidden');
+  } catch (e) {
+    alert('Fehler beim Speichern: ' + e.message);
+  }
+}
+
+function updateGoalBar(today, goal) {
+  const pct = Math.min(100, Math.round((today / Math.max(1, goal)) * 100));
+  document.getElementById('goalFill').style.width = pct + '%';
+}
+
 async function loadDashboard() {
-  const [tests, stats] = await Promise.all([
+  const [tests, stats, dashStats] = await Promise.all([
     api('/api/tests'),
-    api('/api/stats/overview').catch(() => null)
+    api('/api/stats/overview').catch(() => null),
+    api('/api/dashboard/stats').catch(() => null)
   ]);
+
+  // ── Streak & Lernziel ─────────────────────────────────────────
+  if (dashStats) {
+    currentDailyGoal = dashStats.dailyGoal || 20;
+    const streak = dashStats.streak || 0;
+    const today = dashStats.todayAnswered || 0;
+    document.getElementById('streakCount').textContent = streak;
+    document.getElementById('streakFlame').textContent = streak > 0 ? '🔥' : '❄️';
+    document.getElementById('todayCount').textContent = today;
+    document.getElementById('goalCount').textContent = currentDailyGoal;
+    document.getElementById('goalInput').value = currentDailyGoal;
+    updateGoalBar(today, currentDailyGoal);
+    document.getElementById('streakCard').style.display = '';
+  }
 
   // ── Offener Test ──────────────────────────────────────────────
   const openTest = tests.find(t => !t.submittedAt);

@@ -112,6 +112,7 @@ public sealed record UpdateQuestionRequest(
     bool ClearImage = false);
 public sealed record StartTestRequest(int DocumentId, int QuestionCount = 25, string? TestName = null);
 public sealed record StartWeakTestRequest(List<int> QuestionIds, string? TestName = null);
+public sealed record DashboardStatsDto(int Streak, int TodayAnswered, int DailyGoal);
 public sealed record RenameTestRequest(string? TestName);
 public sealed record SubmitTestRequest(List<SubmitAnswerDto> Answers);
 public sealed record SubmitAnswerDto(int QuestionId, int? SelectedAnswerOptionId);
@@ -351,7 +352,8 @@ public sealed record ProgramSettingsDto(
     DateTime? TrialFeedbackPromptedAt,
     DateTime? TrialFeedbackNextPromptAt,
     DateTime? TrialFeedbackSubmittedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    int DailyGoalQuestions);
 
 public sealed record UpdateProgramSettingsRequest(
     string? DisplayName,
@@ -363,6 +365,7 @@ public sealed record UpdateProgramSettingsRequest(
     string? Theme,
     int DefaultGenerateQuestionCount,
     int DefaultTestQuestionCount,
+    int DailyGoalQuestions,
     string? OpenAiApiKey,
     bool ClearOpenAiApiKey,
     string? OpenAiModel,

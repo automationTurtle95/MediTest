@@ -725,6 +725,40 @@ public sealed class FirestoreUserDataStore
         return session;
     }
 
+    public async Task<DashboardStatsDto> GetDashboardStatsAsync(CancellationToken ct)
+    {
+        var allTests = await ListTestsInternalAsync(ct);
+        var settings = await GetSettingsAsync(ct);
+        var dailyGoal = settings.DailyGoalQuestions;
+
+        var todayUtc = DateTime.UtcNow.Date;
+
+        // Fragen die heute in abgeschlossenen Tests beantwortet wurden
+        var todayAnswered = allTests
+            .Where(t => t.SubmittedAt.HasValue && t.SubmittedAt.Value.ToUniversalTime().Date == todayUtc)
+            .Sum(t => t.QuestionCount);
+
+        // Streak: wie viele aufeinanderfolgende Tage (einschließlich heute) mindestens ein Test abgeschlossen wurde
+        var completedDates = allTests
+            .Where(t => t.SubmittedAt.HasValue)
+            .Select(t => t.SubmittedAt!.Value.ToUniversalTime().Date)
+            .Distinct()
+            .ToHashSet();
+
+        int streak = 0;
+        // Heute zählt nur mit wenn wirklich ein Test heute abgeschlossen wurde
+        // Wenn heute noch kein Test - Streak von gestern rückwärts zählen (Streak bleibt erhalten solange heute noch Zeit ist)
+        var checkDay = completedDates.Contains(todayUtc) ? todayUtc : todayUtc.AddDays(-1);
+
+        while (completedDates.Contains(checkDay))
+        {
+            streak++;
+            checkDay = checkDay.AddDays(-1);
+        }
+
+        return new DashboardStatsDto(streak, todayAnswered, dailyGoal);
+    }
+
     private async Task<List<TestSession>> ListTestsInternalAsync(CancellationToken ct)
     {
         return (await ListDocElementsAsync($"{UserRoot()}/testSessions", ct)).Select(DeserializeTest).ToList();

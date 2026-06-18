@@ -12,6 +12,7 @@ public sealed class ProgramSettings
     public string Theme { get; set; } = "system";
     public int DefaultGenerateQuestionCount { get; set; } = 25;
     public int DefaultTestQuestionCount { get; set; } = 25;
+    public int DailyGoalQuestions { get; set; } = 20;
     public string OpenAiApiKey { get; set; } = string.Empty;
     public string OpenAiModel { get; set; } = "gemini-2.5-flash";
     public string AiProvider { get; set; } = "firebase";

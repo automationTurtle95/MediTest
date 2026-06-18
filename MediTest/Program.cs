@@ -224,7 +224,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     var url = app.Urls.FirstOrDefault(u => u.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase))
         ?? app.Urls.FirstOrDefault()
         ?? "http://127.0.0.1:55000";
-    managedBrowserProcess = OpenBrowser(url.TrimEnd('/') + "/index.html?v=5011");
+    managedBrowserProcess = OpenBrowser(url.TrimEnd('/') + "/index.html?v=5012");
 });
 
 app.Lifetime.ApplicationStopping.Register(() =>
@@ -794,6 +794,7 @@ app.MapPut("/api/settings", async (UpdateProgramSettingsRequest req, FirestoreUs
     settings.Theme = NormalizeTheme(req.Theme);
     settings.DefaultGenerateQuestionCount = NormalizeQuestionCount(req.DefaultGenerateQuestionCount, 25);
     settings.DefaultTestQuestionCount = NormalizeQuestionCount(req.DefaultTestQuestionCount, 25);
+    settings.DailyGoalQuestions = Math.Clamp(req.DailyGoalQuestions, 1, 500);
     ApplyFixedAiSettings(settings);
     if (UserOnboardingPolicy.IsProfileComplete(settings))
         settings.ProfileCompletedAt ??= DateTime.UtcNow;
@@ -2067,6 +2068,11 @@ app.MapGet("/api/stats/overview", async (int? testSessionId, FirestoreUserDataSt
     return Results.Ok(await store.BuildStatsAsync(testSessionId, ct));
 });
 
+app.MapGet("/api/dashboard/stats", async (FirestoreUserDataStore store, CancellationToken ct) =>
+{
+    return Results.Ok(await store.GetDashboardStatsAsync(ct));
+});
+
 app.MapPost("/api/tests/start", async (StartTestRequest req, FirestoreUserDataStore store, CancellationToken ct) =>
 {
     try
@@ -2195,7 +2201,8 @@ static ProgramSettingsDto ToProgramSettingsDto(ProgramSettings settings)
         settings.TrialFeedbackPromptedAt,
         settings.TrialFeedbackNextPromptAt,
         settings.TrialFeedbackSubmittedAt,
-        settings.UpdatedAt);
+        settings.UpdatedAt,
+        settings.DailyGoalQuestions);
 }
 
 static LicenseStatusDto ToLicenseStatusDto(UserLicenseState state, HttpContext context, IConfiguration cfg)
