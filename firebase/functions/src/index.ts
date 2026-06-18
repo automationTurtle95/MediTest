@@ -80,15 +80,15 @@ const billingWebsiteBaseUrl = defineString("BILLING_WEBSITE_BASE_URL", {
 });
 const stripeCustomersCollection = defineString("STRIPE_CUSTOMERS_COLLECTION", { default: "customers" });
 const stripePortalConfigurationId = defineString("STRIPE_PORTAL_CONFIGURATION_ID", { default: "not-configured" });
-const currentAppVersion = defineString("CURRENT_APP_VERSION", { default: "5.0.14" });
+const currentAppVersion = defineString("CURRENT_APP_VERSION", { default: "5.0.15" });
 const windowsDownloadUrl = defineString("WINDOWS_DOWNLOAD_URL", {
-  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.14/MediTest-Setup-5.0.14-win-x64.msi"
+  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.15/MediTest-Setup-5.0.15-win-x64.msi"
 });
 const macosArm64DownloadUrl = defineString("MACOS_ARM64_DOWNLOAD_URL", {
-  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.14/MediTest-Setup-5.0.14-macos-arm64.dmg"
+  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.15/MediTest-Setup-5.0.15-macos-arm64.dmg"
 });
 const macosX64DownloadUrl = defineString("MACOS_X64_DOWNLOAD_URL", {
-  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.14/MediTest-Setup-5.0.14-macos-x64.dmg"
+  default: "https://github.com/automationTurtle95/MediTest/releases/download/v5.0.15/MediTest-Setup-5.0.15-macos-x64.dmg"
 });
 const db = getFirestore();
 const legacyExpiredTrialDate = "1970-01-01T00:00:00.000Z";
