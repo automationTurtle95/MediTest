@@ -27,6 +27,11 @@
           <button type="button" onclick="loadStats()">Aktualisieren</button>
           <button class="danger" type="button" onclick="resetTests()">Tests &amp; Statistik zurücksetzen</button>
         </div>
+        <div class="actions" style="margin-top: 8px">
+          <button type="button" onclick="exportCsv('tests')">⬇ Testverlauf (CSV)</button>
+          <button type="button" onclick="exportCsv('topics')">⬇ Themenanalyse (CSV)</button>
+          <button type="button" onclick="exportCsv('weak-questions')">⬇ Schwache Fragen (CSV)</button>
+        </div>
         <div id="msg" class="hidden"></div>
       </section>
 
@@ -298,6 +303,14 @@
           status(msg, `Zurückgesetzt: ${r.testsDeleted} Tests gelöscht.`, "status success");
           await loadTests();
           await loadStats();
+        } catch (e) {
+          status(msg, e.message, "status error");
+        }
+      }
+      async function exportCsv(type) {
+        const msg = document.getElementById("msg");
+        try {
+          await downloadApiFile(`/api/stats/export/${type}`, `Meduvalo-${type}.csv`);
         } catch (e) {
           status(msg, e.message, "status error");
         }
