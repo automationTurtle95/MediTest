@@ -13,7 +13,7 @@
       <h1>Meduvalo</h1>
       <p>Prüfungsnah lernen. Sicherer bestehen.</p>
     </div>
-    <div class="auth-version">Version 5.0.8</div>
+    <div class="auth-version" id="appVersion"></div>
   </section>
   <section class="auth-main">
     <div class="card auth-panel">
@@ -207,6 +207,10 @@ form.addEventListener('submit',async e=>{
 });
 currentAuthUser(false).then(user=>{if(user) location.href=safeReturnUrl();}).catch(()=>{});
 loadConfig();
+fetch('/api/app/info').then(r=>r.json()).then(d=>{
+  const el=document.getElementById('appVersion');
+  if(el) el.textContent='Version '+d.version;
+}).catch(()=>{});
 if(qs('verificationRequired')==='1'){
   resendVerificationBtn.classList.remove('hidden');
   status(msg,'Bitte bestätige zuerst deine E-Mail-Adresse.','status error');

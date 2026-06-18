@@ -762,6 +762,15 @@ app.MapGet("/api/auth/me", async (HttpContext context, IConfiguration cfg, Fires
     return Results.Ok(new AuthResponse(user));
 });
 
+app.MapGet("/api/app/info", (IConfiguration cfg) =>
+{
+    return Results.Ok(new
+    {
+        version = AppVersion(),
+        productName = cfg["Product:ProductName"] ?? "Meduvalo"
+    });
+});
+
 app.MapPost("/api/auth/logout", () =>
 {
     return Results.Ok(new { loggedOut = true });
