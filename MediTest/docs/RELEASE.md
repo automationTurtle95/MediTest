@@ -6,10 +6,10 @@ GitHub Releases und bereits veröffentlichte Installationen kompatibel.
 
 ## Ziel
 
-Version 5.0.9 wird als Windows-MSI, Windows-Portable-ZIP und zwei signierte, von Apple notarisierte macOS-DMGs veröffentlicht.
+Version 5.0.10 wird als Windows-MSI, Windows-Portable-ZIP und zwei signierte, von Apple notarisierte macOS-DMGs veröffentlicht.
 
 ```text
-dist/MediTest-5.0.9/
+dist/MediTest-5.0.10/
 ```
 
 Lokale Datenbanken, API-Keys, Secrets, Debug-Symbole und temporäre Build-Dateien dürfen nicht in Release-Artefakte gelangen.
@@ -35,10 +35,10 @@ Das Skript:
 Der Workflow `.github/workflows/release.yml` baut:
 
 ```text
-MediTest-Setup-5.0.9-win-x64.msi
-MediTest-5.0.9-win-x64-portable.zip
-MediTest-Setup-5.0.9-macos-arm64.dmg
-MediTest-Setup-5.0.9-macos-x64.dmg
+MediTest-Setup-5.0.10-win-x64.msi
+MediTest-5.0.10-win-x64-portable.zip
+MediTest-Setup-5.0.10-macos-arm64.dmg
+MediTest-Setup-5.0.10-macos-x64.dmg
 latest.json
 SHA256SUMS.txt
 ```
@@ -70,8 +70,8 @@ Vor dem Tag:
 Danach:
 
 ```powershell
-git tag v5.0.9
-git push origin v5.0.9
+git tag v5.0.10
+git push origin v5.0.10
 ```
 
 Der Workflow prüft, dass Tag und Projektversion übereinstimmen, und erstellt erst nach erfolgreichen Windows- und macOS-Jobs den GitHub Release.
@@ -103,7 +103,7 @@ Die App liest standardmäßig den neuesten GitHub Release:
 ## Kontrolle
 
 ```powershell
-Get-ChildItem .\dist\MediTest-5.0.9 -Recurse -File |
+Get-ChildItem .\dist\MediTest-5.0.10 -Recurse -File |
   Where-Object { $_.Name -match '\.pdb$|OPENAI_API_KEY|meditest\.db|start-name\.json' }
 ```
 
