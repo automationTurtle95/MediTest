@@ -67,7 +67,7 @@ const billingCatalogQuestionPriceCents = defineInt("BILLING_CATALOG_QUESTION_PRI
 const billingCatalogPriceEndingCents = defineInt("BILLING_CATALOG_PRICE_ENDING_CENTS", { default: 9 });
 const billingCurrency = defineString("BILLING_CURRENCY", { default: "EUR" });
 const installationAuthorizationTtlHours = defineInt("INSTALLATION_AUTHORIZATION_TTL_HOURS", { default: 24 });
-const licensingDefaultMaxDevices = defineInt("LICENSING_DEFAULT_MAX_DEVICES", { default: 2 });
+const licensingDefaultMaxDevices = defineInt("LICENSING_DEFAULT_MAX_DEVICES", { default: 3 });
 const supportMaxDailyRequests = defineInt("SUPPORT_MAX_DAILY_REQUESTS", { default: 5 });
 const supportRecipientEmail = defineString("SUPPORT_RECIPIENT_EMAIL", { default: BRAND.supportEmail });
 const supportFromEmail = defineString("SUPPORT_FROM_EMAIL", { default: "Meduvalo Support <support@meduvalo.at>" });
@@ -1734,7 +1734,7 @@ async function activateLicensedDevice(
   }
   const licenseSnapshot = await db.doc(`licenses/${userId}`).get();
   const license = licenseSnapshot.data() ?? {};
-  const maxDevices = boundedInt(license.maxDevices, 2, 1, 20);
+  const maxDevices = boundedInt(license.maxDevices, 3, 1, 20);
   const currentDeviceCount = boundedInt(license.currentDeviceCount, 0, 0, maxDevices);
   if (currentDeviceCount >= maxDevices)
     throw new Error("device_limit_reached");
@@ -1793,7 +1793,7 @@ async function consumeInstallationAuthorization(
     const status = stringValue(license.licenseStatus).toLowerCase();
     if (status !== "active" && status !== "trial" && status !== "restricted")
       throw new Error("license_not_active");
-    const maxDevices = boundedInt(license.maxDevices, 2, 1, 20);
+    const maxDevices = boundedInt(license.maxDevices, 3, 1, 20);
     const currentDeviceCount = boundedInt(license.currentDeviceCount, 0, 0, maxDevices);
     if (!deviceSnapshot.exists && currentDeviceCount >= maxDevices)
       throw new Error("device_limit_reached");
@@ -1848,7 +1848,7 @@ async function activateDevice(
     if (status !== "active" && status !== "trial" && status !== "restricted")
       throw new Error("license_not_active");
 
-    const maxDevices = boundedInt(license.maxDevices, 2, 1, 20);
+    const maxDevices = boundedInt(license.maxDevices, 3, 1, 20);
     const currentDeviceCount = boundedInt(license.currentDeviceCount, 0, 0, maxDevices);
     if (!deviceSnapshot.exists && currentDeviceCount >= maxDevices)
       throw new Error("device_limit_reached");
