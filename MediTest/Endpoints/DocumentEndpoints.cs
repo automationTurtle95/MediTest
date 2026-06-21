@@ -39,7 +39,7 @@ internal static class DocumentEndpoints
             {
                 return Results.BadRequest(new
                 {
-                    error = $"„{Path.GetFileName(file.FileName)}" konnte nicht gelesen werden. Prüfe, ob die Datei lokal verfügbar, unbeschädigt und nicht passwortgeschützt ist."
+                    error = $"„{Path.GetFileName(file.FileName)}“ konnte nicht gelesen werden. Prüfe, ob die Datei lokal verfügbar, unbeschädigt und nicht passwortgeschützt ist."
                 });
             }
             if (string.IsNullOrWhiteSpace(text)) return Results.BadRequest(new { error = "Aus der Datei konnte kein Text extrahiert werden." });
