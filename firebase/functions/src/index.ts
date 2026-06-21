@@ -730,7 +730,11 @@ export const meditestLicenseAccess = onRequest(
               deviceName,
               appVersion);
           } catch (error) {
-            if (!(error instanceof Error) || error.message !== "device_limit_reached") throw error;
+            // Beim automatischen Check-Aktivierungsversuch sind diese Fehler erwartet und werden still ignoriert:
+            // device_limit_reached: Gerät-Limit erreicht (wird unten korrekt im Response abgebildet)
+            // installation_authorization_missing: kein Installer-Token vorhanden (Nutzer muss explizit activateDevice aufrufen)
+            const silentErrors = ["device_limit_reached", "installation_authorization_missing", "installation_authorization_invalid"];
+            if (!(error instanceof Error) || !silentErrors.includes(error.message)) throw error;
           }
         } else if (
           currentDevice.exists
