@@ -75,6 +75,19 @@ public sealed class LicenseAccessService
         return snapshot;
     }
 
+    public async Task<DeviceListResponse> GetDevicesAsync(CancellationToken ct)
+    {
+        var identity = await _deviceIdentityService.GetAsync(ct);
+        return await SendGenericAsync<DeviceListResponse>("listDevices", identity, null, ct);
+    }
+
+    public async Task RemoveDeviceAsync(string targetDeviceId, CancellationToken ct)
+    {
+        var identity = await _deviceIdentityService.GetAsync(ct);
+        await SendGenericAsync<object>("removeDevice", identity, new { targetDeviceId }, ct);
+        _memoryCache.Remove(MemoryCacheKey(identity.DeviceId));
+    }
+
     public async Task<LicenseAccessSnapshot> AcceptTermsAsync(AcceptTermsRequest request, CancellationToken ct)
     {
         if (!request.AcceptTerms || !request.AcceptPrivacy)
@@ -95,6 +108,28 @@ public sealed class LicenseAccessService
         DeviceIdentity identity,
         object? extra,
         CancellationToken ct)
+    {
+        var raw = await SendRawAsync(action, identity, extra, ct);
+        var snapshot = JsonSerializer.Deserialize<LicenseAccessSnapshot>(raw, JsonOptions);
+        if (snapshot == null)
+            throw new JsonException("Der Lizenzdienst hat ungültige Daten geliefert.");
+        var installationAuthorization = await _installationAuthorizationService.FindAsync(identity.Platform, ct);
+        if (installationAuthorization != null &&
+            string.Equals(snapshot.Device?.DeviceId, identity.DeviceId, StringComparison.Ordinal))
+        {
+            _installationAuthorizationService.Delete(installationAuthorization);
+        }
+        return snapshot;
+    }
+
+    private async Task<T> SendGenericAsync<T>(string action, DeviceIdentity identity, object? extra, CancellationToken ct)
+    {
+        var raw = await SendRawAsync(action, identity, extra, ct);
+        return JsonSerializer.Deserialize<T>(raw, JsonOptions)
+            ?? throw new JsonException("Der Lizenzdienst hat ungültige Daten geliefert.");
+    }
+
+    private async Task<string> SendRawAsync(string action, DeviceIdentity identity, object? extra, CancellationToken ct)
     {
         var token = BearerToken();
         if (string.IsNullOrWhiteSpace(token))
@@ -129,16 +164,7 @@ public sealed class LicenseAccessService
                 throw new HttpRequestException(message, null, response.StatusCode);
             throw new InvalidOperationException(message);
         }
-
-        var snapshot = JsonSerializer.Deserialize<LicenseAccessSnapshot>(raw, JsonOptions);
-        if (snapshot == null)
-            throw new JsonException("Der Lizenzdienst hat ungültige Daten geliefert.");
-        if (installationAuthorization != null &&
-            string.Equals(snapshot.Device?.DeviceId, identity.DeviceId, StringComparison.Ordinal))
-        {
-            _installationAuthorizationService.Delete(installationAuthorization);
-        }
-        return snapshot;
+        return raw;
     }
 
     private async Task<LicenseAccessSnapshot> OfflineSnapshotAsync(DeviceIdentity identity, CancellationToken ct)

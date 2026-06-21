@@ -744,6 +744,49 @@ export const meditestLicenseAccess = onRequest(
             appVersion
           }, { merge: true });
         }
+      } else if (action === "listDevices") {
+        const devicesSnap = await db.collection(`deviceActivations/${user.uid}/devices`).get();
+        const devices = devicesSnap.docs.map(doc => {
+          const d = doc.data();
+          return {
+            deviceId: stringValue(d.deviceId),
+            deviceName: stringValue(d.deviceName) || "Unbenanntes Gerät",
+            appVersion: stringValue(d.appVersion),
+            firstActivatedAt: d.firstActivatedAt instanceof Timestamp ? d.firstActivatedAt.toDate().toISOString() : null,
+            lastUsedAt: d.lastUsedAt instanceof Timestamp ? d.lastUsedAt.toDate().toISOString() : null,
+            isCurrent: stringValue(d.deviceId).toLowerCase() === deviceId
+          };
+        });
+        res.status(200).json({ devices });
+        return;
+      } else if (action === "removeDevice") {
+        const targetDeviceId = stringValue(req.body?.targetDeviceId).toLowerCase();
+        if (!/^[a-f0-9]{64}$/.test(targetDeviceId)) {
+          res.status(400).json({ error: { message: "Die Ziel-Geräte-ID ist ungültig." } });
+          return;
+        }
+        if (targetDeviceId === deviceId) {
+          res.status(400).json({ error: { message: "Das eigene Gerät kann nicht entfernt werden." } });
+          return;
+        }
+        const targetDeviceRef = db.doc(`deviceActivations/${user.uid}/devices/${targetDeviceId}`);
+        const licenseRef2 = db.doc(`licenses/${user.uid}`);
+        await db.runTransaction(async (transaction) => {
+          const [deviceToRemove, licSnap] = await Promise.all([
+            transaction.get(targetDeviceRef),
+            transaction.get(licenseRef2)
+          ]);
+          if (!deviceToRemove.exists) throw new Error("Gerät nicht gefunden.");
+          const lic = licSnap.data() ?? {};
+          const currentCount = boundedInt(lic.currentDeviceCount, 0, 0, 20);
+          transaction.delete(targetDeviceRef);
+          transaction.set(licenseRef2, {
+            currentDeviceCount: Math.max(0, currentCount - 1),
+            updatedAt: Timestamp.now()
+          }, { merge: true });
+        });
+        res.status(200).json({ success: true });
+        return;
       } else {
         res.status(400).json({ error: { message: "Unbekannte Lizenzaktion." } });
         return;

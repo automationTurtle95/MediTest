@@ -940,6 +940,19 @@ app.MapPost("/api/legal-license/terms", async (AcceptTermsRequest req, LicenseAc
     return Results.Ok(await licenseAccess.AcceptTermsAsync(req, ct));
 });
 
+app.MapGet("/api/legal-license/devices", async (LicenseAccessService licenseAccess, CancellationToken ct) =>
+{
+    return Results.Ok(await licenseAccess.GetDevicesAsync(ct));
+});
+
+app.MapPost("/api/legal-license/device/remove", async (RemoveDeviceRequest req, LicenseAccessService licenseAccess, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(req.DeviceId))
+        return Results.BadRequest(new { error = "Geräte-ID fehlt." });
+    await licenseAccess.RemoveDeviceAsync(req.DeviceId, ct);
+    return Results.Ok(new { success = true });
+});
+
 app.MapPost("/api/license/redeem-premium-code", async (RedeemPremiumCodeRequest req, HttpContext context, IConfiguration cfg, FirestoreUserDataStore store, IHttpClientFactory httpClientFactory, CancellationToken ct) =>
 {
     var normalizedCode = NormalizePremiumCode(req.Code);

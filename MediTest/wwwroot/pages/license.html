@@ -8,11 +8,16 @@
   </head>
   <body>
     <header class="topbar">
-      <a class="brand" href="/index.html">Meduvalo</a>
+      <a class="brand" href="/index.html">
+        <span class="brand-mark"><img src="/assets/meduvalo-logo.svg" alt="" /></span>
+        Meduvalo
+      </a>
       <nav>
-        <a href="/index.html">Start</a><a href="/pages/documents.html">Dokumente</a
-        ><a href="/pages/manual.html">Manuell</a><a href="/pages/tests.html">Tests</a
-        ><a href="/pages/stats.html">Statistik</a>
+        <a href="/index.html">Start</a>
+        <a href="/pages/documents.html">Dokumente</a>
+        <a href="/pages/learn.html">Lernen</a>
+        <a href="/pages/tests.html">Tests</a>
+        <a href="/pages/stats.html">Statistik</a>
       </nav>
     </header>
     <main>
@@ -73,7 +78,7 @@
     <article class="card doc-card">
       <span class="badge">${esc(result.status || "unbekannt")}</span>
       <h2>Deine Lizenz &amp; Geräte</h2>
-      <p class="muted">Ein gekaufter Zugang kann auf bis zu ${Number(license.maxDevices) || 2} Geräten aktiviert werden.</p>
+      <p class="muted">Ein gekaufter Zugang kann auf bis zu ${Number(license.maxDevices) || 3} Geräten aktiviert werden.</p>
       <dl class="legal-details">
         <div><dt>Nutzer</dt><dd>${esc(valueOr(user.displayName, user.email || "-"))}</dd></div>
         <div><dt>E-Mail</dt><dd>${esc(valueOr(user.email, "-"))}</dd></div>
@@ -88,6 +93,10 @@
         <button class="primary" type="button" onclick="checkLicense()">Lizenz prüfen</button>
         <button type="button" onclick="activateDevice()" ${result.deviceActivated || !result.canActivateDevice ? "disabled" : ""}>${result.deviceActivated ? "Gerät aktiviert" : "Gerät aktivieren"}</button>
         <button type="button" onclick="logoutApp()">Abmelden</button>
+      </div>
+      <div id="deviceListSection" style="margin-top:20px">
+        <h3 style="font-size:15px;margin:0 0 10px">Aktivierte Geräte</h3>
+        <div id="deviceListContent"><p class="muted" style="font-size:13px">Lade Geräteliste...</p></div>
       </div>
     </article>
     <details class="card legal-info-panel">
@@ -304,9 +313,53 @@
         }
       }
 
+      async function loadDeviceList() {
+        const box = document.getElementById("deviceListContent");
+        if (!box) return;
+        try {
+          const data = await api("/api/legal-license/devices");
+          const devices = data.devices || [];
+          if (!devices.length) {
+            box.innerHTML = '<p class="muted" style="font-size:13px">Keine Geräte gefunden.</p>';
+            return;
+          }
+          box.innerHTML = devices.map(d => {
+            const lastUsed = d.lastUsedAt ? new Date(d.lastUsedAt).toLocaleDateString("de-AT") : "-";
+            const isCurrent = d.isCurrent;
+            return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
+              <div style="min-width:0">
+                <div style="font-weight:700;font-size:14px">${esc(d.deviceName)}${isCurrent ? ' <span class="badge" style="font-size:11px;margin-left:4px">Dieses Gerät</span>' : ""}</div>
+                <div class="muted" style="font-size:12px">v${esc(d.appVersion)} · Zuletzt: ${lastUsed}</div>
+              </div>
+              ${isCurrent ? "" : `<button type="button" style="flex-shrink:0;font-size:13px;padding:6px 14px;color:var(--danger);border-color:var(--danger)" onclick="removeDevice('${esc(d.deviceId)}', '${esc(d.deviceName)}')">Entfernen</button>`}
+            </div>`;
+          }).join("") + '<div style="border-bottom:none"></div>';
+        } catch (e) {
+          box.innerHTML = `<p class="muted" style="font-size:13px">Geräteliste konnte nicht geladen werden.</p>`;
+        }
+      }
+
+      async function removeDevice(deviceId, deviceName) {
+        if (!confirm(`Gerät „${deviceName}" aus der Lizenz entfernen?\n\nDas Gerät kann jederzeit wieder aktiviert werden.`)) return;
+        const msg = document.getElementById("msg");
+        status(msg, "Entferne Gerät...");
+        try {
+          await api("/api/legal-license/device/remove", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ deviceId })
+          });
+          status(msg, "Gerät wurde entfernt.", "status success");
+          await Promise.all([loadLicense(), loadDeviceList()]);
+        } catch (e) {
+          status(msg, e.message, "status error");
+        }
+      }
+
       async function initLicense() {
         const checkout = new URLSearchParams(location.search).get("checkout");
         await loadLicense();
+        loadDeviceList();
         if (checkout === "success") {
           status(
             document.getElementById("msg"),

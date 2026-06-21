@@ -110,7 +110,23 @@ public sealed class LicenseAccessSnapshot
     public DateTime? LastSuccessfulOnlineCheck { get; set; }
 }
 
+public sealed class DeviceInfo
+{
+    public string DeviceId { get; set; } = string.Empty;
+    public string DeviceName { get; set; } = string.Empty;
+    public string AppVersion { get; set; } = string.Empty;
+    public DateTime? FirstActivatedAt { get; set; }
+    public DateTime? LastUsedAt { get; set; }
+    public bool IsCurrent { get; set; }
+}
+
+public sealed class DeviceListResponse
+{
+    public List<DeviceInfo> Devices { get; set; } = [];
+}
+
 public sealed record AcceptTermsRequest(bool AcceptTerms, bool AcceptPrivacy);
+public sealed record RemoveDeviceRequest(string DeviceId);
 
 public sealed record LegalLicenseStatusDto(
     AppLegalInfo Legal,
