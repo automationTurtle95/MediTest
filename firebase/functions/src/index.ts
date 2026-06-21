@@ -1738,7 +1738,7 @@ async function activateLicensedDevice(
   }
   const licenseSnapshot = await db.doc(`licenses/${userId}`).get();
   const license = licenseSnapshot.data() ?? {};
-  const maxDevices = boundedInt(license.maxDevices, 3, 1, 20);
+  const maxDevices = boundedInt(license.maxDevices, 3, 3, 20);
   const currentDeviceCount = boundedInt(license.currentDeviceCount, 0, 0, maxDevices);
   if (currentDeviceCount >= maxDevices)
     throw new Error("device_limit_reached");
@@ -1797,7 +1797,7 @@ async function consumeInstallationAuthorization(
     const status = stringValue(license.licenseStatus).toLowerCase();
     if (status !== "active" && status !== "trial" && status !== "restricted")
       throw new Error("license_not_active");
-    const maxDevices = boundedInt(license.maxDevices, 3, 1, 20);
+    const maxDevices = boundedInt(license.maxDevices, 3, 3, 20);
     const currentDeviceCount = boundedInt(license.currentDeviceCount, 0, 0, maxDevices);
     if (!deviceSnapshot.exists && currentDeviceCount >= maxDevices)
       throw new Error("device_limit_reached");
@@ -1852,7 +1852,7 @@ async function activateDevice(
     if (status !== "active" && status !== "trial" && status !== "restricted")
       throw new Error("license_not_active");
 
-    const maxDevices = boundedInt(license.maxDevices, 3, 1, 20);
+    const maxDevices = boundedInt(license.maxDevices, 3, 3, 20);
     const currentDeviceCount = boundedInt(license.currentDeviceCount, 0, 0, maxDevices);
     if (!deviceSnapshot.exists && currentDeviceCount >= maxDevices)
       throw new Error("device_limit_reached");
@@ -1904,7 +1904,7 @@ function commercialLicenseFromData(
     licenseStatus: stringValue(source.licenseStatus) || "inactive",
     licenseStartDate: dateValue(source.licenseStartDate),
     licenseEndDate: dateValue(source.licenseEndDate),
-    maxDevices: boundedInt(source.maxDevices, config.defaultMaxDevices, 1, 20),
+    maxDevices: boundedInt(source.maxDevices, config.defaultMaxDevices, config.defaultMaxDevices, 20),
     currentDeviceCount: boundedInt(source.currentDeviceCount, 0, 0, 20),
     lastLicenseCheck: dateValue(source.lastLicenseCheck) ?? new Date().toISOString(),
     serverValidationRequired: source.serverValidationRequired === true,
