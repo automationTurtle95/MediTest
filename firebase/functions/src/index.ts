@@ -1848,7 +1848,7 @@ async function activateDevice(
     if (status !== "active" && status !== "trial" && status !== "restricted")
       throw new Error("license_not_active");
 
-    const maxDevices = boundedInt(license.maxDevices, 1, 1, 20);
+    const maxDevices = boundedInt(license.maxDevices, 2, 1, 20);
     const currentDeviceCount = boundedInt(license.currentDeviceCount, 0, 0, maxDevices);
     if (!deviceSnapshot.exists && currentDeviceCount >= maxDevices)
       throw new Error("device_limit_reached");

@@ -99,6 +99,27 @@
       </section>
 
       <section class="settings-grid">
+        <section class="card" id="licensePreviewCard">
+          <h2>Lizenz &amp; Zugang</h2>
+          <p id="licensePreviewStatus" class="muted">Lizenzstatus wird geladen...</p>
+          <div id="licensePreviewActions" class="actions">
+            <a class="button" href="/pages/license.html">Details &amp; Geräte</a>
+          </div>
+        </section>
+      </section>
+
+      <section class="settings-grid">
+        <section class="card">
+          <h2>Informationen</h2>
+          <p class="muted">Support, Kontakt und rechtliche Hinweise.</p>
+          <div class="actions">
+            <a class="button" href="/pages/contact.html">Support kontaktieren</a>
+            <a class="button" href="/pages/license.html">Lizenz &amp; Geräte</a>
+          </div>
+        </section>
+      </section>
+
+      <section class="settings-grid">
         <section class="card account-delete-card">
           <h2>Konto löschen</h2>
           <p>
@@ -341,10 +362,59 @@
           status(msg, err.message, "status error");
         }
       });
+      async function loadLicensePreview() {
+        const statusEl = document.getElementById("licensePreviewStatus");
+        const actionsEl = document.getElementById("licensePreviewActions");
+        try {
+          const s = await api("/api/license/status");
+          const isPremium = s.premiumActive || s.status === "premium";
+          const hasSubscription = !!s.subscriptionActive && !isPremium;
+          statusEl.textContent = isPremium
+            ? "Premium ist aktiv – voller Funktionsumfang freigeschaltet."
+            : hasSubscription
+              ? "Abo aktiv."
+              : s.status === "trial"
+                ? `Testphase aktiv – noch ${Number(s.trialDaysRemaining) || 0} Tag(e) übrig.`
+                : s.baseProductPurchased
+                  ? "Basiskauf aktiv. Premium-Abo für vollen Zugang verfügbar."
+                  : `${s.plan || "Kein aktiver Plan"}`;
+          const buyBtn = isPremium
+            ? '<button class="primary" type="button" disabled>Premium aktiv</button>'
+            : hasSubscription
+              ? '<button class="primary" type="button" onclick="manageSubscriptionFromSettings()">Abo verwalten</button>'
+              : s.baseProductPurchased
+                ? `<button class="primary" type="button" onclick="startSubscriptionFromSettings()" ${s.checkoutConfigured ? "" : "disabled"}>Premium-Abo kaufen</button>`
+                : `<a class="button primary" href="${APP_BRAND.websiteUrl}/purchase" target="_blank" rel="noopener">Meduvalo kaufen</a>`;
+          actionsEl.innerHTML = buyBtn + '<a class="button" href="/pages/license.html">Details &amp; Geräte</a>';
+        } catch (e) {
+          if (statusEl) statusEl.textContent = "Lizenzstatus konnte nicht geladen werden.";
+        }
+      }
+      async function startSubscriptionFromSettings() {
+        const msg = document.getElementById("msg");
+        try {
+          const r = await api("/api/license/checkout/subscription", { method: "POST" });
+          if (r.available && r.url) location.href = r.url;
+          else status(msg, r.message, "status error");
+        } catch (e) {
+          status(msg, e.message, "status error");
+        }
+      }
+      async function manageSubscriptionFromSettings() {
+        const msg = document.getElementById("msg");
+        try {
+          const r = await api("/api/license/portal", { method: "POST" });
+          if (r.available && r.url) location.href = r.url;
+          else status(msg, r.message, "status error");
+        } catch (e) {
+          status(msg, e.message, "status error");
+        }
+      }
       document.getElementById("reloadBtn").onclick = loadSettings;
       loadSettings();
       wireUpdateButton();
       checkForUpdates();
+      loadLicensePreview();
     </script>
   </body>
 </html>
