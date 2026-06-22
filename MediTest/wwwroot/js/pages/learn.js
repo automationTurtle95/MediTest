@@ -167,11 +167,18 @@ function buildCards(questions) {
       difficulty: q.difficulty || 'mittel',
       isAiGenerated: !!q.isAiGenerated,
       explanation: q.explanation || 'Keine Erklärung hinterlegt.',
-      correctIndex: q.correctOptionIndex ?? 0,
-      options: (q.options || [])
-        .slice()
-        .sort((a, b) => (a.optionIndex ?? 0) - (b.optionIndex ?? 0))
-        .map((o) => o.text),
+      ...(() => {
+        const sorted = (q.options || [])
+          .slice()
+          .sort((a, b) => (a.optionIndex ?? 0) - (b.optionIndex ?? 0))
+          .map((o) => o.text);
+        const correctText = sorted[q.correctOptionIndex ?? 0];
+        const shuffled = shuffle([...sorted]);
+        return {
+          correctIndex: shuffled.indexOf(correctText) >= 0 ? shuffled.indexOf(correctText) : 0,
+          options: shuffled,
+        };
+      })(),
       imageDataUrl: q.imageDataUrl || null,
       imageAltText: q.imageAltText || null,
       imageFileName: q.imageFileName || null,
