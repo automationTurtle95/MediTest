@@ -11,7 +11,7 @@ const SITE_CONFIG = {
   monthlyPriceCents: 999,
   currency: "EUR",
   pricingUrl: "./api/pricing",
-  purchaseUrl: "./purchase.html"
+  purchaseUrl: "./purchase"
 };
 
 const LEGAL_CONFIG = Object.freeze({
@@ -70,6 +70,21 @@ function applySitePricing() {
       element.textContent = `Für ${purchasePrice} kaufen`;
     }
   });
+
+  const structuredDataElement = document.querySelector("#softwareStructuredData");
+  if (structuredDataElement) {
+    try {
+      const structuredData = JSON.parse(structuredDataElement.textContent);
+      const softwareApplication = structuredData["@graph"]?.find((item) => item["@type"] === "SoftwareApplication");
+      if (softwareApplication?.offers) {
+        softwareApplication.offers.price = (SITE_CONFIG.productPriceCents / 100).toFixed(2);
+        softwareApplication.offers.priceCurrency = SITE_CONFIG.currency;
+        structuredDataElement.textContent = JSON.stringify(structuredData);
+      }
+    } catch {
+      // Keep the server-rendered structured data when it cannot be updated.
+    }
+  }
 }
 
 async function loadSitePricing() {
