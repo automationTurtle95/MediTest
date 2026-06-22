@@ -60,6 +60,7 @@
       api("/api/tests"),
       api("/api/stats/overview").catch(() => null),
       api("/api/dashboard/stats").catch(() => null),
+      getAppSettings().catch(() => null),
     ]);
 
     // ── Streak & Lernziel ─────────────────────────────────────────

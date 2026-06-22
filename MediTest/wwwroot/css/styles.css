@@ -28,6 +28,23 @@
   --field:#092829;
   --field-alt:#103839;
 }
+@media(prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#071f20;
+    --card:#0c3032;
+    --text:#edf9f6;
+    --muted:#abc6c2;
+    --primary:#5ed9b7;
+    --primary-dark:#9be9d3;
+    --accent:#37c8a0;
+    --danger:#fb7185;
+    --ok:#5ed9b7;
+    --border:#235052;
+    --shadow:0 18px 42px rgba(0,0,0,.28);
+    --field:#092829;
+    --field-alt:#103839;
+  }
+}
 *{box-sizing:border-box}
 html,body{height:100%}
 body{
