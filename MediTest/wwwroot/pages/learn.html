@@ -123,6 +123,26 @@
         flex-wrap: wrap;
         margin-top: 28px;
       }
+      .pick-doc-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .pick-doc-row:last-child {
+        border-bottom: none;
+      }
+      .pick-doc-name {
+        font-weight: 600;
+        font-size: 15px;
+      }
+      .pick-doc-meta {
+        font-size: 13px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
     </style>
   </head>
   <body>
@@ -144,6 +164,25 @@
       <section id="loadingCard" class="card">
         <p class="muted">Karten werden geladen...</p>
         <div id="loadingMsg" class="hidden"></div>
+      </section>
+
+      <!-- Picker: Fragenpool wählen (Einstieg über Nav ohne Parameter) -->
+      <section id="pickerCard" class="card hidden">
+        <p class="eyebrow">Lernmodus starten</p>
+        <p class="muted" id="pickerSubtitle" style="margin-bottom: 20px">Fragenpool wird geladen…</p>
+        <div id="pickerWeakSection" class="hidden" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border)">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+            <div>
+              <strong>Schwache Fragen</strong>
+              <p class="muted" id="pickerWeakInfo" style="margin: 2px 0 0; font-size: 13px"></p>
+            </div>
+            <button class="primary" type="button" id="pickerWeakBtn">Üben</button>
+          </div>
+        </div>
+        <div id="pickerDocList"></div>
+        <p id="pickerEmpty" class="muted hidden">
+          Noch keine Dokumente mit Fragen vorhanden. <a href="/pages/documents.html">Jetzt hochladen →</a>
+        </p>
       </section>
 
       <!-- Learn card (question) -->

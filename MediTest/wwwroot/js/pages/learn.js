@@ -43,7 +43,7 @@ async function loadCards() {
     );
     allCards = buildCards(results.flat());
   } else {
-    showLoadError('Kein Fragenpool gewählt.', '/pages/documents.html', 'Zu den Dokumenten');
+    await showPicker();
     return;
   }
 
@@ -61,7 +61,99 @@ async function loadCards() {
 
 function showLoadError(message, href, linkLabel) {
   const card = document.getElementById('loadingCard');
+  card.classList.remove('hidden');
   card.innerHTML = `<p class="muted">${esc(message)}</p><div class="actions"><a class="button" href="${esc(href)}">${esc(linkLabel)}</a></div>`;
+}
+
+async function showPicker() {
+  document.getElementById('loadingCard').classList.add('hidden');
+  document.getElementById('pickerCard').classList.remove('hidden');
+
+  const [docs, stats] = await Promise.all([
+    api('/api/documents').catch(() => []),
+    api('/api/stats/overview').catch(() => null),
+  ]);
+
+  const weakCount = (stats?.weakQuestions || []).length;
+  if (weakCount > 0) {
+    document.getElementById('pickerWeakInfo').textContent = `${weakCount} Frage${weakCount === 1 ? '' : 'n'} unter 60 % Trefferquote`;
+    document.getElementById('pickerWeakSection').classList.remove('hidden');
+    document.getElementById('pickerWeakBtn').onclick = () => startWithMode('weak');
+  }
+
+  const learnDocs = (docs || []).filter((d) => d.itemType === 'test' && Number(d.questionCount) > 0);
+  const subtitle = document.getElementById('pickerSubtitle');
+  if (learnDocs.length === 0) {
+    subtitle.textContent = weakCount > 0 ? '' : 'Noch keine Fragen vorhanden.';
+    document.getElementById('pickerEmpty').classList.remove('hidden');
+  } else {
+    subtitle.textContent = `${learnDocs.length} Fragenpool${learnDocs.length === 1 ? '' : 's'} verfügbar`;
+    document.getElementById('pickerDocList').innerHTML = learnDocs
+      .map(
+        (d) => `<div class="pick-doc-row">
+  <div>
+    <div class="pick-doc-name">${esc(d.fileName)}</div>
+    <div class="pick-doc-meta">${d.questionCount} Fragen</div>
+  </div>
+  <button type="button" onclick="startWithDoc('${esc(String(d.id))}')">Lernen</button>
+</div>`,
+      )
+      .join('');
+  }
+}
+
+async function startWithDoc(docId) {
+  document.getElementById('pickerCard').classList.add('hidden');
+  document.getElementById('loadingCard').classList.remove('hidden');
+  document.getElementById('loadingCard').innerHTML = '<p class="muted">Karten werden geladen…</p>';
+  try {
+    const data = await api(`/api/documents/${docId}/questions`);
+    allCards = buildCards(data.questions || []);
+    if (!allCards.length) {
+      showLoadError('Dieser Fragenpool enthält noch keine Fragen.', '/pages/documents.html', 'Zu den Dokumenten');
+      return;
+    }
+    startQueue(shuffle([...allCards]));
+  } catch (err) {
+    showLoadError(err?.message || 'Fehler beim Laden.', '/pages/documents.html', 'Zu den Dokumenten');
+  }
+}
+
+async function startWithMode(mode) {
+  document.getElementById('pickerCard').classList.add('hidden');
+  document.getElementById('loadingCard').classList.remove('hidden');
+  document.getElementById('loadingCard').innerHTML = '<p class="muted">Schwache Fragen werden geladen…</p>';
+  if (mode !== 'weak') return;
+  try {
+    const stats = await api('/api/stats/overview');
+    const weak = stats.weakQuestions || [];
+    if (!weak.length) {
+      showLoadError(
+        'Keine schwachen Fragen gefunden. Mach mehr Tests, dann erscheinen sie hier automatisch.',
+        '/pages/stats.html',
+        'Zur Statistik',
+      );
+      return;
+    }
+    const byDoc = {};
+    weak.forEach((wq) => (byDoc[wq.documentId] = byDoc[wq.documentId] || []).push(wq.questionId));
+    const weakSet = new Set(weak.map((wq) => wq.questionId));
+    const results = await Promise.all(
+      Object.keys(byDoc).map((did) =>
+        api(`/api/documents/${did}/questions`)
+          .then((d) => (d.questions || []).filter((q) => weakSet.has(q.questionId)))
+          .catch(() => []),
+      ),
+    );
+    allCards = buildCards(results.flat());
+    if (!allCards.length) {
+      showLoadError('Keine schwachen Fragen gefunden.', '/pages/stats.html', 'Zur Statistik');
+      return;
+    }
+    startQueue(shuffle([...allCards]));
+  } catch (err) {
+    showLoadError(err?.message || 'Fehler beim Laden.', '/pages/stats.html', 'Zur Statistik');
+  }
 }
 
 // ---- Karten aufbauen (normalisiert aus verschiedenen API-Antworten) ----
@@ -267,5 +359,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 loadCards().catch((err) => {
-  document.getElementById('loadingCard').innerHTML = `<p class="muted">Fehler beim Laden: ${esc(err?.message || 'Unbekannter Fehler')}</p><div class="actions"><a class="button" href="/index.html">Zum Dashboard</a></div>`;
+  const card = document.getElementById('loadingCard');
+  card.classList.remove('hidden');
+  card.innerHTML = `<p class="muted">Fehler beim Laden: ${esc(err?.message || 'Unbekannter Fehler')}</p><div class="actions"><a class="button" href="/index.html">Zum Dashboard</a></div>`;
 });
