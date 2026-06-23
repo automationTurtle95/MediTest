@@ -486,7 +486,31 @@ window.readImageFileAsDataUrl = readImageFileAsDataUrl;
 window.priceLabel = priceLabel;
 
 function qs(name){ return new URLSearchParams(location.search).get(name); }
-function status(el, msg, type='status'){ el.className = type; el.textContent = msg; el.classList.remove('hidden'); }
+let _toastTimer = null;
+function showToast(msg, type = 'info', durationMs = 3500) {
+  const prev = document.getElementById('meditestToast');
+  if (prev) { clearTimeout(_toastTimer); prev.remove(); }
+  const t = document.createElement('div');
+  t.id = 'meditestToast';
+  t.className = `toast toast-${type}`;
+  t.setAttribute('role', 'status');
+  t.setAttribute('aria-live', 'polite');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(() => requestAnimationFrame(() => t.classList.add('toast-visible')));
+  const dismiss = () => {
+    t.classList.remove('toast-visible');
+    setTimeout(() => { if (t.isConnected) t.remove(); }, 300);
+  };
+  _toastTimer = setTimeout(dismiss, durationMs);
+  t.onclick = () => { clearTimeout(_toastTimer); dismiss(); };
+}
+window.showToast = showToast;
+function status(el, msg, type = 'status') {
+  if (el) { el.className = type; el.textContent = msg; el.classList.remove('hidden'); }
+  if (msg && type.includes('error')) showToast(msg, 'error');
+  else if (msg && type.includes('success')) showToast(msg, 'success');
+}
 
 function describeUiElement(element) {
   if (!(element instanceof Element)) return null;

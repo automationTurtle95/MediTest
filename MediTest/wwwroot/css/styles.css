@@ -511,6 +511,12 @@ button:disabled,.button:disabled{cursor:not-allowed;opacity:.55;transform:none}
   background:var(--field-alt);
 }
 @keyframes action-progress-spin{to{transform:rotate(360deg)}}
+/* Toast notifications */
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--card);border:1px solid var(--border);border-radius:12px;padding:11px 20px;font-size:14px;font-weight:500;color:var(--text);box-shadow:var(--shadow);z-index:9999;max-width:min(92vw,420px);text-align:center;opacity:0;transition:opacity .25s ease,transform .25s ease;cursor:pointer;pointer-events:auto}
+.toast.toast-visible{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast-success{border-left:4px solid #22c55e}
+.toast-error{border-left:4px solid var(--danger,#ef4444)}
+.toast-info{border-left:4px solid var(--accent,#6366f1)}
 .profile-onboarding-modal{width:min(100%,680px)}
 .profile-onboarding-modal form{margin-top:18px}
 .catalog-price{

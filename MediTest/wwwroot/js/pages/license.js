@@ -41,14 +41,14 @@
   <article class="card doc-card">
     <span class="badge">${esc(result.status || "unbekannt")}</span>
     <h2>Deine Lizenz &amp; Geräte</h2>
-    <p class="muted">Ein gekaufter Zugang kann auf bis zu ${Number(license.maxDevices) || 3} Geräten aktiviert werden.</p>
+    <p class="muted">Ein gekaufter Zugang kann auf bis zu ${Math.max(3, Number(license.maxDevices) || 3)} Geräten aktiviert werden.</p>
     <dl class="legal-details">
       <div><dt>Nutzer</dt><dd>${esc(valueOr(user.displayName, user.email || "-"))}</dd></div>
       <div><dt>E-Mail</dt><dd>${esc(valueOr(user.email, "-"))}</dd></div>
       <div><dt>Lizenztyp</dt><dd>${esc(valueOr(license.licenseType, "-"))}</dd></div>
       <div><dt>Lizenzstatus</dt><dd>${esc(valueOr(license.licenseStatus, "-"))}</dd></div>
       <div><dt>Gültig bis</dt><dd>${esc(dateOr(license.licenseEndDate))}</dd></div>
-      <div><dt>Geräte</dt><dd>${Number(license.currentDeviceCount) || 0} / ${Number(license.maxDevices) || 0}</dd></div>
+      <div><dt>Geräte</dt><dd>${Number(license.currentDeviceCount) || 0} / ${Math.max(3, Number(license.maxDevices) || 3)}</dd></div>
       <div><dt>Dieses Gerät</dt><dd>${result.deviceActivated ? "Aktiviert" : "Nicht aktiviert"}</dd></div>
       <div><dt>Prüfmodus</dt><dd>${access.isOfflineMode ? "Offline-Cache" : "Online"}</dd></div>
     </dl>

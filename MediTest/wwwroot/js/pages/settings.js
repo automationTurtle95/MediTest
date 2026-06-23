@@ -264,13 +264,14 @@
     }
   }
   async function manageSubscriptionFromSettings() {
-    const msg = document.getElementById("msg");
     try {
       const r = await api("/api/license/portal", { method: "POST" });
-      if (r.available && r.url) location.href = r.url;
-      else status(msg, r.message, "status error");
+      if (r.available && r.url) { location.href = r.url; return; }
+      showToast(r.message || "Stripe-Portal nicht verfügbar – öffne Lizenzseite …", "info");
+      setTimeout(() => { location.href = "/pages/license.html"; }, 1200);
     } catch (e) {
-      status(msg, e.message, "status error");
+      showToast(e.message || "Fehler – öffne Lizenzseite …", "error");
+      setTimeout(() => { location.href = "/pages/license.html"; }, 1200);
     }
   }
   document.getElementById("reloadBtn").onclick = loadSettings;
