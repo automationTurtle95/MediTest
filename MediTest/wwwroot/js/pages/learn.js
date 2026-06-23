@@ -334,6 +334,20 @@ function restartAll() {
   startQueue(shuffle([...allCards]));
 }
 
+// ---- Lernmodus verlassen ----
+function exitLearn() {
+  const params = new URLSearchParams(location.search);
+  const hasParams = params.get('id') || params.get('weak');
+  if (!hasParams) {
+    // Über Picker gestartet → zurück zum Picker
+    document.getElementById('learnCard').classList.add('hidden');
+    showPicker();
+  } else {
+    // Über URL-Parameter gestartet → Picker-Ansicht
+    location.href = '/pages/learn.html';
+  }
+}
+
 // ---- Event-Listener ----
 document.getElementById('revealBtn').onclick = reveal;
 document.getElementById('rightBtn').onclick = () => rate(true);
