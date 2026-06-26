@@ -1322,51 +1322,79 @@ window.addEventListener('pageshow', event => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Katalog in Topbar-Nav
   const nav = document.querySelector('header.topbar nav');
-  if (!nav) return;
-  if (!nav.querySelector('a[href="/pages/catalog.html"]')) {
-    const link = document.createElement('a');
-    link.href = '/pages/catalog.html';
-    link.textContent = 'Katalog';
-    const manualLink = nav.querySelector('a[href="/pages/manual.html"]');
-    if (manualLink) nav.insertBefore(link, manualLink);
-    else nav.appendChild(link);
+  if (nav) {
+    if (!nav.querySelector('a[href="/pages/catalog.html"]')) {
+      const link = document.createElement('a');
+      link.href = '/pages/catalog.html';
+      link.textContent = 'Katalog';
+      const manualLink = nav.querySelector('a[href="/pages/manual.html"]');
+      if (manualLink) nav.insertBefore(link, manualLink);
+      else nav.appendChild(link);
+    }
+    nav.querySelectorAll('a[href]').forEach(a => {
+      if (a.getAttribute('href') === location.pathname) a.classList.add('active');
+    });
   }
-  if (!nav.querySelector('a[href="/pages/license.html"]')) {
-    const license = document.createElement('a');
-    license.href = '/pages/license.html';
-    license.textContent = 'Rechtliches & Lizenz';
-    nav.appendChild(license);
+
+  // Fußzeile
+  if (!document.getElementById('appFooter') && !location.pathname.endsWith('/pages/login.html')) {
+    const footer = document.createElement('footer');
+    footer.id = 'appFooter';
+    footer.className = 'app-footer';
+    footer.innerHTML = `
+      <nav class="footer-nav" aria-label="Fußnavigation">
+        <a href="/pages/contact.html">Support</a>
+        <a href="/pages/license.html">Rechtliches &amp; Lizenz</a>
+        <a href="/pages/settings.html">Einstellungen</a>
+      </nav>
+      <button class="danger footer-shutdown" type="button" id="shutdownBtn">Schließen</button>`;
+    document.body.appendChild(footer);
+    document.getElementById('shutdownBtn').onclick = shutdownApp;
+    footer.querySelectorAll('a[href]').forEach(a => {
+      if (a.getAttribute('href') === location.pathname) a.classList.add('active');
+    });
   }
-  if (!nav.querySelector('a[href="/pages/contact.html"]')) {
-    const support = document.createElement('a');
-    support.href = '/pages/contact.html';
-    support.textContent = 'Support';
-    const license = nav.querySelector('a[href="/pages/license.html"]');
-    if (license) nav.insertBefore(support, license);
-    else nav.appendChild(support);
-  }
-  if (!nav.querySelector('a[href="/pages/settings.html"]')) {
-    const link = document.createElement('a');
-    link.href = '/pages/settings.html';
-    link.textContent = 'Einstellungen';
-    nav.appendChild(link);
-  }
-  nav.querySelectorAll('a[href]').forEach(a => {
-    if (a.getAttribute('href') === location.pathname) a.classList.add('active');
-  });
-  if (document.getElementById('shutdownBtn')) return;
-  const btn = document.createElement('button');
-  btn.id = 'shutdownBtn';
-  btn.className = 'danger nav-shutdown';
-  btn.type = 'button';
-  btn.textContent = 'Schließen';
-  btn.onclick = shutdownApp;
-  nav.appendChild(btn);
+
   currentAuthUser(false).then(user => {
     if (user) renderAccountDock(user);
   }).catch(() => {});
 });
+
+function showQrModal(url, title) {
+  document.getElementById('qrCodeModal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'qrCodeModal';
+  modal.className = 'modal-backdrop';
+  modal.innerHTML = `
+    <section class="modal-panel qr-modal-panel" role="dialog" aria-modal="true" aria-labelledby="qrModalTitle">
+      <h2 id="qrModalTitle">${esc(title)}</h2>
+      <p class="muted">Mit der Kamera-App scannen</p>
+      <div id="qrModalCanvas" class="qr-modal-canvas"></div>
+      <p class="muted qr-modal-url">${esc(url)}</p>
+      <div class="actions">
+        <button type="button" onclick="document.getElementById('qrCodeModal').remove()">Schließen</button>
+      </div>
+    </section>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  function renderQr() {
+    new QRCode(document.getElementById('qrModalCanvas'), {
+      text: url, width: 220, height: 220,
+      colorDark: '#000000', colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M,
+    });
+  }
+  if (typeof QRCode !== 'undefined') {
+    renderQr();
+  } else {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+    s.onload = renderQr;
+    document.head.appendChild(s);
+  }
+}
 
 document.addEventListener('DOMContentLoaded', () => {
   if (location.pathname.endsWith('/pages/login.html')) return;

@@ -126,7 +126,7 @@ nav a{
 nav a:hover{color:var(--primary-dark);border-bottom-color:color-mix(in srgb,var(--accent) 55%,transparent)}
 nav a.active{color:var(--primary-dark);border-bottom-color:var(--primary)}
 main{max-width:1180px;margin:40px auto;padding:0 24px}
-main:not(.auth-page){padding-bottom:82px}
+main:not(.auth-page){padding-bottom:24px}
 .hero{display:grid;place-items:center;min-height:calc(100vh - 130px)}
 .card{
   background:var(--card);
@@ -333,11 +333,41 @@ button:disabled,.button:disabled{cursor:not-allowed;opacity:.55;transform:none}
 [data-theme="dark"] .ai-badge{background:#78350f;color:#fde68a}
 .answers li{margin:9px 0;line-height:1.45}
 .correct-answer{color:var(--ok);font-weight:800}
-.nav-shutdown{margin-left:14px;padding:8px 10px;border-radius:10px;min-height:38px}
+.app-footer{
+  position:sticky;
+  bottom:0;
+  z-index:20;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  padding:9px 32px;
+  background:color-mix(in srgb, var(--card) 96%, transparent);
+  border-top:1px solid var(--border);
+  backdrop-filter:blur(12px);
+}
+.footer-nav{display:flex;align-items:center;gap:2px;flex-wrap:wrap}
+.footer-nav a{
+  margin:0;
+  font-size:13px;
+  padding:6px 10px;
+  border-bottom:none;
+  border-radius:8px;
+  color:var(--muted);
+  font-weight:600;
+}
+.footer-nav a:hover{color:var(--primary-dark);background:var(--border);border-bottom-color:transparent}
+.footer-nav a.active{color:var(--primary-dark);background:var(--border);border-bottom-color:transparent}
+.footer-shutdown{padding:7px 14px;min-height:34px;font-size:13px}
+.qr-modal-panel{max-width:300px;text-align:center}
+.qr-modal-panel h2{margin-bottom:4px}
+.qr-modal-panel .muted{font-size:13px;margin-bottom:12px}
+.qr-modal-canvas{display:inline-block;padding:12px;background:#fff;border-radius:12px;margin:8px 0 12px}
+.qr-modal-url{font-size:11px!important;word-break:break-all}
 .account-dock{
   position:fixed;
   right:22px;
-  bottom:18px;
+  bottom:56px;
   z-index:30;
   display:flex;
   align-items:center;
@@ -834,10 +864,10 @@ html[data-platform="macos"] .login-success{
   .topbar{padding:12px 14px;align-items:flex-start;flex-direction:column}
   .topbar nav{width:100%;padding-bottom:5px;overflow-x:auto;flex-wrap:nowrap}
   .topbar nav a{margin:0 16px 0 0;white-space:nowrap;flex:0 0 auto}
-  .topbar .nav-shutdown{width:auto;flex:0 0 auto}
-  .card{padding:20px}
-  .button,button{width:100%;justify-content:center}
-  .account-dock{right:12px;bottom:12px;left:12px;max-width:none}
+  .app-footer{padding:9px 14px;gap:10px}
+  .footer-nav a{padding:5px 7px;font-size:12px}
+  .footer-shutdown{width:auto}
+  .account-dock{right:12px;bottom:60px;left:12px;max-width:none}
   .account-dock-user{max-width:none;flex:1}
   .account-dock-logout{width:auto}
   .settings-savebar{align-items:stretch;flex-direction:column}
