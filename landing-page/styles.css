@@ -1808,46 +1808,54 @@ button {
 }
 
 .mobile-app-section {
-  background: var(--white);
+  background: linear-gradient(160deg, var(--mint-50) 0%, var(--white) 60%);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
 .mobile-app-grid {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  max-width: 760px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  max-width: 800px;
   margin: 0 auto;
 }
 
 .mobile-app-card {
   display: grid;
-  min-height: 168px;
-  padding: 24px;
+  min-height: 180px;
+  padding: 28px;
   align-items: center;
-  background: #f8fbfa;
+  background: var(--white);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   gap: 20px;
   grid-template-columns: auto minmax(0, 1fr) auto;
   text-decoration: none;
   color: inherit;
+  box-shadow: var(--shadow-sm);
   transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
 }
 
+.mobile-app-card--featured {
+  border-color: var(--mint-400);
+  background: linear-gradient(135deg, #f0fdf8 0%, var(--white) 100%);
+}
+
 .mobile-app-card:hover {
-  border-color: #bed8d2;
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-3px);
+  border-color: var(--mint-400);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-4px);
 }
 
 .mobile-app-card--soon {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: default;
 }
 
 .mobile-app-card--soon:hover {
   transform: none;
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
   border-color: var(--border);
 }
 
@@ -1859,13 +1867,30 @@ button {
 
 .mobile-app-copy h3 {
   margin: 0;
-  font-size: 17px;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .mobile-app-copy p:not(.download-kicker) {
   margin: 0;
   font-size: 14px;
   color: var(--text-muted);
+}
+
+.app-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  background: var(--mint-500);
+  color: var(--white);
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
 }
 
 .cta-section {
