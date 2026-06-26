@@ -1389,3 +1389,13 @@ window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',
   const settings = window.mediTestSettings || cachedSettings();
   if (!settings || settings.theme === 'system') applyTheme(settings?.theme || 'system');
 });
+
+async function openExternalUrl(url) {
+  try {
+    await fetch('/api/system/open-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+  } catch {}
+}

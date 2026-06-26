@@ -135,6 +135,7 @@ internal static class AppSupport
         if (path.Equals("/api/app/info")) return true;
         if (path.StartsWithSegments("/api/system/shutdown")) return true;
         if (path.StartsWithSegments("/api/system/update")) return true;
+        if (path.StartsWithSegments("/api/system/open-url")) return true;
         if (path.StartsWithSegments("/css")) return true;
         if (path.StartsWithSegments("/js")) return true;
         if (path.StartsWithSegments("/assets")) return true;
