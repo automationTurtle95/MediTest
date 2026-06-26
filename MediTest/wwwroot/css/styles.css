@@ -635,6 +635,11 @@ button:disabled,.button:disabled{cursor:not-allowed;opacity:.55;transform:none}
 .terms-modal{width:min(660px,100%)}
 .terms-modal .checkline{padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:var(--field-alt)}
 .account-delete-card{border-color:color-mix(in srgb,var(--danger) 50%,var(--border))}
+.app-qr-grid{display:flex;gap:2rem;flex-wrap:wrap;margin-top:1.25rem}
+.app-qr-item{display:flex;flex-direction:column;align-items:center;gap:0.75rem}
+.qr-code canvas,.qr-code img{border-radius:8px;border:1px solid var(--border);display:block}
+.qr-code--placeholder{width:160px;height:160px;border-radius:8px;border:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.25rem;font-size:0.875rem}
+.app-qr-label{font-size:0.8rem}
 .ai-generation-modal{width:min(720px,100%)}
 .ai-generation-document,.ai-generation-metrics{
   display:grid;

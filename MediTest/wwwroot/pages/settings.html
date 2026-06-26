@@ -125,6 +125,28 @@
       </section>
 
       <section class="settings-grid">
+        <section class="card">
+          <h2>Mobile App</h2>
+          <p class="muted">Meduvalo jetzt auch für Android und iOS – unterwegs lernen mit denselben Fragenpools.</p>
+          <div class="app-qr-grid">
+            <div class="app-qr-item">
+              <div id="qr-android" class="qr-code"></div>
+              <span class="muted app-qr-label">Android – Google Play</span>
+              <a class="button" href="https://play.google.com/store/apps/details?id=at.meduvalo.app" target="_blank" rel="noopener noreferrer">Play Store öffnen</a>
+            </div>
+            <div class="app-qr-item">
+              <div class="qr-code qr-code--placeholder">
+                <span>App Store</span>
+                <span class="muted">Bald verfügbar</span>
+              </div>
+              <span class="muted app-qr-label">iOS – App Store</span>
+              <button class="button" disabled>App Store (bald)</button>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="settings-grid">
         <section class="card account-delete-card">
           <h2>Konto löschen</h2>
           <p>
@@ -140,5 +162,16 @@
     </main>
     <script src="/js/api.js"></script>
     <script src="/js/pages/settings.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script>
+      new QRCode(document.getElementById('qr-android'), {
+        text: 'https://play.google.com/store/apps/details?id=at.meduvalo.app',
+        width: 160,
+        height: 160,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M,
+      });
+    </script>
   </body>
 </html>

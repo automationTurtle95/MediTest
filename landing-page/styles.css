@@ -1807,6 +1807,67 @@ button {
   font-size: 13px;
 }
 
+.mobile-app-section {
+  background: var(--white);
+}
+
+.mobile-app-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.mobile-app-card {
+  display: grid;
+  min-height: 168px;
+  padding: 24px;
+  align-items: center;
+  background: #f8fbfa;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  gap: 20px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.mobile-app-card:hover {
+  border-color: #bed8d2;
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-3px);
+}
+
+.mobile-app-card--soon {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.mobile-app-card--soon:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--border);
+}
+
+.mobile-app-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mobile-app-copy h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.mobile-app-copy p:not(.download-kicker) {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
 .cta-section {
   padding-top: 88px;
   background: var(--white);
