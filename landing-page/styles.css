@@ -1822,19 +1822,22 @@ button {
 }
 
 .mobile-app-card {
-  display: grid;
-  min-height: 180px;
+  display: flex;
+  flex-direction: column;
   padding: 28px;
-  align-items: center;
   background: var(--white);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  gap: 20px;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 16px;
   text-decoration: none;
   color: inherit;
   box-shadow: var(--shadow-sm);
   transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.mobile-app-card .button {
+  margin-top: auto;
+  align-self: flex-start;
 }
 
 .mobile-app-card--featured {
