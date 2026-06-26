@@ -202,6 +202,40 @@
         border-radius: 6px;
         font-size: 14px;
       }
+      .app-promo-banner {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+        padding: 16px 20px;
+        margin-bottom: 20px;
+        border-color: var(--accent);
+        background: color-mix(in srgb, var(--accent) 8%, var(--card));
+      }
+      .app-promo-icon {
+        font-size: 32px;
+        line-height: 1;
+        flex-shrink: 0;
+      }
+      .app-promo-text {
+        flex: 1;
+        min-width: 0;
+      }
+      .app-promo-text strong {
+        display: block;
+        font-size: 15px;
+        margin-bottom: 2px;
+      }
+      .app-promo-text span {
+        font-size: 13px;
+        color: var(--muted, #6b7280);
+      }
+      @media (max-width: 700px) {
+        .app-promo-banner {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
       @media (max-width: 700px) {
         .two-col {
           grid-template-columns: 1fr;
@@ -237,6 +271,18 @@
     </header>
 
     <main>
+      <!-- Mobile App Banner -->
+      <div class="card app-promo-banner">
+        <span class="app-promo-icon">📱</span>
+        <div class="app-promo-text">
+          <strong>Meduvalo jetzt auch als App</strong>
+          <span>Für Android – dieselben Fragenpools, unterwegs lernen.</span>
+        </div>
+        <button class="button primary" type="button" onclick="openExternalUrl('https://play.google.com/store/apps/details?id=at.meduvalo.app')">
+          Im Play Store laden
+        </button>
+      </div>
+
       <!-- Offener Test Banner (wird dynamisch eingeblendet) -->
       <div id="resumeBanner" class="card resume-banner hidden">
         <div class="resume-banner-text">

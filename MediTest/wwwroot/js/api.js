@@ -1392,10 +1392,13 @@ window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',
 
 async function openExternalUrl(url) {
   try {
-    await fetch('/api/system/open-url', {
+    const res = await fetch('/api/system/open-url', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url })
     });
+    if (res.ok) return;
   } catch {}
+  // Fallback: im System-Browser öffnen
+  window.open(url, '_blank', 'noopener,noreferrer');
 }
