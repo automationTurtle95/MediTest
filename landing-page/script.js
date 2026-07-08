@@ -109,6 +109,15 @@ document.querySelectorAll("[data-purchase-link]").forEach((link) => {
 });
 
 const header = document.querySelector("[data-header]");
+const announcementBar = document.querySelector(".announcement-bar");
+
+function syncBarHeight() {
+  const h = announcementBar ? announcementBar.offsetHeight : 0;
+  document.documentElement.style.setProperty("--bar-h", h + "px");
+}
+syncBarHeight();
+window.addEventListener("resize", syncBarHeight, { passive: true });
+
 const updateHeader = () => header?.classList.toggle("scrolled", window.scrollY > 16);
 updateHeader();
 window.addEventListener("scroll", updateHeader, { passive: true });

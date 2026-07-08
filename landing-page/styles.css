@@ -29,6 +29,7 @@
 
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--bar-h, 44px) + 80px);
 }
 
 body {
@@ -111,9 +112,11 @@ button {
   text-align: center;
   font-size: 0.875rem;
   padding: 10px 16px;
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 200;
+  left: 0;
+  right: 0;
+  z-index: 300;
 }
 
 .announcement-inner {
@@ -152,8 +155,8 @@ button {
 
 .site-header {
   position: fixed;
-  z-index: 100;
-  top: 0;
+  z-index: 200;
+  top: var(--bar-h, 44px);
   right: 0;
   left: 0;
   border-bottom: 1px solid transparent;
@@ -304,7 +307,7 @@ button {
 .hero {
   position: relative;
   min-height: 760px;
-  padding: 154px 0 96px;
+  padding: calc(154px + var(--bar-h, 44px)) 0 96px;
   overflow: hidden;
   background:
     radial-gradient(circle at 78% 20%, rgba(55, 200, 160, 0.13), transparent 29%),
@@ -2720,7 +2723,7 @@ button {
 
   .site-nav {
     position: fixed;
-    top: 76px;
+    top: calc(76px + var(--bar-h, 44px));
     right: 16px;
     left: 16px;
     display: grid;
@@ -2780,7 +2783,7 @@ button {
   }
 
   .hero {
-    padding: 128px 0 78px;
+    padding: calc(128px + var(--bar-h, 44px)) 0 78px;
   }
 
   .hero-grid {
@@ -2882,7 +2885,7 @@ button {
 
   .hero {
     min-height: auto;
-    padding-top: 112px;
+    padding-top: calc(112px + var(--bar-h, 44px));
   }
 
   .hero h1 {
