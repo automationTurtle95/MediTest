@@ -1941,6 +1941,70 @@ button {
   vertical-align: middle;
 }
 
+.app-screenshots {
+  margin-top: 64px;
+  text-align: center;
+}
+
+.app-screenshots-label {
+  margin: 0 0 36px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.phone-row {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.phone-frame {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.phone-frame img {
+  width: clamp(140px, 16vw, 195px);
+  height: auto;
+  border-radius: 30px;
+  box-shadow: 0 20px 56px rgba(8, 47, 48, 0.18);
+  display: block;
+  transform: rotate(-3deg) scale(0.92) translateY(10px);
+  transition: transform 300ms ease, box-shadow 300ms ease;
+}
+
+.phone-frame--center img {
+  transform: rotate(0deg) scale(1) translateY(0);
+  box-shadow: 0 36px 80px rgba(8, 47, 48, 0.28);
+}
+
+.phone-frame:last-child img {
+  transform: rotate(3deg) scale(0.92) translateY(10px);
+}
+
+.phone-frame figcaption {
+  margin-top: 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 600px) {
+  .phone-row {
+    gap: 10px;
+  }
+
+  .phone-frame img {
+    width: clamp(100px, 26vw, 145px);
+    border-radius: 20px;
+  }
+}
+
 .cta-section {
   padding-top: 88px;
   background: var(--white);
