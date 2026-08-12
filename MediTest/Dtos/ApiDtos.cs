@@ -287,6 +287,7 @@ public sealed record LicenseStatusDto(
     int TrialDaysRemaining,
     int ProductPriceCents,
     int MonthlyPriceCents,
+    int SemesterPriceCents,
     int CatalogTestPriceCents,
     int CatalogQuestionPriceCents,
     int CatalogPriceEndingCents,

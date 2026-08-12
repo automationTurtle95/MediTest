@@ -100,13 +100,14 @@
 
     function renderBilling(s) {
       const trialEnd = dateOr(s.trialEndsAt, "-");
-      const purchaseDate = dateOr(s.baseProductPurchasedAt, "-");
       const isPremium = s.premiumActive || s.status === "premium";
       const hasSubscription = !!s.subscriptionActive && !isPremium;
-      const isRestricted = !!s.restrictedMode || s.status === "restricted";
-      const productPurchased = !!s.baseProductPurchased;
-      const fullAccess = isPremium || hasSubscription || s.status === "trial";
-      const testsAvailable = productPurchased || fullAccess;
+      const isTrial = s.status === "trial";
+      const fullAccess = !!s.accessActive || isPremium || hasSubscription || isTrial;
+      const isGrandfathered = fullAccess && !isPremium && !hasSubscription && !isTrial && !!s.baseProductPurchased;
+      const testsAvailable = fullAccess;
+      const monthly = priceLabel(s.monthlyPriceCents, s.currency);
+      const semester = priceLabel(s.semesterPriceCents, s.currency);
       const freeCreditAvailable = !!s.freeCatalogCreditAvailable;
       const freeCreditRedeemed = !!s.freeCatalogCreditRedeemed;
       const freeCreditText = freeCreditAvailable
@@ -116,50 +117,42 @@
           : "Noch nicht aktiviert.";
       document.getElementById("billingBox").innerHTML = `
   <article class="card doc-card license-plan-card">
-    <span class="badge">${isRestricted ? "Eingeschränkt" : "Zugang"}</span>
+    <span class="badge">${fullAccess ? "Zugang aktiv" : "Kein Abo"}</span>
     <h2>${esc(s.plan)}</h2>
     <p class="muted">${
       isPremium
         ? "Dauerhaft freigeschaltet"
         : hasSubscription
-          ? `Monatsabo aktiv · ${priceLabel(s.monthlyPriceCents, s.currency)} pro Monat`
-          : s.status === "trial"
+          ? `Abo aktiv · ${monthly}/Monat`
+          : isTrial
             ? `Testphase bis ${trialEnd} · ${Number(s.trialDaysRemaining) || 0} Tag(e) übrig`
-            : productPurchased
-              ? `Basiskauf am ${purchaseDate}`
-              : `Einmaliger Kauf: ${priceLabel(s.productPriceCents, s.currency)}`
+            : isGrandfathered
+              ? "Bestandskunden-Zugang (voller Zugriff)"
+              : "Kein aktives Abo"
     }</p>
     <p>${
-      isPremium
-        ? "Premium ist aktiv. Katalogfreischaltungen per Premium-Code sind eine gesonderte Sonderberechtigung."
-        : hasSubscription
-          ? `Alle ${APP_BRAND.productName}-Funktionen sind verfügbar. Katalogtests bleiben separate Kaufartikel.`
-          : s.status === "trial"
-            ? `Der Kauf enthält 7 Tage Vollzugang. Danach kostet das optionale Abo <b>${priceLabel(s.monthlyPriceCents, s.currency)} pro Monat</b>. Katalogtests sind nicht enthalten.`
-            : isRestricted
-              ? `Tests aus vorhandenen Fragenpools können gestartet, fortgesetzt und ausgewertet werden. Dokument-, Fragen-, Katalog-, Statistik-, Bearbeitungs- und KI-Funktionen werden mit dem Abo für <b>${priceLabel(s.monthlyPriceCents, s.currency)} pro Monat</b> wieder freigeschaltet.`
-              : `${APP_BRAND.productName} muss zuerst einmalig für <b>${priceLabel(s.productPriceCents, s.currency)}</b> gekauft werden. Der Kauf startet die 7-tägige Testphase und schaltet den Installer frei.`
+      fullAccess
+        ? `Alle ${APP_BRAND.productName}-Funktionen sind verfügbar. Katalogtests bleiben separate Kaufartikel.`
+        : `Schalte ${APP_BRAND.productName} Pro frei und nutze Lernmodus, Testmodus, Statistik und den KI-Fragengenerator. Wähle Monatsabo oder Semesterpass.`
     }</p>
     <div class="actions">${
       isPremium
         ? '<button class="primary" type="button" disabled>Premium aktiv</button>'
         : hasSubscription
-          ? '<button class="primary" type="button" onclick="manageSubscription()">Premium-Abo verwalten</button>'
-          : productPurchased
-            ? `<button class="primary" type="button" onclick="startSubscription()" ${s.checkoutConfigured ? "" : "disabled"}>Premium-Abo kaufen · ${priceLabel(s.monthlyPriceCents, s.currency)}/Monat</button>`
-            : `<a class="button primary" href="${APP_BRAND.websiteUrl}/purchase" target="_blank" rel="noopener">${APP_BRAND.productName} kaufen</a>`
+          ? '<button class="primary" type="button" onclick="manageSubscription()">Abo verwalten</button>'
+          : `<button class="primary" type="button" onclick="startSubscription('monthly')" ${s.checkoutConfigured ? "" : "disabled"}>Pro · ${monthly}/Monat</button>
+             <button type="button" onclick="startSubscription('semester')" ${s.checkoutConfigured ? "" : "disabled"}>Semesterpass · ${semester}/6 Monate</button>`
     }</div>
   </article>
   <article class="card doc-card">
     <span class="badge">Deine Funktionen</span>
-    <h2>${isRestricted ? "Tests bleiben verfügbar" : fullAccess ? "Voller Funktionsumfang" : "Nach dem Kauf verfügbar"}</h2>
+    <h2>${fullAccess ? "Voller Funktionsumfang" : "Mit Abo verfügbar"}</h2>
     <ul class="license-feature-list">
-      <li class="${testsAvailable ? "available" : "locked"}"><strong>Tests durchführen &amp; auswerten</strong><span>${testsAvailable ? "Verfügbar" : "Nach dem Kauf verfügbar"}</span></li>
-      <li class="${fullAccess ? "available" : "locked"}"><strong>Dokumente &amp; Fragenpools verwalten</strong><span>${fullAccess ? "Verfügbar" : isRestricted ? "Premium erforderlich" : "Nach dem Kauf verfügbar"}</span></li>
-      <li class="${fullAccess ? "available" : "locked"}"><strong>KI-Fragen erstellen</strong><span>${fullAccess ? "Verfügbar" : isRestricted ? "Premium erforderlich" : "Nach dem Kauf verfügbar"}</span></li>
-      <li class="${fullAccess ? "available" : "locked"}"><strong>Katalog &amp; Statistik öffnen</strong><span>${fullAccess ? "Verfügbar" : isRestricted ? "Premium erforderlich" : "Nach dem Kauf verfügbar"}</span></li>
+      <li class="${testsAvailable ? "available" : "locked"}"><strong>Tests durchführen &amp; auswerten</strong><span>${testsAvailable ? "Verfügbar" : "Mit Abo"}</span></li>
+      <li class="${fullAccess ? "available" : "locked"}"><strong>Dokumente &amp; Fragenpools verwalten</strong><span>${fullAccess ? "Verfügbar" : "Mit Abo"}</span></li>
+      <li class="${fullAccess ? "available" : "locked"}"><strong>KI-Fragen erstellen</strong><span>${fullAccess ? "Verfügbar" : "Mit Abo"}</span></li>
+      <li class="${fullAccess ? "available" : "locked"}"><strong>Katalog &amp; Statistik öffnen</strong><span>${fullAccess ? "Verfügbar" : "Mit Abo"}</span></li>
     </ul>
-    ${isRestricted ? `<p class="muted">Nach Ablauf der Testphase können vorhandene Tests weiterhin gestartet, fortgesetzt und ausgewertet werden. Alle anderen Funktionen werden mit Premium wieder freigeschaltet.</p>` : ""}
   </article>
   <article class="card doc-card">
     <span class="badge">Katalog</span>
@@ -228,9 +221,10 @@
         status(document.getElementById("msg"), e.message, "status error");
       }
     }
-    async function startSubscription() {
+    async function startSubscription(plan) {
       try {
-        const r = await api("/api/license/checkout/subscription", { method: "POST" });
+        const chosen = plan === "semester" ? "semester" : "monthly";
+        const r = await api(`/api/license/checkout/subscription?plan=${chosen}`, { method: "POST" });
         if (r.available && r.url) location.href = r.url;
         else status(document.getElementById("msg"), r.message, "status error");
       } catch (e) {

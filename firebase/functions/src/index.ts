@@ -18,6 +18,13 @@ import {
   resolveCommerceProductByPriceId,
   validateStripeProducts
 } from "./stripe-products";
+import {
+  appleNotificationActive,
+  decodeAppleNotification,
+  decodeGoogleRtdn,
+  verifyAppleSignedTransaction,
+  verifyGooglePurchase
+} from "./mobile-subscriptions";
 
 initializeApp();
 
@@ -38,6 +45,8 @@ const BRAND = Object.freeze({
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const stripeApiKey = defineSecret("MEDITEST_STRIPE_API_KEY");
 const stripeWebhookSecret = defineSecret("MEDITEST_STRIPE_WEBHOOK_SECRET");
+// Google Play Service-Account-JSON (androidpublisher-Scope) für Abo-Verifikation.
+const googlePlayServiceAccount = defineSecret("GOOGLE_PLAY_SERVICE_ACCOUNT");
 const stripeValidationToken = defineSecret("MEDITEST_STRIPE_VALIDATION_TOKEN");
 const supportSmtpPassword = defineSecret("MEDITEST_SMTP_PASSWORD");
 const aiMaxQuestionsPerRequest = defineInt("AI_MAX_QUESTIONS_PER_REQUEST", { default: 25 });
@@ -62,7 +71,11 @@ const premiumCodeHashList = defineString("PREMIUM_CODE_HASHES", {
 });
 const billingTrialDays = defineInt("BILLING_TRIAL_DAYS", { default: 7 });
 const billingProductPriceCents = defineInt("BILLING_PRODUCT_PRICE_CENTS", { default: 2499 });
-const billingMonthlyPriceCents = defineInt("BILLING_MONTHLY_PRICE_CENTS", { default: 999 });
+const billingMonthlyPriceCents = defineInt("BILLING_MONTHLY_PRICE_CENTS", { default: 690 });
+const billingSemesterPriceCents = defineInt("BILLING_SEMESTER_PRICE_CENTS", { default: 2900 });
+// Bestandskunden-Übergangsfrist: ISO-Datum, bis zu dem ein alter Einmalkauf als
+// Vollzugang gilt. Leer = unbefristet (kein bestehender Zahler wird gebrochen).
+const billingGrandfatherUntil = defineString("BILLING_GRANDFATHER_UNTIL", { default: "" });
 const billingCatalogQuestionPriceCents = defineInt("BILLING_CATALOG_QUESTION_PRICE_CENTS", { default: 10 });
 const billingCatalogPriceEndingCents = defineInt("BILLING_CATALOG_PRICE_ENDING_CENTS", { default: 9 });
 const billingCurrency = defineString("BILLING_CURRENCY", { default: "EUR" });
@@ -385,6 +398,161 @@ export const meditestAiUsage = onRequest(
   }
 );
 
+// Setzt/entfernt das Store-Abo im Lizenzstatus (subscriptionActive + Renews-Datum).
+async function applyMobileSubscription(
+  uid: string,
+  active: boolean,
+  provider: string,
+  expiryMs: number | null
+): Promise<void> {
+  await updateLicenseState(uid, (state) => {
+    state.subscriptionActive = active;
+    state.subscriptionProvider = provider;
+    state.subscriptionRenewsAt = active && expiryMs
+      ? new Date(expiryMs).toISOString()
+      : null;
+    return state;
+  });
+}
+
+// Verify-at-Purchase: Die App schickt nach dem Store-Kauf den Beleg, der Server
+// prüft ihn bei Apple/Google und schaltet das Abo frei (ersetzt Client-Trust).
+export const meditestVerifyMobilePurchase = onRequest(
+  {
+    invoker: "public",
+    memory: "256MiB",
+    timeoutSeconds: 60,
+    secrets: [googlePlayServiceAccount]
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.set("Allow", "POST").status(405).json({ error: { message: "Nur POST-Anfragen sind erlaubt." } });
+      return;
+    }
+    const user = await verifiedUser(req.header("authorization") ?? "", res);
+    if (!user) return;
+    const platform = stringValue(req.body?.platform).toLowerCase();
+    const productId = stringValue(req.body?.productId);
+    const token = stringValue(req.body?.token);
+    if (!token || !productId) {
+      res.status(400).json({ error: { message: "Kaufbeleg fehlt." } });
+      return;
+    }
+    try {
+      let sub;
+      let provider: string;
+      if (platform === "android") {
+        sub = await verifyGooglePurchase(productId, token, googlePlayServiceAccount.value());
+        provider = "google_play";
+      } else if (platform === "ios") {
+        sub = await verifyAppleSignedTransaction(token);
+        provider = "app_store";
+      } else {
+        res.status(400).json({ error: { message: "Unbekannte Plattform." } });
+        return;
+      }
+      if (!sub.linkKey) {
+        res.status(422).json({ error: { message: "Kaufbeleg ohne Transaktionsschlüssel." } });
+        return;
+      }
+      // uid-Zuordnung für spätere Webhooks (Verlängerung/Kündigung) speichern.
+      await db.doc(`mobileSubscriptionLinks/${firestoreDocumentId(sub.linkKey)}`).set({
+        uid: user.uid,
+        platform,
+        productId: sub.productId || productId,
+        provider,
+        linkKey: sub.linkKey,
+        updatedAt: Timestamp.now()
+      }, { merge: true });
+      await applyMobileSubscription(user.uid, sub.active, provider, sub.expiryMs);
+      res.status(200).json({
+        active: sub.active,
+        expiresAt: sub.expiryMs ? new Date(sub.expiryMs).toISOString() : null
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Verifikation fehlgeschlagen.";
+      logger.error("Mobile purchase verification failed", { uid: user.uid, platform, message });
+      res.status(502).json({ error: { message: "Der Kauf konnte nicht verifiziert werden." } });
+    }
+  }
+);
+
+// Apple App Store Server Notifications v2 – Verlängerung/Kündigung/Ablauf.
+export const meditestAppleNotifications = onRequest(
+  {
+    invoker: "public",
+    memory: "256MiB",
+    timeoutSeconds: 60
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.set("Allow", "POST").status(405).send("Method Not Allowed");
+      return;
+    }
+    const signedPayload = stringValue(req.body?.signedPayload);
+    if (!signedPayload) {
+      res.status(400).send("missing signedPayload");
+      return;
+    }
+    try {
+      const { notificationType, subscription } = await decodeAppleNotification(signedPayload);
+      if (!subscription?.linkKey) {
+        res.status(200).send("ignored");
+        return;
+      }
+      const linkSnap = await db.doc(`mobileSubscriptionLinks/${firestoreDocumentId(subscription.linkKey)}`).get();
+      const uid = stringValue(linkSnap.data()?.uid);
+      if (!uid) {
+        res.status(200).send("no-link");
+        return;
+      }
+      const active = appleNotificationActive(notificationType, subscription.expiryMs);
+      await applyMobileSubscription(uid, active, "app_store", subscription.expiryMs);
+      res.status(200).send("ok");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown";
+      logger.error("Apple notification failed", { message });
+      res.status(400).send("verification failed");
+    }
+  }
+);
+
+// Google Play Real-time Developer Notifications (Pub/Sub-Push).
+export const meditestGoogleNotifications = onRequest(
+  {
+    invoker: "public",
+    memory: "256MiB",
+    timeoutSeconds: 60,
+    secrets: [googlePlayServiceAccount]
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.set("Allow", "POST").status(405).send("Method Not Allowed");
+      return;
+    }
+    const rtdn = decodeGoogleRtdn(req.body);
+    if (!rtdn) {
+      res.status(204).send("");
+      return;
+    }
+    try {
+      const linkSnap = await db.doc(`mobileSubscriptionLinks/${firestoreDocumentId(rtdn.purchaseToken)}`).get();
+      const uid = stringValue(linkSnap.data()?.uid);
+      if (!uid) {
+        res.status(204).send("");
+        return;
+      }
+      const sub = await verifyGooglePurchase(rtdn.subscriptionId, rtdn.purchaseToken, googlePlayServiceAccount.value());
+      await applyMobileSubscription(uid, sub.active, "google_play", sub.expiryMs);
+      res.status(204).send("");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown";
+      logger.error("Google RTDN failed", { message });
+      res.status(500).send("error");
+    }
+  }
+);
+
 export const meditestAiStatus = onRequest(
   {
     invoker: "public",
@@ -572,18 +740,8 @@ export const meditestDownloadAccess = onRequest(
     const platform = requestedPlatform ?? "windows-x64";
     const isAdmin = user.admin === true || user.isAdmin === true;
     let state = await ensureLicenseState(user.uid);
-    const downloadAllowed = isAdmin ||
-      state.baseProductPurchased ||
-      state.premiumActive ||
-      state.subscriptionActive;
-    if (!downloadAllowed) {
-      res.status(403).json({
-        error: {
-          message: "Der Software-Download wird nach erfolgreichem Kauf freigeschaltet."
-        }
-      });
-      return;
-    }
+    // Der Desktop-Installer kann von jedem eingeloggten, verifizierten Konto geladen
+    // werden. Die Abo-/Trial-Prüfung (Paywall) erfolgt erst beim Login im Programm.
     if (!isAdmin && !state.installationAuthorizationRequired) {
       state = await updateLicenseState(user.uid, (current) => {
         current.installationAuthorizationRequired = true;
@@ -994,6 +1152,7 @@ export const meditestCreateCheckout = onRequest(
     const kind = stringValue(req.body?.kind).toLowerCase();
     const source = stringValue(req.body?.source).toLowerCase();
     const catalogId = stringValue(req.body?.catalogId).slice(0, 200);
+    const plan = stringValue(req.body?.plan).toLowerCase() === "semester" ? "semester" : "monthly";
     const requestedPlatform = normalizeDownloadPlatform(req.body?.platform);
     if (kind === "product" && req.body?.platform && !requestedPlatform) {
       res.status(400).json({ error: { message: "Diese Kaufplattform wird nicht unterstützt." } });
@@ -1066,14 +1225,6 @@ export const meditestCreateCheckout = onRequest(
         res.status(409).json({ error: { message: "Für dieses Konto ist bereits ein Zugang aktiv." } });
         return;
       }
-      if (!state.baseProductPurchased) {
-        res.status(403).json({
-          error: {
-            message: `Das Monatsabo ist nach dem einmaligen Kauf von ${BRAND.productName} verfügbar.`
-          }
-        });
-        return;
-      }
       const subscriptions = await stripe.subscriptions.list({
         customer: customerId,
         status: "all",
@@ -1105,10 +1256,11 @@ export const meditestCreateCheckout = onRequest(
         0,
         Math.ceil(((state.trialEndsAt ? Date.parse(state.trialEndsAt) : 0) - Date.now()) / 86_400_000)
       );
-      const commerceProduct = await resolveCommerceProduct(db, stripeProductConfig(), "subscription");
+      const commerceProduct = await resolveCommerceProduct(db, stripeProductConfig(), "subscription", "", plan);
       await assertStripeCheckoutProduct(stripe, commerceProduct);
       const metadata = {
         meditestPurchaseType: "subscription",
+        subscriptionPlan: plan,
         localProductKey: commerceProduct.localProductKey,
         stripeProductId: commerceProduct.stripeProductId,
         stripePriceId: commerceProduct.stripePriceId,
@@ -1731,18 +1883,25 @@ async function ensureCommercialLicense(
   const premium = billing.premiumActive;
   const subscription = billing.subscriptionActive;
   const purchased = billing.baseProductPurchased;
-  const trialActive = purchased && !!billing.trialEndsAt && Date.parse(billing.trialEndsAt) > now;
+  // Bestandskunden-Grandfathering: alter Einmalkauf = Vollzugang bis zum
+  // Übergangsdatum (leer = unbefristet, damit kein bestehender Zahler bricht).
+  const grandfatherUntil = billingGrandfatherUntil.value().trim();
+  const grandfatherEndsMs = grandfatherUntil ? Date.parse(grandfatherUntil) : NaN;
+  const grandfathered = purchased &&
+    (!grandfatherUntil || (Number.isFinite(grandfatherEndsMs) && grandfatherEndsMs > now));
+  // Trial ab Registrierung (unabhängig vom Kauf). Freischaltung sonst nur über Abo.
+  const trialActive = !!billing.trialEndsAt && Date.parse(billing.trialEndsAt) > now;
   const licenseType = admin ? "Admin" :
     premium ? "Lifetime" :
       subscription ? "Subscription" :
-        trialActive ? "Trial" :
-          purchased ? "Base" : "Free";
-  const licenseStatus = admin || premium || subscription ? "active" :
-    trialActive ? "trial" :
-      purchased ? "restricted" : "inactive";
+        grandfathered ? "Base" :
+          trialActive ? "Trial" : "Free";
+  const licenseStatus = admin || premium || subscription || grandfathered ? "active" :
+    trialActive ? "trial" : "inactive";
   const licenseEndDate = admin || premium ? null :
     subscription ? billing.subscriptionRenewsAt :
-      trialActive ? billing.trialEndsAt : null;
+      grandfathered ? (grandfatherUntil || null) :
+        trialActive ? billing.trialEndsAt : null;
   const licenseStartDate = billing.baseProductPurchasedAt ?? billing.trialStartedAt;
   const maxDevices = config.defaultMaxDevices;
   const activatedDevices = await db.collection(`deviceActivations/${user.uid}/devices`).get();
@@ -2447,9 +2606,11 @@ function normalizeLicenseState(source: Record<string, any>, createdAt: string): 
   const baseProductPurchased = source.baseProductPurchased === true || legacyPaidAccess;
   const baseProductPurchasedAt = validIsoString(source.baseProductPurchasedAt) ??
     (legacyPaidAccess ? validIsoString(source.trialStartedAt) ?? createdAt : null);
+  // 7-Tage-Trial ab Registrierung (Anker = unveränderliche Auth-createdAt), auch
+  // ohne Kauf. Nach Ablauf greift die Paywall (Freischaltung nur über Abo).
   const trialStartedAt = baseProductPurchased
     ? validIsoString(source.trialStartedAt) ?? baseProductPurchasedAt
-    : null;
+    : validIsoString(source.trialStartedAt) ?? createdAt;
   const trialEndsAt = trialStartedAt
     ? validIsoString(source.trialEndsAt) ??
       new Date(Date.parse(trialStartedAt) + trialDays * 86_400_000).toISOString()
@@ -2490,11 +2651,13 @@ function normalizeLicenseState(source: Record<string, any>, createdAt: string): 
 function commercialPricing(): {
   productPriceCents: number;
   monthlyPriceCents: number;
+  semesterPriceCents: number;
   currency: string;
 } {
   return {
     productPriceCents: Math.max(1, billingProductPriceCents.value()),
     monthlyPriceCents: Math.max(1, billingMonthlyPriceCents.value()),
+    semesterPriceCents: Math.max(1, billingSemesterPriceCents.value()),
     currency: billingCurrency.value().trim().toUpperCase() || "EUR"
   };
 }
@@ -2503,6 +2666,7 @@ function stripeProductConfig() {
   return {
     productPriceAmount: Math.max(1, billingProductPriceCents.value()),
     monthlyPriceAmount: Math.max(1, billingMonthlyPriceCents.value()),
+    semesterPriceAmount: Math.max(1, billingSemesterPriceCents.value()),
     catalogQuestionPriceAmount: Math.max(0, billingCatalogQuestionPriceCents.value()),
     catalogPriceEndingAmount: Math.max(0, billingCatalogPriceEndingCents.value()),
     currency: billingCurrency.value().trim().toUpperCase() || "EUR"

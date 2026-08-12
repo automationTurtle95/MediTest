@@ -1052,16 +1052,20 @@ function showLicenseAccessModal(state) {
   if (location.pathname.endsWith('/pages/license.html') || location.pathname.endsWith('/pages/contact.html')) return;
   const result = state?.access?.result || {};
   if (result.isValid || document.getElementById('licenseAccessModal')) return;
+  const expired = result.status === 'expired';
+  const brand = APP_BRAND.productName;
   const modal = document.createElement('div');
   modal.id = 'licenseAccessModal';
   modal.className = 'modal-backdrop';
   modal.innerHTML = `
     <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="licenseAccessTitle">
-      <p class="eyebrow">Lizenzprüfung</p>
-      <h2 id="licenseAccessTitle">${esc(result.status === 'expired' ? 'Lizenz abgelaufen' : 'Zugriff nicht freigegeben')}</h2>
-      <p>${esc(result.message || 'Keine gültige Lizenz gefunden.')}</p>
+      <p class="eyebrow">${esc(brand)} Pro</p>
+      <h2 id="licenseAccessTitle">${expired ? 'Dein Zugang ist abgelaufen' : 'Jetzt freischalten'}</h2>
+      <p>${expired
+        ? `Dein ${esc(brand)}-Zugang ist abgelaufen. Aktiviere ${esc(brand)} Pro erneut, um wieder vollen Zugriff zu erhalten.`
+        : `Für den vollen Zugang zu ${esc(brand)} ist ein aktives Abo nötig. Schalte mit ${esc(brand)} Pro alle Funktionen frei – Lernmodus, Testmodus, Statistik und den KI-Fragengenerator.`}</p>
       <div class="actions">
-        <a class="button primary" href="/pages/license.html">Rechtliches & Lizenz öffnen</a>
+        <a class="button primary" href="/pages/license.html">${esc(brand)} Pro freischalten</a>
         <button type="button" onclick="logoutApp()">Abmelden</button>
       </div>
     </section>`;

@@ -621,35 +621,36 @@ internal static class AppSupport
         var premiumActive = claimPremium || state.PremiumActive;
         var subscriptionActive = admin || premiumActive || claimSubscription || state.SubscriptionActive;
         var now = DateTime.UtcNow;
-        var trialActive = state.BaseProductPurchased && state.TrialEndsAt is { } trialEnd && now < trialEnd;
+        // Bestandskunden-Grandfathering: alter Einmalkauf = Vollzugang bis zum
+        // Übergangsdatum (leer = unbefristet, damit kein bestehender Zahler bricht).
+        var grandfatherUntil = BillingGrandfatherUntil(cfg);
+        var grandfathered = state.BaseProductPurchased && (grandfatherUntil is null || now < grandfatherUntil.Value);
+        // 7-Tage-Trial ab Registrierung (unabhängig vom Kauf).
+        var trialActive = state.TrialEndsAt is { } trialEnd && now < trialEnd;
         var daysRemaining = trialActive && state.TrialEndsAt is { } activeTrialEnd
             ? Math.Max(0, (int)Math.Ceiling((activeTrialEnd - now).TotalDays))
             : 0;
-        var accessActive = subscriptionActive || trialActive;
-        var restrictedMode = state.BaseProductPurchased && !accessActive;
+        var accessActive = subscriptionActive || grandfathered || trialActive;
         var status = premiumActive ? "premium" :
             subscriptionActive ? "active" :
-            trialActive ? "trial" :
-            restrictedMode ? "restricted" : "inactive";
+            grandfathered ? "active" :
+            trialActive ? "trial" : "inactive";
         var plan = premiumActive ? "Premium" :
-            subscriptionActive ? "Premium" :
-            trialActive ? "Testphase" :
-            restrictedMode ? "Basis" : "Nicht gekauft";
+            subscriptionActive ? $"{Brand.ProductName} Pro" :
+            grandfathered ? $"{Brand.ProductName} (Bestandskunde)" :
+            trialActive ? "Testphase" : "Kein Abo";
         var checkoutConfigured = cfg.GetValue<bool?>("Billing:StripeEnabled") ?? false;
-        var message = status switch
-        {
-            "premium" => "Premium aktiv. Katalogtests bleiben separate Kaufartikel.",
-            "active" => $"Monatsabo aktiv. Alle {Brand.ProductName}-Funktionen sind verfügbar.",
-            "trial" => $"7-tägige Testphase aktiv: noch {daysRemaining} Tag(e).",
-            "restricted" => "Testphase beendet. Tests aus vorhandenen Fragenpools bleiben ausführbar; alle anderen Funktionen benötigen ein Abo.",
-            _ => $"{Brand.ProductName} wurde für dieses Konto noch nicht gekauft."
-        };
+        var message = premiumActive ? "Premium aktiv. Katalogtests bleiben separate Kaufartikel." :
+            subscriptionActive ? $"Abo aktiv. Alle {Brand.ProductName}-Funktionen sind verfügbar." :
+            grandfathered ? $"Bestandskunden-Zugang aktiv. Voller Zugriff auf {Brand.ProductName}." :
+            trialActive ? $"7-tägige Testphase aktiv: noch {daysRemaining} Tag(e)." :
+            $"Kein aktives Abo. Schalte {Brand.ProductName} Pro frei, um alle Funktionen zu nutzen.";
 
         return new LicenseStatusDto(
             plan,
             status,
             accessActive,
-            restrictedMode,
+            false,
             state.BaseProductPurchased,
             state.BaseProductPurchasedAt,
             subscriptionActive,
@@ -659,6 +660,7 @@ internal static class AppSupport
             daysRemaining,
             state.ProductPriceCents > 0 ? state.ProductPriceCents : BillingProductPriceCents(cfg),
             state.MonthlyPriceCents > 0 ? state.MonthlyPriceCents : BillingMonthlyPriceCents(cfg),
+            state.SemesterPriceCents > 0 ? state.SemesterPriceCents : BillingSemesterPriceCents(cfg),
             BillingCatalogExamplePriceCents(cfg),
             BillingCatalogQuestionPriceCents(cfg),
             BillingCatalogPriceEndingCents(cfg),
@@ -822,6 +824,14 @@ internal static class AppSupport
     public static int BillingTrialDays(IConfiguration cfg) => Math.Clamp(cfg.GetValue<int?>("Billing:TrialDays") ?? 7, 1, 60);
     public static int BillingProductPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:ProductPriceCents") ?? CommercialPricing.ProductPriceCents);
     public static int BillingMonthlyPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:MonthlyPriceCents") ?? CommercialPricing.MonthlyPriceCents);
+    public static int BillingSemesterPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:SemesterPriceCents") ?? CommercialPricing.SemesterPriceCents);
+    public static DateTime? BillingGrandfatherUntil(IConfiguration cfg)
+    {
+        var raw = cfg.GetValue<string?>("Billing:GrandfatherUntil");
+        return DateTime.TryParse(raw, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal,
+            out var parsed) ? parsed : null;
+    }
     public static int BillingCatalogQuestionPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:CatalogQuestionPriceCents") ?? 10);
     public static int BillingCatalogPriceEndingCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:CatalogPriceEndingCents") ?? 9);
     public static int BillingCatalogExampleQuestionCount(IConfiguration cfg) => Math.Clamp(cfg.GetValue<int?>("Billing:CatalogPriceExampleQuestionCount") ?? 25, 1, 1000);

@@ -12,31 +12,31 @@ const PURCHASE_CONFIG = Object.freeze({
 const DOWNLOAD_PRODUCTS = Object.freeze({
   "windows-x64": {
     kicker: "Windows-Version",
-    lead: "Melde dich an oder erstelle ein Konto. Der einmalige Kauf schaltet den Windows-MSI-Installer und eine 7-tägige Testphase mit allen Funktionen frei.",
+    lead: "Melde dich an oder erstelle ein Konto und lade den Windows-MSI-Installer. Teste Meduvalo 7 Tage kostenlos – das Abo schaltest du danach direkt im Programm frei.",
     name: "Meduvalo für Windows 10 & 11",
     details: "64-Bit · MSI-Installer · Version 5.0.15",
-    benefit: "Windows-MSI direkt nach erfolgreicher Zahlung",
-    success: "Dein Kauf ist aktiv und deine 7-tägige Testphase hat begonnen. Der MSI-Installer kann jetzt heruntergeladen werden.",
+    benefit: "Windows-MSI direkt nach der Anmeldung",
+    success: "Dein Download ist bereit. Installiere Meduvalo und teste 7 Tage kostenlos. Pro oder Semesterpass schaltest du im Programm frei.",
     downloadLabel: "Windows MSI herunterladen",
     apple: false
   },
   "macos-arm64": {
     kicker: "macOS · Apple Silicon",
-    lead: "Melde dich an oder erstelle ein Konto. Der einmalige Kauf schaltet das signierte und von Apple notarisierte DMG für Apple Silicon sowie eine 7-tägige Testphase frei.",
+    lead: "Melde dich an oder erstelle ein Konto und lade das signierte, von Apple notarisierte DMG für Apple Silicon. Teste 7 Tage kostenlos – das Abo schaltest du im Programm frei.",
     name: "Meduvalo für Mac mit Apple Chip",
     details: "Apple Silicon · signiertes DMG · macOS 11+ · Version 5.0.15",
-    benefit: "Notarisiertes macOS-DMG direkt nach erfolgreicher Zahlung",
-    success: "Dein Kauf ist aktiv und deine 7-tägige Testphase hat begonnen. Das DMG für Apple Silicon kann jetzt heruntergeladen werden.",
+    benefit: "Notarisiertes macOS-DMG direkt nach der Anmeldung",
+    success: "Dein Download ist bereit. Installiere Meduvalo und teste 7 Tage kostenlos. Pro oder Semesterpass schaltest du im Programm frei.",
     downloadLabel: "Mac-DMG für Apple Silicon herunterladen",
     apple: true
   },
   "macos-x64": {
     kicker: "macOS · Intel",
-    lead: "Melde dich an oder erstelle ein Konto. Der einmalige Kauf schaltet das signierte und von Apple notarisierte DMG für Intel-Macs sowie eine 7-tägige Testphase frei.",
+    lead: "Melde dich an oder erstelle ein Konto und lade das signierte, von Apple notarisierte DMG für Intel-Macs. Teste 7 Tage kostenlos – das Abo schaltest du im Programm frei.",
     name: "Meduvalo für Intel-Mac",
     details: "Intel 64-Bit · signiertes DMG · macOS 11+ · Version 5.0.15",
-    benefit: "Notarisiertes macOS-DMG direkt nach erfolgreicher Zahlung",
-    success: "Dein Kauf ist aktiv und deine 7-tägige Testphase hat begonnen. Das DMG für Intel-Macs kann jetzt heruntergeladen werden.",
+    benefit: "Notarisiertes macOS-DMG direkt nach der Anmeldung",
+    success: "Dein Download ist bereit. Installiere Meduvalo und teste 7 Tage kostenlos. Pro oder Semesterpass schaltest du im Programm frei.",
     downloadLabel: "Mac-DMG für Intel herunterladen",
     apple: true
   }
@@ -201,6 +201,10 @@ function setAuthenticated(session) {
   authPanel.classList.add("hidden");
   checkoutPanel.classList.remove("hidden");
   signedInEmail.textContent = session.email;
+  // Abo-Modell: Einmalkauf-UI ausblenden. Der Installer ist frei, das Abo
+  // (Pro/Semesterpass) wird nach der Installation im Programm abgeschlossen.
+  checkoutButton.classList.add("hidden");
+  document.querySelectorAll(".consent-row").forEach((el) => el.classList.add("hidden"));
   updateCheckoutButton();
 }
 
@@ -314,15 +318,19 @@ securedDownload.addEventListener("click", (event) => {
 });
 
 async function refreshPurchaseAccess() {
-  const status = await authorizedRequest(PURCHASE_CONFIG.statusEndpoint, { method: "GET" });
+  // Neues Abo-Modell: Der Installer ist für jedes eingeloggte, verifizierte Konto
+  // verfügbar. Das Abo (Pro/Semesterpass) wird nach der Installation direkt im
+  // Programm abgeschlossen. Kein Einmalkauf mehr auf der Web-Seite.
+  const status = await authorizedRequest(PURCHASE_CONFIG.statusEndpoint, { method: "GET" }).catch(() => null);
   const state = status?.state || {};
-  if (!(state.baseProductPurchased || state.subscriptionActive || state.premiumActive)) return false;
-  productPurchased = true;
-  checkoutButton.textContent = "Bereits gekauft";
-  redeemProductCode.textContent = "Mit Gratis-Code erneut herunterladen";
-  updateCheckoutButton();
+  const active = state.subscriptionActive || state.premiumActive || state.baseProductPurchased;
   await requestSecuredDownload();
-  showMessage("Meduvalo ist für dieses Konto bereits freigeschaltet.", "success");
+  showMessage(
+    active
+      ? "Dein Konto ist freigeschaltet. Lade Meduvalo herunter und leg los."
+      : "Lade Meduvalo herunter und teste 7 Tage kostenlos. Danach schaltest du Pro oder den Semesterpass direkt im Programm frei.",
+    "success"
+  );
   return true;
 }
 

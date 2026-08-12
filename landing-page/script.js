@@ -8,7 +8,8 @@ const SITE_CONFIG = {
   shortClaim: "Medizinfragen smart trainieren.",
   description: "Meduvalo ist eine Lernsoftware für Medizinstudenten zur prüfungsnahen Vorbereitung mit strukturierten Fragen, Tests, Lernmodulen, Fortschrittsübersicht und KI-gestützter Fragengenerierung.",
   productPriceCents: 2499,
-  monthlyPriceCents: 999,
+  monthlyPriceCents: 690,
+  semesterPriceCents: 2900,
   currency: "EUR",
   pricingUrl: "./api/pricing",
   purchaseUrl: "./purchase"
@@ -59,11 +60,15 @@ function formatSitePrice(cents) {
 function applySitePricing() {
   const purchasePrice = formatSitePrice(SITE_CONFIG.productPriceCents);
   const monthlyPrice = formatSitePrice(SITE_CONFIG.monthlyPriceCents);
+  const semesterPrice = formatSitePrice(SITE_CONFIG.semesterPriceCents);
   document.querySelectorAll("[data-purchase-price]").forEach((element) => {
     element.textContent = purchasePrice;
   });
   document.querySelectorAll("[data-monthly-price]").forEach((element) => {
     element.textContent = monthlyPrice;
+  });
+  document.querySelectorAll("[data-semester-price]").forEach((element) => {
+    element.textContent = semesterPrice;
   });
   document.querySelectorAll("[data-purchase-button]").forEach((element) => {
     if (!element.textContent.includes("Bereits gekauft")) {
@@ -77,7 +82,7 @@ function applySitePricing() {
       const structuredData = JSON.parse(structuredDataElement.textContent);
       const softwareApplication = structuredData["@graph"]?.find((item) => item["@type"] === "SoftwareApplication");
       if (softwareApplication?.offers) {
-        softwareApplication.offers.price = (SITE_CONFIG.productPriceCents / 100).toFixed(2);
+        softwareApplication.offers.price = (SITE_CONFIG.monthlyPriceCents / 100).toFixed(2);
         softwareApplication.offers.priceCurrency = SITE_CONFIG.currency;
         structuredDataElement.textContent = JSON.stringify(structuredData);
       }
@@ -94,6 +99,7 @@ async function loadSitePricing() {
     const pricing = await response.json();
     if (Number(pricing.productPriceCents) > 0) SITE_CONFIG.productPriceCents = Number(pricing.productPriceCents);
     if (Number(pricing.monthlyPriceCents) > 0) SITE_CONFIG.monthlyPriceCents = Number(pricing.monthlyPriceCents);
+    if (Number(pricing.semesterPriceCents) > 0) SITE_CONFIG.semesterPriceCents = Number(pricing.semesterPriceCents);
     if (typeof pricing.currency === "string" && pricing.currency.trim()) SITE_CONFIG.currency = pricing.currency.trim().toUpperCase();
     applySitePricing();
   } catch {
