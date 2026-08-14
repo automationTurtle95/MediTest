@@ -145,7 +145,7 @@ export async function loadCommerceProducts(
       const category = stringValue(data.category) || "Allgemein";
       const configuredAmount = positiveInt(data.priceAmount) || positiveInt(data.priceCents);
       const calculatedAmount = category.toLowerCase() === "medat"
-        ? 4999
+        ? 999
         : questionCount * Math.max(0, config.catalogQuestionPriceAmount) +
           Math.max(0, config.catalogPriceEndingAmount);
       const product = mergeMapping({

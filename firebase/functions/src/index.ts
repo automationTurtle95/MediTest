@@ -18,13 +18,6 @@ import {
   resolveCommerceProductByPriceId,
   validateStripeProducts
 } from "./stripe-products";
-import {
-  appleNotificationActive,
-  decodeAppleNotification,
-  decodeGoogleRtdn,
-  verifyAppleSignedTransaction,
-  verifyGooglePurchase
-} from "./mobile-subscriptions";
 
 initializeApp();
 
@@ -45,8 +38,6 @@ const BRAND = Object.freeze({
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const stripeApiKey = defineSecret("MEDITEST_STRIPE_API_KEY");
 const stripeWebhookSecret = defineSecret("MEDITEST_STRIPE_WEBHOOK_SECRET");
-// Google Play Service-Account-JSON (androidpublisher-Scope) für Abo-Verifikation.
-const googlePlayServiceAccount = defineSecret("GOOGLE_PLAY_SERVICE_ACCOUNT");
 const stripeValidationToken = defineSecret("MEDITEST_STRIPE_VALIDATION_TOKEN");
 const supportSmtpPassword = defineSecret("MEDITEST_SMTP_PASSWORD");
 const aiMaxQuestionsPerRequest = defineInt("AI_MAX_QUESTIONS_PER_REQUEST", { default: 25 });
@@ -395,161 +386,6 @@ export const meditestAiUsage = onRequest(
       users: usersSnapshot.docs.map((doc) => serializeFirestoreDocument(doc.id, doc.data())),
       events: eventsSnapshot.docs.map((doc) => serializeFirestoreDocument(doc.id, doc.data()))
     });
-  }
-);
-
-// Setzt/entfernt das Store-Abo im Lizenzstatus (subscriptionActive + Renews-Datum).
-async function applyMobileSubscription(
-  uid: string,
-  active: boolean,
-  provider: string,
-  expiryMs: number | null
-): Promise<void> {
-  await updateLicenseState(uid, (state) => {
-    state.subscriptionActive = active;
-    state.subscriptionProvider = provider;
-    state.subscriptionRenewsAt = active && expiryMs
-      ? new Date(expiryMs).toISOString()
-      : null;
-    return state;
-  });
-}
-
-// Verify-at-Purchase: Die App schickt nach dem Store-Kauf den Beleg, der Server
-// prüft ihn bei Apple/Google und schaltet das Abo frei (ersetzt Client-Trust).
-export const meditestVerifyMobilePurchase = onRequest(
-  {
-    invoker: "public",
-    memory: "256MiB",
-    timeoutSeconds: 60,
-    secrets: [googlePlayServiceAccount]
-  },
-  async (req, res) => {
-    if (req.method !== "POST") {
-      res.set("Allow", "POST").status(405).json({ error: { message: "Nur POST-Anfragen sind erlaubt." } });
-      return;
-    }
-    const user = await verifiedUser(req.header("authorization") ?? "", res);
-    if (!user) return;
-    const platform = stringValue(req.body?.platform).toLowerCase();
-    const productId = stringValue(req.body?.productId);
-    const token = stringValue(req.body?.token);
-    if (!token || !productId) {
-      res.status(400).json({ error: { message: "Kaufbeleg fehlt." } });
-      return;
-    }
-    try {
-      let sub;
-      let provider: string;
-      if (platform === "android") {
-        sub = await verifyGooglePurchase(productId, token, googlePlayServiceAccount.value());
-        provider = "google_play";
-      } else if (platform === "ios") {
-        sub = await verifyAppleSignedTransaction(token);
-        provider = "app_store";
-      } else {
-        res.status(400).json({ error: { message: "Unbekannte Plattform." } });
-        return;
-      }
-      if (!sub.linkKey) {
-        res.status(422).json({ error: { message: "Kaufbeleg ohne Transaktionsschlüssel." } });
-        return;
-      }
-      // uid-Zuordnung für spätere Webhooks (Verlängerung/Kündigung) speichern.
-      await db.doc(`mobileSubscriptionLinks/${firestoreDocumentId(sub.linkKey)}`).set({
-        uid: user.uid,
-        platform,
-        productId: sub.productId || productId,
-        provider,
-        linkKey: sub.linkKey,
-        updatedAt: Timestamp.now()
-      }, { merge: true });
-      await applyMobileSubscription(user.uid, sub.active, provider, sub.expiryMs);
-      res.status(200).json({
-        active: sub.active,
-        expiresAt: sub.expiryMs ? new Date(sub.expiryMs).toISOString() : null
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Verifikation fehlgeschlagen.";
-      logger.error("Mobile purchase verification failed", { uid: user.uid, platform, message });
-      res.status(502).json({ error: { message: "Der Kauf konnte nicht verifiziert werden." } });
-    }
-  }
-);
-
-// Apple App Store Server Notifications v2 – Verlängerung/Kündigung/Ablauf.
-export const meditestAppleNotifications = onRequest(
-  {
-    invoker: "public",
-    memory: "256MiB",
-    timeoutSeconds: 60
-  },
-  async (req, res) => {
-    if (req.method !== "POST") {
-      res.set("Allow", "POST").status(405).send("Method Not Allowed");
-      return;
-    }
-    const signedPayload = stringValue(req.body?.signedPayload);
-    if (!signedPayload) {
-      res.status(400).send("missing signedPayload");
-      return;
-    }
-    try {
-      const { notificationType, subscription } = await decodeAppleNotification(signedPayload);
-      if (!subscription?.linkKey) {
-        res.status(200).send("ignored");
-        return;
-      }
-      const linkSnap = await db.doc(`mobileSubscriptionLinks/${firestoreDocumentId(subscription.linkKey)}`).get();
-      const uid = stringValue(linkSnap.data()?.uid);
-      if (!uid) {
-        res.status(200).send("no-link");
-        return;
-      }
-      const active = appleNotificationActive(notificationType, subscription.expiryMs);
-      await applyMobileSubscription(uid, active, "app_store", subscription.expiryMs);
-      res.status(200).send("ok");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "unknown";
-      logger.error("Apple notification failed", { message });
-      res.status(400).send("verification failed");
-    }
-  }
-);
-
-// Google Play Real-time Developer Notifications (Pub/Sub-Push).
-export const meditestGoogleNotifications = onRequest(
-  {
-    invoker: "public",
-    memory: "256MiB",
-    timeoutSeconds: 60,
-    secrets: [googlePlayServiceAccount]
-  },
-  async (req, res) => {
-    if (req.method !== "POST") {
-      res.set("Allow", "POST").status(405).send("Method Not Allowed");
-      return;
-    }
-    const rtdn = decodeGoogleRtdn(req.body);
-    if (!rtdn) {
-      res.status(204).send("");
-      return;
-    }
-    try {
-      const linkSnap = await db.doc(`mobileSubscriptionLinks/${firestoreDocumentId(rtdn.purchaseToken)}`).get();
-      const uid = stringValue(linkSnap.data()?.uid);
-      if (!uid) {
-        res.status(204).send("");
-        return;
-      }
-      const sub = await verifyGooglePurchase(rtdn.subscriptionId, rtdn.purchaseToken, googlePlayServiceAccount.value());
-      await applyMobileSubscription(uid, sub.active, "google_play", sub.expiryMs);
-      res.status(204).send("");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "unknown";
-      logger.error("Google RTDN failed", { message });
-      res.status(500).send("error");
-    }
   }
 );
 
@@ -2708,7 +2544,7 @@ async function findCatalogTest(catalogId: string): Promise<{
     if (questionCount > 0) {
       const category = stringValue(data.category) || "Allgemein";
       const priceCents = category.toLowerCase() === "medat"
-        ? boundedInt(data.priceCents, 4999, 1, 1_000_000)
+        ? boundedInt(data.priceCents, 999, 1, 1_000_000)
         : boundedInt(
           data.priceCents,
           questionCount * Math.max(0, billingCatalogQuestionPriceCents.value()) +
