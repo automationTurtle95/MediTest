@@ -18,11 +18,13 @@ export type CommerceProduct = {
   taxCode: string;
   active: boolean;
   recurringInterval: "month" | "";
+  recurringIntervalCount: number;
 };
 
 export type StripeProductConfig = {
   productPriceAmount: number;
   monthlyPriceAmount: number;
+  semesterPriceAmount: number;
   catalogQuestionPriceAmount: number;
   catalogPriceEndingAmount: number;
   currency: string;
@@ -93,7 +95,8 @@ export async function loadCommerceProducts(
     priceAmount: positiveInt(config.productPriceAmount),
     taxCode: "",
     active: true,
-    recurringInterval: ""
+    recurringInterval: "",
+    recurringIntervalCount: 0
   }, mappings.get("base-product"));
 
   const subscription = mergeMapping({
@@ -101,16 +104,34 @@ export async function loadCommerceProducts(
     productKind: "subscription",
     catalogId: "",
     catalogCollection: "",
-    name: "Meduvalo Monatsabo",
-    description: "Monatlicher Vollzugang zu Meduvalo",
+    name: "Meduvalo Pro (Monat)",
+    description: "Monatlicher Vollzugang zu Meduvalo (Pro)",
     stripeProductId: "",
     stripePriceId: "",
     currency: normalizeCurrency(config.currency),
     priceAmount: positiveInt(config.monthlyPriceAmount),
     taxCode: "",
     active: true,
-    recurringInterval: "month"
+    recurringInterval: "month",
+    recurringIntervalCount: 1
   }, mappings.get("subscription-monthly"));
+
+  const semester = mergeMapping({
+    localProductKey: "subscription-semester",
+    productKind: "subscription",
+    catalogId: "",
+    catalogCollection: "",
+    name: "Meduvalo Semesterpass",
+    description: "Vollzugang zu Meduvalo für 6 Monate (Semesterpass)",
+    stripeProductId: "",
+    stripePriceId: "",
+    currency: normalizeCurrency(config.currency),
+    priceAmount: positiveInt(config.semesterPriceAmount),
+    taxCode: "",
+    active: true,
+    recurringInterval: "month",
+    recurringIntervalCount: 6
+  }, mappings.get("subscription-semester"));
 
   const catalogProducts: CommerceProduct[] = [];
   for (const collection of ["catalogTests", "thematicTests"]) {
@@ -141,13 +162,14 @@ export async function loadCommerceProducts(
         priceAmount: configuredAmount || calculatedAmount,
         taxCode: stringValue(data.taxCode),
         active: data.active !== false,
-        recurringInterval: ""
+        recurringInterval: "",
+        recurringIntervalCount: 0
       }, mappings.get(localProductKey));
       catalogProducts.push(product);
     }
   }
 
-  return [base, subscription, ...catalogProducts]
+  return [base, subscription, semester, ...catalogProducts]
     .sort((left, right) => left.localProductKey.localeCompare(right.localProductKey));
 }
 
@@ -155,10 +177,11 @@ export async function resolveCommerceProduct(
   db: Firestore,
   config: StripeProductConfig,
   kind: CommerceProductKind,
-  catalogId = ""
+  catalogId = "",
+  plan: "monthly" | "semester" = "monthly"
 ): Promise<CommerceProduct> {
   const key = kind === "catalog" ? `catalog:${catalogId}` :
-    kind === "subscription" ? "subscription-monthly" : "base-product";
+    kind === "subscription" ? `subscription-${plan}` : "base-product";
   const products = await loadCommerceProducts(db, config);
   const product = products.find((candidate) => candidate.localProductKey === key);
   if (!product) {
@@ -241,7 +264,11 @@ export async function assertStripeCheckoutProduct(
     );
   }
   const actualInterval = price.recurring?.interval ?? "";
-  if (actualInterval !== product.recurringInterval) {
+  const actualIntervalCount = Number(price.recurring?.interval_count ?? (actualInterval ? 1 : 0));
+  if (
+    actualInterval !== product.recurringInterval ||
+    (actualInterval && actualIntervalCount !== (product.recurringIntervalCount || 1))
+  ) {
     throw new StripeProductConfigurationError(
       "stripe_recurring_mismatch",
       `Der Abrechnungszeitraum des Stripe-Preises für "${product.name}" ist ungültig.`
@@ -303,16 +330,21 @@ export async function validateStripeProducts(
         unit_amount: positiveInt(local.priceAmount),
         active: local.active,
         recurring: local.recurringInterval
-          ? { interval: local.recurringInterval }
+          ? { interval: local.recurringInterval, interval_count: local.recurringIntervalCount || 1 }
           : undefined,
         lookup_key: lookupKey(local),
+        // Übernimmt den lookup_key von einem bestehenden Preis (z.B. alter 9,99-Preis),
+        // sonst würde Stripe "lookup key already exists" werfen bei Preiswechsel.
+        transfer_lookup_key: true,
         metadata: stripeMetadata(local)
       }, {
         idempotencyKey: `meduvalo-price-${stableId([
           local.localProductKey,
           local.currency,
           local.priceAmount,
-          local.recurringInterval
+          local.recurringInterval,
+          local.recurringIntervalCount,
+          "v2"
         ].join(":"))}`
       });
       stripePrices.push(stripePrice);
@@ -338,7 +370,11 @@ export async function validateStripeProducts(
       if (positiveInt(stripePrice.unit_amount) !== positiveInt(local.priceAmount)) {
         addIssue(issues, "error", "stripe_amount_mismatch", local, "Der Stripe-Betrag stimmt nicht überein.");
       }
-      if ((stripePrice.recurring?.interval ?? "") !== local.recurringInterval) {
+      if (
+        (stripePrice.recurring?.interval ?? "") !== local.recurringInterval ||
+        (local.recurringInterval &&
+          Number(stripePrice.recurring?.interval_count ?? 1) !== (local.recurringIntervalCount || 1))
+      ) {
         addIssue(issues, "error", "stripe_recurring_mismatch", local, "Der Abrechnungszeitraum stimmt nicht überein.");
       }
       if (
@@ -497,10 +533,13 @@ function selectStripePrice(
 }
 
 function priceMatches(local: CommerceProduct, price: any): boolean {
+  const interval = price.recurring?.interval ?? "";
+  const intervalCount = Number(price.recurring?.interval_count ?? (interval ? 1 : 0));
   return price.active &&
     normalizeCurrency(price.currency) === normalizeCurrency(local.currency) &&
     positiveInt(price.unit_amount) === positiveInt(local.priceAmount) &&
-    (price.recurring?.interval ?? "") === local.recurringInterval;
+    interval === local.recurringInterval &&
+    (!interval || intervalCount === (local.recurringIntervalCount || 1));
 }
 
 function mergeMapping(
@@ -533,7 +572,10 @@ function productNameAliases(product: CommerceProduct): string[] {
     return [product.name, "Produktkauf", "Meduvalo Basiskauf", "Meduvalo Desktop"];
   }
   if (product.productKind === "subscription") {
-    return [product.name, "Meduvalo Premium Monatsabo", "Meduvalo Vollzugang Monatsabo"];
+    if (product.localProductKey === "subscription-semester") {
+      return [product.name, "Meduvalo Semesterpass", "Meduvalo Semester"];
+    }
+    return [product.name, "Meduvalo Pro (Monat)", "Meduvalo Premium Monatsabo", "Meduvalo Vollzugang Monatsabo", "Meduvalo Monatsabo"];
   }
   return [product.name];
 }

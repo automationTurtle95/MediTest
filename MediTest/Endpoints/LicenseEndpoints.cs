@@ -94,13 +94,16 @@ internal static class LicenseEndpoints
 
         app.MapPost("/api/license/checkout/subscription", async (HttpContext context, IConfiguration cfg, IHttpClientFactory httpClientFactory, CancellationToken ct) =>
         {
+            var plan = context.Request.Query["plan"].ToString().Trim().ToLowerInvariant() == "semester"
+                ? "semester"
+                : "monthly";
             var functionUrl = FirebaseFunctionUrl(cfg, "Billing:CheckoutFunctionUrl", "meditestCreateCheckout");
             var functionResult = await SendProtectedFirebaseFunctionAsync(
                 httpClientFactory,
                 context,
                 HttpMethod.Post,
                 functionUrl,
-                new { kind = "subscription" },
+                new { kind = "subscription", plan },
                 "Der Stripe-Checkout konnte nicht gestartet werden.",
                 ct);
             if (functionResult.Error != null) return functionResult.Error;

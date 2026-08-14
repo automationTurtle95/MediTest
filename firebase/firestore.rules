@@ -46,13 +46,19 @@ service cloud.firestore {
 
       match /billing/{document=**} {
         allow read: if ownsUserData();
-        allow write: if false;
+        // write erlaubt für IAP-Aktivierung vom Client (iOS StoreKit)
+        allow write: if ownsUserData();
       }
     }
 
     match /licenses/{userId} {
       allow read: if signedIn() && request.auth.uid == userId;
       allow write: if false;
+    }
+
+    // Zuordnung Store-Kaufbeleg → uid. Nur serverseitig (Admin SDK) beschreibbar.
+    match /mobileSubscriptionLinks/{document=**} {
+      allow read, write: if false;
     }
 
     match /deviceActivations/{userId} {
