@@ -333,6 +333,9 @@ export async function validateStripeProducts(
           ? { interval: local.recurringInterval, interval_count: local.recurringIntervalCount || 1 }
           : undefined,
         lookup_key: lookupKey(local),
+        // Übernimmt den lookup_key von einem bestehenden Preis (z.B. alter 9,99-Preis),
+        // sonst würde Stripe "lookup key already exists" werfen bei Preiswechsel.
+        transfer_lookup_key: true,
         metadata: stripeMetadata(local)
       }, {
         idempotencyKey: `meduvalo-price-${stableId([
@@ -340,7 +343,8 @@ export async function validateStripeProducts(
           local.currency,
           local.priceAmount,
           local.recurringInterval,
-          local.recurringIntervalCount
+          local.recurringIntervalCount,
+          "v2"
         ].join(":"))}`
       });
       stripePrices.push(stripePrice);

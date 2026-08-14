@@ -658,10 +658,12 @@ export const meditestPricing = onRequest(
     const products = await loadCommerceProducts(db, stripeProductConfig());
     const baseProduct = products.find((product) => product.localProductKey === "base-product");
     const subscription = products.find((product) => product.localProductKey === "subscription-monthly");
+    const semester = products.find((product) => product.localProductKey === "subscription-semester");
     res.set("Cache-Control", "public, max-age=300");
     res.status(200).json({
       productPriceCents: baseProduct?.priceAmount ?? commercialPricing().productPriceCents,
       monthlyPriceCents: subscription?.priceAmount ?? commercialPricing().monthlyPriceCents,
+      semesterPriceCents: semester?.priceAmount ?? commercialPricing().semesterPriceCents,
       currency: (baseProduct?.currency || subscription?.currency || commercialPricing().currency).toUpperCase()
     });
   }

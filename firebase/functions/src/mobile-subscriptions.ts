@@ -3,17 +3,15 @@
 //  - Verify-at-Purchase: die App schickt den Kaufbeleg, der Server prüft ihn.
 //  - Webhooks (Apple ASSN v2 / Google RTDN): Verlängerung/Kündigung/Ablauf.
 //
+// WICHTIG: googleapis + die Apple-Lib werden LAZY (dynamic import) geladen –
+// sonst timeouten sie die Firebase-Function-Analyse beim Deploy (googleapis ist riesig).
+//
 // Konfiguration (siehe Runbook im Projekt-Doc):
 //  - Apple Root CA Zertifikate (öffentlich) unter functions/apple-certs/ ablegen.
 //  - Google Play Service-Account-JSON als Secret GOOGLE_PLAY_SERVICE_ACCOUNT.
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { google } from "googleapis";
-import {
-  Environment,
-  SignedDataVerifier,
-} from "@apple/app-store-server-library";
 import type {
   JWSTransactionDecodedPayload,
   ResponseBodyV2DecodedPayload,
@@ -54,31 +52,27 @@ function loadAppleRootCerts(): Buffer[] {
   return certs;
 }
 
-function appleVerifier(environment: Environment): SignedDataVerifier {
-  return new SignedDataVerifier(
-    loadAppleRootCerts(),
-    true,
-    environment,
-    APPLE_BUNDLE_ID
-  );
-}
-
 async function decodeAppleTransaction(
   signedTransaction: string,
-  environment?: Environment
+  sandbox?: boolean
 ): Promise<JWSTransactionDecodedPayload> {
-  if (environment) {
-    return appleVerifier(environment).verifyAndDecodeTransaction(signedTransaction);
+  const lib = await import("@apple/app-store-server-library");
+  const certs = loadAppleRootCerts();
+  const verifier = (prod: boolean) =>
+    new lib.SignedDataVerifier(
+      certs,
+      true,
+      prod ? lib.Environment.PRODUCTION : lib.Environment.SANDBOX,
+      APPLE_BUNDLE_ID
+    );
+  if (sandbox !== undefined) {
+    return verifier(!sandbox).verifyAndDecodeTransaction(signedTransaction);
   }
   // Produktion zuerst, sonst Sandbox (Review-/Testkäufe).
   try {
-    return await appleVerifier(Environment.PRODUCTION).verifyAndDecodeTransaction(
-      signedTransaction
-    );
+    return await verifier(true).verifyAndDecodeTransaction(signedTransaction);
   } catch (_) {
-    return appleVerifier(Environment.SANDBOX).verifyAndDecodeTransaction(
-      signedTransaction
-    );
+    return verifier(false).verifyAndDecodeTransaction(signedTransaction);
   }
 }
 
@@ -112,24 +106,26 @@ export async function decodeAppleNotification(signedPayload: string): Promise<{
   subtype: string;
   subscription: MobileSubscription | null;
 }> {
+  const lib = await import("@apple/app-store-server-library");
+  const certs = loadAppleRootCerts();
+  const verifier = (prod: boolean) =>
+    new lib.SignedDataVerifier(
+      certs,
+      true,
+      prod ? lib.Environment.PRODUCTION : lib.Environment.SANDBOX,
+      APPLE_BUNDLE_ID
+    );
   let decoded: ResponseBodyV2DecodedPayload;
   try {
-    decoded = await appleVerifier(Environment.PRODUCTION).verifyAndDecodeNotification(
-      signedPayload
-    );
+    decoded = await verifier(true).verifyAndDecodeNotification(signedPayload);
   } catch (_) {
-    decoded = await appleVerifier(Environment.SANDBOX).verifyAndDecodeNotification(
-      signedPayload
-    );
+    decoded = await verifier(false).verifyAndDecodeNotification(signedPayload);
   }
-  const environment =
-    decoded.data?.environment === Environment.SANDBOX
-      ? Environment.SANDBOX
-      : Environment.PRODUCTION;
+  const isSandbox = decoded.data?.environment === lib.Environment.SANDBOX;
   let subscription: MobileSubscription | null = null;
   const signedTx = decoded.data?.signedTransactionInfo;
   if (signedTx) {
-    const tx = await decodeAppleTransaction(signedTx, environment);
+    const tx = await decodeAppleTransaction(signedTx, isSandbox);
     subscription = subscriptionFromTransaction(tx);
   }
   return {
@@ -152,22 +148,19 @@ export function appleNotificationActive(
 
 // ─── Google ──────────────────────────────────────────────────────────────────
 
-function androidPublisher(serviceAccountJson: string) {
-  const credentials = JSON.parse(serviceAccountJson);
-  const auth = new google.auth.GoogleAuth({
-    credentials,
-    scopes: ["https://www.googleapis.com/auth/androidpublisher"],
-  });
-  return google.androidpublisher({ version: "v3", auth });
-}
-
 // Verify-at-Purchase + Webhook: Abo-Status per Play Developer API prüfen.
 export async function verifyGooglePurchase(
   productId: string,
   purchaseToken: string,
   serviceAccountJson: string
 ): Promise<MobileSubscription> {
-  const publisher = androidPublisher(serviceAccountJson);
+  const { google } = await import("googleapis");
+  const credentials = JSON.parse(serviceAccountJson);
+  const auth = new google.auth.GoogleAuth({
+    credentials,
+    scopes: ["https://www.googleapis.com/auth/androidpublisher"],
+  });
+  const publisher = google.androidpublisher({ version: "v3", auth });
   const res = await publisher.purchases.subscriptionsv2.get({
     packageName: ANDROID_PACKAGE_NAME,
     token: purchaseToken,
