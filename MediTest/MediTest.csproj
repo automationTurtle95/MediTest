@@ -4,9 +4,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <OutputType>WinExe</OutputType>
-    <Version>5.0.27</Version>
-    <AssemblyVersion>5.0.27.0</AssemblyVersion>
-    <FileVersion>5.0.27.0</FileVersion>
+    <Version>5.0.28</Version>
+    <AssemblyVersion>5.0.28.0</AssemblyVersion>
+    <FileVersion>5.0.28.0</FileVersion>
     <InformationalVersion>5.0.27</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Product>Meduvalo</Product>
