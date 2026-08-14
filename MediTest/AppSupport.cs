@@ -836,7 +836,7 @@ internal static class AppSupport
     public static int BillingCatalogPriceEndingCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:CatalogPriceEndingCents") ?? 9);
     public static int BillingCatalogExampleQuestionCount(IConfiguration cfg) => Math.Clamp(cfg.GetValue<int?>("Billing:CatalogPriceExampleQuestionCount") ?? 25, 1, 1000);
     public static int BillingCatalogExamplePriceCents(IConfiguration cfg) => BillingCatalogTestPriceCents(cfg, "Allgemein", BillingCatalogExampleQuestionCount(cfg));
-    public static int BillingMedAtCatalogPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:MedAtCatalogPriceCents") ?? 4999);
+    public static int BillingMedAtCatalogPriceCents(IConfiguration cfg) => Math.Max(0, cfg.GetValue<int?>("Billing:MedAtCatalogPriceCents") ?? 999);
 
     public static int BillingCatalogTestPriceCents(IConfiguration cfg, string category, int questionCount)
     {
