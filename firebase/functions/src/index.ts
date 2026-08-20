@@ -3252,9 +3252,12 @@ function readBearerToken(authorization: string): string {
     : "";
 }
 
+// Fallback-Modell, falls der Client keins/ein ungueltiges schickt. gemini-2.5-flash hat nur
+// 20 Free-Tier-Anfragen/Tag (bestaetigt 20.08.2026) - gemini-3.5-flash-lite hat eigenes,
+// grosszuegigeres Kontingent (Quotas sind pro Modell getrennt). Siehe AiProviderCatalog.cs (.NET).
 function normalizeGeminiModel(model: unknown): string {
   const value = typeof model === "string" ? model.trim() : "";
-  return value.startsWith("gemini-") ? value : "gemini-2.5-flash";
+  return value.startsWith("gemini-") ? value : "gemini-3.5-flash-lite";
 }
 
 function normalizeAccessCode(code: unknown): string {

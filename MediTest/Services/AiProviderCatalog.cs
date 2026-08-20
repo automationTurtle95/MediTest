@@ -12,7 +12,11 @@ public sealed record AiProviderOption(
 public static class AiProviderCatalog
 {
     public const string DefaultProvider = "firebase";
-    public const string DefaultModel = "gemini-2.5-flash";
+    // gemini-2.5-flash Free-Tier-Kontingent ist auf 20 Anfragen/Tag begrenzt (bestaetigt 20.08.2026,
+    // "GenerateRequestsPerDayPerProjectPerModel-FreeTier"). Kontingent ist PRO MODELL getrennt -
+    // gemini-3.5-flash-lite hat noch unverbrauchtes, grosszuegigeres Free-Tier-Kontingent.
+    // gemini-2.0-flash/gemini-2.5-flash-lite sind zum 20.08.2026 fuer neue Nutzung eingestellt (404).
+    public const string DefaultModel = "gemini-3.5-flash-lite";
     public const string FirebaseProvider = "firebase";
     public const string FirebaseFunctionUrl = "https://europe-west3-meditest-12354.cloudfunctions.net/meditestAi";
     public const string FirebaseUsageFunctionUrl = "https://europe-west3-meditest-12354.cloudfunctions.net/meditestAiUsage";
@@ -71,9 +75,10 @@ public static class AiProviderCatalog
             "",
             true,
             [
-                new("gemini-2.5-flash", "Gemini 2.5 Flash"),
+                new("gemini-3.5-flash-lite", "Gemini 3.5 Flash Lite (Standard, hohes Freikontingent)"),
+                new("gemini-flash-latest", "Gemini Flash (latest)"),
+                new("gemini-2.5-flash", "Gemini 2.5 Flash (Free-Tier: 20 Anfragen/Tag)"),
                 new("gemini-2.5-pro", "Gemini 2.5 Pro"),
-                new("gemini-2.0-flash", "Gemini 2.0 Flash"),
                 new("__custom__", "Eigenes Modell")
             ]),
         new(
