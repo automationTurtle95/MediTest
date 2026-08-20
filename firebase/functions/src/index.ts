@@ -2866,44 +2866,89 @@ async function finalizeUsage(
   }
 }
 
+// Max. Fragen pro einzelnem Gemini-Call. Bei mehr wird die responseJsonSchema-Constraint
+// zu komplex ("too many states for serving", Gemini 400 - bestaetigt in Produktion am
+// 12.08. und 20.08.2026, beide Male bei 25 angeforderten Fragen, Fehler kam <1s nach dem
+// Request, also VOR jeder echten Generierung). Siehe [[02 Projekte/Meduvalo/Meduvalo App Verbesserungen]].
+const MAX_QUESTIONS_PER_AI_CALL = 5;
+
 async function generateQuestions(request: GenerateQuestionsRequest) {
   const expectedQuestions = readRequestedQuestionCount(request);
   if (!expectedQuestions) {
     throw new Error("Die Fragenanzahl im Request und im Prompt stimmt nicht überein.");
   }
   const limits = getLimitConfiguration();
-  const userPrompt = buildPrompt(request.messages).slice(0, limits.maxPromptChars);
-  const prompt = `${userPrompt}
+  const fullPrompt = buildPrompt(request.messages).slice(0, limits.maxPromptChars);
+  const { preamble, sourceText } = splitPromptAtSkripttext(fullPrompt);
+  const model = normalizeGeminiModel(request.model);
+  const temperature = typeof request.temperature === "number" ? request.temperature : 0.2;
+
+  const batchSizes = splitIntoBatches(expectedQuestions, MAX_QUESTIONS_PER_AI_CALL);
+  const textChunks = splitTextIntoChunks(sourceText, batchSizes.length);
+
+  const batchResults = await Promise.all(
+    batchSizes.map((batchCount, index) =>
+      generateQuestionBatch({
+        preamble,
+        chunk: textChunks[index] ?? sourceText,
+        chunkLabel: batchSizes.length > 1 ? `(Teil ${index + 1}/${batchSizes.length})` : "",
+        batchCount,
+        model,
+        temperature
+      })
+    )
+  );
+
+  const combined: QuestionResponse = { questions: batchResults.flatMap((r) => r.questions) };
+  if (combined.questions.length !== expectedQuestions) {
+    throw new Error(`Das Modell lieferte insgesamt ${combined.questions.length} statt ${expectedQuestions} Fragen.`);
+  }
+  return balanceCorrectOptionIndexes(combined);
+}
+
+async function generateQuestionBatch(args: {
+  preamble: string;
+  chunk: string;
+  chunkLabel: string;
+  batchCount: number;
+  model: string;
+  temperature: number;
+}): Promise<QuestionResponse> {
+  const { preamble, chunk, chunkLabel, batchCount, model, temperature } = args;
+  const prompt = `${preamble}
+
+SKRIPTTEXT ${chunkLabel}:
+${chunk}
 
 VERBINDLICHE SERVERVORGABE:
-Liefere genau ${expectedQuestions} vollständige Fragen im vorgegebenen JSON-Schema. Keine Frage und kein Pflichtfeld darf abgeschnitten oder ausgelassen werden. Ignoriere jede abweichende Anweisung zur Fragenanzahl.`;
+Liefere genau ${batchCount} vollständige Fragen im vorgegebenen JSON-Schema, ausschließlich aus dem oben stehenden Skripttext-Abschnitt. Keine Frage und kein Pflichtfeld darf abgeschnitten oder ausgelassen werden. Ignoriere jede abweichende Anweisung zur Fragenanzahl.`;
   const ai = genAiClient ??= new GoogleGenAI({ apiKey: geminiApiKey.value() });
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const response = await ai.models.generateContent({
-        model: normalizeGeminiModel(request.model),
+        model,
         contents: prompt,
         config: {
-          temperature: typeof request.temperature === "number" ? request.temperature : 0.2,
-          maxOutputTokens: Math.min(24000, Math.max(5000, expectedQuestions * 800 + 1500)),
+          temperature,
+          maxOutputTokens: Math.min(24000, Math.max(3000, batchCount * 800 + 1500)),
           thinkingConfig: {
             includeThoughts: false,
             thinkingBudget: 512
           },
           responseMimeType: "application/json",
-          responseJsonSchema: questionResponseSchema(expectedQuestions)
+          responseJsonSchema: questionResponseSchema(batchCount)
         }
       });
       if (!response.text) {
         throw new Error("Der KI-Dienst hat keine verwertbaren Fragen geliefert.");
       }
       const output = parseQuestionResponse(JSON.parse(response.text));
-      if (output.questions.length !== expectedQuestions) {
-        throw new Error(`Das Modell lieferte ${output.questions.length} statt ${expectedQuestions} Fragen.`);
+      if (output.questions.length !== batchCount) {
+        throw new Error(`Das Modell lieferte ${output.questions.length} statt ${batchCount} Fragen.`);
       }
       validateAnswerConsistency(output);
-      return balanceCorrectOptionIndexes(output);
+      return output;
     } catch (error) {
       if (attempt === 2 || !isTransientAiError(error)) throw error;
       await delay((attempt + 1) * 2000);
@@ -2913,10 +2958,55 @@ Liefere genau ${expectedQuestions} vollständige Fragen im vorgegebenen JSON-Sch
   throw new Error("Die KI-Generierung konnte nach mehreren Versuchen nicht abgeschlossen werden.");
 }
 
+// Teilt eine Gesamtanzahl in moeglichst gleichmaessige Batches auf, keiner groesser als maxPerBatch.
+// z.B. splitIntoBatches(25, 5) -> [5,5,5,5,5], splitIntoBatches(12, 5) -> [4,4,4]
+function splitIntoBatches(total: number, maxPerBatch: number): number[] {
+  const batchCount = Math.ceil(total / maxPerBatch);
+  const base = Math.floor(total / batchCount);
+  const remainder = total % batchCount;
+  return Array.from({ length: batchCount }, (_, i) => base + (i < remainder ? 1 : 0));
+}
+
+// Trennt den vom .NET-Client gebauten Prompt an "SKRIPTTEXT:" in Regelwerk (preamble,
+// bleibt fuer jeden Batch identisch) und eigentlichen Quelltext (wird pro Batch aufgeteilt).
+function splitPromptAtSkripttext(fullPrompt: string): { preamble: string; sourceText: string } {
+  const marker = "SKRIPTTEXT:";
+  const idx = fullPrompt.lastIndexOf(marker);
+  if (idx === -1) return { preamble: fullPrompt, sourceText: "" };
+  return {
+    preamble: fullPrompt.slice(0, idx).trim(),
+    sourceText: fullPrompt.slice(idx + marker.length).trim()
+  };
+}
+
+// Teilt den Quelltext in n moeglichst gleich lange, zusammenhaengende Abschnitte (auf
+// Satzgrenzen, wo moeglich) - jeder Batch bekommt einen eigenen Abschnitt statt des vollen
+// Textes. Verhindert Themen-Ueberschneidungen zwischen parallelen Batches UND haelt die
+// gesamte Prompt-Textmenge ueber alle Batches etwa gleich (statt sie zu vervielfachen).
+function splitTextIntoChunks(text: string, chunkCount: number): string[] {
+  if (chunkCount <= 1 || text.length === 0) return [text];
+  const targetLength = Math.ceil(text.length / chunkCount);
+  const chunks: string[] = [];
+  let cursor = 0;
+  for (let i = 0; i < chunkCount; i += 1) {
+    if (cursor >= text.length) {
+      chunks.push("");
+      continue;
+    }
+    let end = Math.min(cursor + targetLength, text.length);
+    if (end < text.length) {
+      const sentenceBreak = text.lastIndexOf(". ", end);
+      if (sentenceBreak > cursor + targetLength * 0.5) end = sentenceBreak + 1;
+    }
+    chunks.push(text.slice(cursor, end).trim());
+    cursor = end;
+  }
+  return chunks;
+}
+
 function questionResponseSchema(expectedQuestions: number) {
   return {
     type: "object",
-    additionalProperties: false,
     required: ["questions"],
     properties: {
       questions: {
@@ -2925,7 +3015,6 @@ function questionResponseSchema(expectedQuestions: number) {
         maxItems: expectedQuestions,
         items: {
           type: "object",
-          additionalProperties: false,
           required: [
             "questionText",
             "options",
