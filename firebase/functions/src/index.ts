@@ -143,6 +143,7 @@ type UsageReservation = {
   startedAtMs: number;
   dailyRemaining: number;
   monthlyRemaining: number;
+  requestedQuestions: number;
   code?: string;
   message?: string;
 };
@@ -2751,6 +2752,7 @@ async function reserveUsage(
         startedAtMs: now.toMillis(),
         dailyRemaining: Math.max(0, limits.dailyQuestionLimit - dayRequested),
         monthlyRemaining: Math.max(0, limits.monthlyQuestionLimit - monthRequested),
+        requestedQuestions,
         code,
         message
       };
@@ -2811,7 +2813,8 @@ async function reserveUsage(
       monthKey,
       startedAtMs: now.toMillis(),
       dailyRemaining: Math.max(0, limits.dailyQuestionLimit - nextDayRequested),
-      monthlyRemaining: Math.max(0, limits.monthlyQuestionLimit - nextMonthRequested)
+      monthlyRemaining: Math.max(0, limits.monthlyQuestionLimit - nextMonthRequested),
+      requestedQuestions
     };
   });
 }
@@ -2830,15 +2833,26 @@ async function finalizeUsage(
   const batch = db.batch();
   const statusCounter = status === "success" ? "successCount" : "failedCount";
 
+  // WICHTIG: Bei Fehlschlag wird das bei reserveUsage() reservierte Tages-/Monats-Kontingent
+  // wieder zurueckerstattet - der Nutzer hat ja keine Fragen bekommen. Ohne Refund wuerde jeder
+  // fehlgeschlagene Versuch (z.B. durch einen Bug oder API-Ausfall) dauerhaft echtes Kontingent
+  // verbrauchen. Nur die "requestedQuestions"-Zaehler werden zurueckgebucht, der Tages-
+  // Request-Zaehler (dailyRequestLimit, verhindert Spam) bleibt bewusst bestehen.
+  const refund = status === "failed" ? -reservation.requestedQuestions : 0;
+
   batch.set(eventRef, {
     status,
     generatedQuestions,
     errorMessage: errorMessage.slice(0, 1000),
     completedAt: now,
-    durationMs: Math.max(0, now.toMillis() - reservation.startedAtMs)
+    durationMs: Math.max(0, now.toMillis() - reservation.startedAtMs),
+    refundedQuestions: status === "failed" ? reservation.requestedQuestions : 0
   }, { merge: true });
   batch.set(summaryRef, {
     totalGeneratedQuestions: FieldValue.increment(generatedQuestions),
+    totalRequestedQuestions: FieldValue.increment(refund),
+    currentDayRequestedQuestions: FieldValue.increment(refund),
+    currentMonthRequestedQuestions: FieldValue.increment(refund),
     [statusCounter]: FieldValue.increment(1),
     lastStatus: status,
     lastReason: status === "failed" ? "generation_failed" : "",
@@ -2846,11 +2860,13 @@ async function finalizeUsage(
   }, { merge: true });
   batch.set(dayRef, {
     generatedQuestions: FieldValue.increment(generatedQuestions),
+    requestedQuestions: FieldValue.increment(refund),
     [statusCounter]: FieldValue.increment(1),
     updatedAt: now
   }, { merge: true });
   batch.set(monthRef, {
     generatedQuestions: FieldValue.increment(generatedQuestions),
+    requestedQuestions: FieldValue.increment(refund),
     [statusCounter]: FieldValue.increment(1),
     updatedAt: now
   }, { merge: true });
@@ -2872,6 +2888,12 @@ async function finalizeUsage(
 // Request, also VOR jeder echten Generierung). Siehe [[02 Projekte/Meduvalo/Meduvalo App Verbesserungen]].
 const MAX_QUESTIONS_PER_AI_CALL = 5;
 
+// Max. gleichzeitige Gemini-Calls pro Nutzeranfrage. NICHT auf Batch-Anzahl (z.B. 5) setzen -
+// das hat am 20.08.2026 sofort ein Gemini-429-Rate-Limit ausgeloest (5 Calls im selben Moment),
+// obwohl Billing fuer das Projekt aktiv ist. 2 gleichzeitig ist ein Kompromiss zwischen
+// Geschwindigkeit und Burst-Rate.
+const MAX_CONCURRENT_AI_CALLS = 2;
+
 async function generateQuestions(request: GenerateQuestionsRequest) {
   const expectedQuestions = readRequestedQuestionCount(request);
   if (!expectedQuestions) {
@@ -2886,24 +2908,38 @@ async function generateQuestions(request: GenerateQuestionsRequest) {
   const batchSizes = splitIntoBatches(expectedQuestions, MAX_QUESTIONS_PER_AI_CALL);
   const textChunks = splitTextIntoChunks(sourceText, batchSizes.length);
 
-  const batchResults = await Promise.all(
-    batchSizes.map((batchCount, index) =>
-      generateQuestionBatch({
-        preamble,
-        chunk: textChunks[index] ?? sourceText,
-        chunkLabel: batchSizes.length > 1 ? `(Teil ${index + 1}/${batchSizes.length})` : "",
-        batchCount,
-        model,
-        temperature
-      })
-    )
+  const batchTasks = batchSizes.map((batchCount, index) => () =>
+    generateQuestionBatch({
+      preamble,
+      chunk: textChunks[index] ?? sourceText,
+      chunkLabel: batchSizes.length > 1 ? `(Teil ${index + 1}/${batchSizes.length})` : "",
+      batchCount,
+      model,
+      temperature
+    })
   );
+  const batchResults = await runWithConcurrencyLimit(batchTasks, MAX_CONCURRENT_AI_CALLS);
 
   const combined: QuestionResponse = { questions: batchResults.flatMap((r) => r.questions) };
   if (combined.questions.length !== expectedQuestions) {
     throw new Error(`Das Modell lieferte insgesamt ${combined.questions.length} statt ${expectedQuestions} Fragen.`);
   }
   return balanceCorrectOptionIndexes(combined);
+}
+
+// Fuehrt Tasks mit begrenzter Parallelitaet aus (statt Promise.all = unbegrenzt gleichzeitig).
+async function runWithConcurrencyLimit<T>(tasks: Array<() => Promise<T>>, limit: number): Promise<T[]> {
+  const results: T[] = new Array(tasks.length);
+  let nextIndex = 0;
+  async function worker() {
+    while (nextIndex < tasks.length) {
+      const current = nextIndex;
+      nextIndex += 1;
+      results[current] = await tasks[current]();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, () => worker()));
+  return results;
 }
 
 async function generateQuestionBatch(args: {
@@ -2951,7 +2987,11 @@ Liefere genau ${batchCount} vollständige Fragen im vorgegebenen JSON-Schema, au
       return output;
     } catch (error) {
       if (attempt === 2 || !isTransientAiError(error)) throw error;
-      await delay((attempt + 1) * 2000);
+      // Kontingent-Fehler (429) brauchen deutlich laengeres Backoff als andere transiente
+      // Fehler (500/503) - ein Minuten-Rate-Limit ist mit 2-4s Wartezeit nicht vorbei.
+      const isQuotaError = /\b429\b|quota|rate.?limit/i.test(error instanceof Error ? error.message : String(error));
+      const backoffMs = isQuotaError ? (attempt + 1) * 15_000 : (attempt + 1) * 2_000;
+      await delay(backoffMs);
     }
   }
 
