@@ -81,7 +81,7 @@ async function showPicker() {
     document.getElementById('pickerWeakBtn').onclick = () => startWithMode('weak');
   }
 
-  const learnDocs = (docs || []).filter((d) => d.itemType === 'test' && Number(d.questionCount) > 0);
+  const learnDocs = (docs || []).filter((d) => Number(d.questionCount) > 0);
   const subtitle = document.getElementById('pickerSubtitle');
   if (learnDocs.length === 0) {
     subtitle.textContent = weakCount > 0 ? '' : 'Noch keine Fragen vorhanden.';

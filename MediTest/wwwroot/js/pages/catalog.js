@@ -303,9 +303,7 @@
     }
 
     async function loadLocalDocs() {
-      localDocs = (await api("/api/documents")).filter(
-        (doc) => doc.itemType === "test" && Number(doc.questionCount) > 0,
-      );
+      localDocs = (await api("/api/documents")).filter((doc) => Number(doc.questionCount) > 0);
       const sel = document.getElementById("documentId");
       sel.innerHTML = localDocs.length
         ? localDocs

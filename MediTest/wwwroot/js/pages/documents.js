@@ -82,24 +82,36 @@
     function createDocumentFolderNode(name, path, itemType) {
       return { name, path, itemType, folders: new Map(), documents: [], documentCount: 0 };
     }
+    function insertDocumentIntoRoot(root, doc) {
+      let node = root;
+      documentFolderSegments(doc).forEach((segment) => {
+        const key = segment.toLocaleLowerCase("de");
+        let child = [...node.folders.values()].find((entry) => entry.name.toLocaleLowerCase("de") === key);
+        if (!child) {
+          const path = node.path ? `${node.path}/${segment}` : segment;
+          child = createDocumentFolderNode(segment, path, node.itemType);
+          node.folders.set(segment, child);
+        }
+        node = child;
+      });
+      node.documents.push(doc);
+    }
     function buildDocumentTrees(documents) {
       const roots = [
         createDocumentFolderNode("Dokumente", "", "document"),
         createDocumentFolderNode("Tests", "", "test"),
       ];
+      const [documentRoot, testRoot] = roots;
       documents.forEach((doc) => {
-        let node = roots.find((root) => root.itemType === (doc.itemType === "test" ? "test" : "document"));
-        documentFolderSegments(doc).forEach((segment) => {
-          const key = segment.toLocaleLowerCase("de");
-          let child = [...node.folders.values()].find((entry) => entry.name.toLocaleLowerCase("de") === key);
-          if (!child) {
-            const path = node.path ? `${node.path}/${segment}` : segment;
-            child = createDocumentFolderNode(segment, path, node.itemType);
-            node.folders.set(segment, child);
-          }
-          node = child;
-        });
-        node.documents.push(doc);
+        // Ein reiner Katalog-/Fragenpool-Import (kein eigener Quelltext) ist itemType "test" und
+        // gehoert nur in die Tests-Ansicht. Ein echtes hochgeladenes Dokument bleibt IMMER in
+        // "Dokumente" sichtbar (unabhaengig von generierten Fragen) und erscheint ZUSAETZLICH in
+        // "Tests", sobald es Fragen hat - so verschwindet die Quelle nicht mehr aus der Ansicht,
+        // sobald einmal KI-Fragen generiert wurden (Entscheidung Lukas, 20.08.2026).
+        const isPureTestImport = doc.itemType === "test";
+        const hasQuestions = Number(doc.questionCount) > 0;
+        if (!isPureTestImport) insertDocumentIntoRoot(documentRoot, doc);
+        if (isPureTestImport || hasQuestions) insertDocumentIntoRoot(testRoot, doc);
       });
       function count(node) {
         node.documentCount = node.documents.length;
@@ -111,8 +123,11 @@
       roots.forEach(count);
       return roots;
     }
-    function documentCard(d, generateDefault, testDefault) {
-      const isTest = d.itemType === "test";
+    function documentCard(d, generateDefault, testDefault, contextItemType) {
+      // contextItemType kommt vom Baum-Knoten (Dokumente- oder Tests-Ast), nicht von d.itemType:
+      // ein echtes Dokument mit generierten Fragen steht jetzt in BEIDEN Aesten und muss je nach
+      // Ast unterschiedlich gerendert werden (Quelle vs. Testkarte).
+      const isTest = (contextItemType || d.itemType) === "test";
       const badges = isTest
         ? `<span class="badge">${d.questionCount} Fragen</span><span class="badge">Test</span>`
         : `<span class="badge">Dokument</span><span class="badge">${documentTypeLabel(d)}</span>`;
@@ -154,7 +169,7 @@
       const documents = node.documents
         .slice()
         .sort((a, b) => String(a.fileName).localeCompare(String(b.fileName), "de"))
-        .map((doc) => documentCard(doc, generateDefault, testDefault))
+        .map((doc) => documentCard(doc, generateDefault, testDefault, node.itemType))
         .join("");
       const isRoot = depth === 0;
       const rootClass = isRoot ? ` document-root-folder document-root-folder--${node.itemType}` : "";
@@ -455,9 +470,10 @@
         context.running = false;
         progress.classList.add("hidden");
         await loadDocs();
+        await loadAiGenerationQuota();
         const ids = Array.isArray(result.questionIds) ? result.questionIds : [];
         resultBox.className = "status success";
-        resultBox.innerHTML = `<strong>Generierung abgeschlossen</strong><p>${Number(result.added) || 0} neue Fragen wurden gespeichert. Der neue Test enthält ${Number(result.total) || 0} Fragen und liegt nun im Hauptverzeichnis „Tests“.</p>${ids.length ? `<div class="actions"><a class="button primary" href="${newQuestionsHref(context.id, ids)}">Neue Fragen ansehen</a></div>` : ""}`;
+        resultBox.innerHTML = `<strong>Generierung abgeschlossen</strong><p>${Number(result.added) || 0} neue Fragen wurden gespeichert. Der Test enthält jetzt ${Number(result.total) || 0} Fragen und ist zusätzlich unter „Tests“ verfügbar. Das Dokument bleibt weiterhin hier unter „Dokumente“ – du kannst jederzeit weitere Fragen daraus generieren.</p>${ids.length ? `<div class="actions"><a class="button primary" href="${newQuestionsHref(context.id, ids)}">Neue Fragen ansehen</a></div>` : ""}`;
         document.getElementById("aiGenerationTitle").textContent = "Generierung abgeschlossen";
         startButton.classList.add("hidden");
         cancelButton.disabled = false;
