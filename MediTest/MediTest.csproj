@@ -4,7 +4,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <OutputType>WinExe</OutputType>
-    <Version>5.0.32</Version>
+    <Version>5.0.33</Version>
     <AssemblyVersion>5.0.31.0</AssemblyVersion>
     <FileVersion>5.0.29.0</FileVersion>
     <InformationalVersion>5.0.27</InformationalVersion>
