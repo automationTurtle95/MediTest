@@ -59,10 +59,12 @@ jobs:
             MediTest/dist/MediTest-*/windows/MediTest-*-win-x64-portable.zip
 
   macos:
-    # macos-14 wurde von GitHub abgeschafft ("configuration 'macos-14-arm64-us-default'
-    # is not supported", Lauf v5.0.32 am 23.11.2026). macos-15 ist ebenfalls ARM,
-    # der Build braucht Apple Silicon fuer das arm64-DMG.
-    runs-on: macos-15
+    # GitHub hat die macOS-Labels aufgesplittet (Stand 23.11.2026):
+    #   macos-14        abgeschafft -> "configuration 'macos-14-arm64-us-default' is not supported"
+    #   macos-15        bekam 2x keinen Runner zugeteilt (15 Min. Warteschlange, dann abgebrochen)
+    #   macos-15-arm64  explizites ARM-Label, direkter Nachfolger von macos-14
+    # Apple Silicon ist noetig, weil hier das arm64-DMG gebaut wird.
+    runs-on: macos-15-arm64
     timeout-minutes: 270
 
     steps:
