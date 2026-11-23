@@ -7,6 +7,9 @@ import { onRequest } from "firebase-functions/v2/https";
 import { setGlobalOptions } from "firebase-functions/v2/options";
 import { GoogleGenAI } from "@google/genai";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { Environment, SignedDataVerifier } from "@apple/app-store-server-library";
 import nodemailer from "nodemailer";
 import Stripe from "stripe";
 import {
@@ -2069,6 +2072,33 @@ function dateValue(value: unknown): string | null {
   return validIsoString(value);
 }
 
+/**
+ * Prueft nur die Anmeldung, NICHT die E-Mail-Bestaetigung.
+ *
+ * Fuer Endpunkte, bei denen eine E-Mail-Huerde falsch waere - konkret die
+ * Apple-Belegpruefung: Dort hat der Nutzer bereits bezahlt und Apple hat den
+ * Kauf signiert. Die Freischaltung zu verweigern, weil eine E-Mail-Adresse
+ * nicht bestaetigt ist, heisst Geld nehmen ohne zu liefern.
+ *
+ * Sicherheitlich unbedenklich: Der Anspruch haengt an der uid aus einem
+ * gueltigen ID-Token, der Beleg ist kryptographisch gegen Apple geprueft, und
+ * die Mehrfacheinloesung ist ueber mobileSubscriptionLinks gesperrt. Die
+ * E-Mail-Bestaetigung schuetzt hier vor nichts.
+ */
+async function authenticatedUser(authorization: string, res: any): Promise<any | null> {
+  const idToken = readBearerToken(authorization);
+  if (!idToken) {
+    res.status(401).json({ error: { message: "Anmeldetoken fehlt." } });
+    return null;
+  }
+  try {
+    return await getAuth().verifyIdToken(idToken);
+  } catch {
+    res.status(401).json({ error: { message: "Anmeldetoken ist ungültig oder abgelaufen." } });
+    return null;
+  }
+}
+
 async function verifiedUser(authorization: string, res: any): Promise<any | null> {
   const idToken = readBearerToken(authorization);
   if (!idToken) {
@@ -2079,8 +2109,25 @@ async function verifiedUser(authorization: string, res: any): Promise<any | null
   try {
     const user = await getAuth().verifyIdToken(idToken);
     if (user.email_verified !== true) {
-      res.status(403).json({ error: { message: "Bitte bestätige zuerst deine E-Mail-Adresse." } });
-      return null;
+      // email_verified im ID-Token ist ein Schnappschuss vom Zeitpunkt der
+      // Token-Ausgabe. Wer seine Adresse gerade bestaetigt hat, traegt bis zur
+      // naechsten Token-Erneuerung (bis zu 1 Stunde) weiterhin "false" mit sich
+      // und wurde hier faelschlich abgewiesen - am 11.11.2026 genau so im
+      // TestFlight aufgetreten, obwohl das Konto in Firebase Auth laengst
+      // bestaetigt war. Deshalb gegen den LEBENDEN Auth-Datensatz gegenpruefen,
+      // bevor abgelehnt wird. Das lockert die Regel nicht: Wer wirklich
+      // unbestaetigt ist, wird weiterhin abgewiesen.
+      let liveBestaetigt = false;
+      try {
+        liveBestaetigt = (await getAuth().getUser(user.uid)).emailVerified === true;
+      } catch {
+        liveBestaetigt = false;
+      }
+      if (!liveBestaetigt) {
+        res.status(403).json({ error: { message: "Bitte bestätige zuerst deine E-Mail-Adresse." } });
+        return null;
+      }
+      logger.info("Veralteter email_verified-Claim im Token, Live-Pruefung bestanden", { uid: user.uid });
     }
     return user;
   } catch {
@@ -3335,3 +3382,291 @@ function buildPrompt(messages: unknown): string {
     .filter((text) => text.trim().length > 0)
     .join("\n\n");
 }
+
+// ---------------------------------------------------------------------------
+// SEC-002: Apple-IAP-Belegpruefung (seit 11.11.2026)
+//
+// Vorher schrieb die iOS-App ihren Kauf selbst nach
+// users/{uid}/billing/license - ohne jede Pruefung, ob ueberhaupt bezahlt
+// wurde. Zusammen mit der damals offenen Firestore-Regel (SEC-001) war das ein
+// Payment-Bypass. Jetzt schickt die App die von StoreKit 2 signierte
+// Transaktion (JWS) hierher; freigeschaltet wird nur, was Apples Signatur
+// traegt.
+//
+// Die Pruefung laeuft gegen Apples Root-CA (G3) im Deployment-Paket: kein
+// zusaetzlicher App-Store-Server-API-Key noetig.
+// ---------------------------------------------------------------------------
+
+const APPLE_BUNDLE_ID = "at.meduvalo.app";
+const APPLE_APP_APPLE_ID = 6784239185;
+const APPLE_PREMIUM_PRODUCT_ID = "at.meduvalo.app.premium";
+
+let appleRootCertificatesCache: Buffer[] | null = null;
+
+function appleRootCertificates(): Buffer[] {
+  if (!appleRootCertificatesCache) {
+    // Liegt als Datei im Deployment-Paket (functions/certs/), nicht als
+    // Konstante im Code - so bleibt der Fingerprint pruefbar.
+    const certPath = path.join(__dirname, "..", "certs", "AppleRootCA-G3.cer");
+    appleRootCertificatesCache = [fs.readFileSync(certPath)];
+  }
+  return appleRootCertificatesCache;
+}
+
+/**
+ * Liest das `environment`-Feld aus dem JWS, OHNE ihm zu vertrauen.
+ *
+ * Der SignedDataVerifier muss fuer eine konkrete Umgebung konstruiert werden,
+ * deshalb braucht es die Angabe vorab. Ein manipuliertes Feld hilft niemandem:
+ * Der Verifier prueft anschliessend die Signaturkette UND dass die Umgebung im
+ * Payload zu der passt, fuer die er gebaut wurde - eine Luege fuehrt also zur
+ * Ablehnung, nicht zu einer Umgehung.
+ */
+function peekEnvironment(signedTransaction: string): Environment {
+  try {
+    const payload = signedTransaction.split(".")[1];
+    const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    return decoded?.environment === "Production" ? Environment.PRODUCTION : Environment.SANDBOX;
+  } catch {
+    return Environment.SANDBOX;
+  }
+}
+
+/**
+ * Optionaler Einschub fuer Tests: erlaubt eine eigene Wurzel-CA und das
+ * Abschalten der OCSP-Abfrage. Im Betrieb wird das NIE gesetzt - dort gelten
+ * Apples Root-CA und enableOnlineChecks=true.
+ */
+export type AppleVerifyOverrides = {
+  rootCertificates: Buffer[];
+  enableOnlineChecks: boolean;
+};
+
+export async function verifyAppleTransaction(
+  signedTransaction: string,
+  overrides?: AppleVerifyOverrides
+): Promise<any> {
+  // Wichtig: peekEnvironment liefert ausschliesslich PRODUCTION oder SANDBOX.
+  // Die Bibliothek ueberspringt die Signaturpruefung bei XCODE/LOCAL_TESTING
+  // ("verification should be skipped") - diese Werte duerfen deshalb nie aus
+  // dem eingereichten Beleg uebernommen werden. Ein Beleg mit
+  // environment:"Xcode" landet hier bei SANDBOX und wird anschliessend von der
+  // Bibliothek wegen Umgebungs-Abweichung abgelehnt.
+  const environment = peekEnvironment(signedTransaction);
+  const verifier = new SignedDataVerifier(
+    overrides?.rootCertificates ?? appleRootCertificates(),
+    overrides?.enableOnlineChecks ?? true,
+    environment,
+    APPLE_BUNDLE_ID,
+    environment === Environment.PRODUCTION ? APPLE_APP_APPLE_ID : undefined
+  );
+  return await verifier.verifyAndDecodeTransaction(signedTransaction);
+}
+
+/**
+ * Inhaltliche Pruefung eines bereits signaturgeprueften Belegs.
+ *
+ * Als eigene Funktion, damit die Regeln ohne HTTP-Schicht und ohne Apple
+ * testbar sind. Eine echte Apple-Signatur allein genuegt nicht: der Beleg muss
+ * zu DIESER App und DIESEM Produkt gehoeren und darf nicht widerrufen sein.
+ */
+/**
+ * Entfernt den Anspruch, der aus einem iOS-Kauf stammt - und nur den.
+ *
+ * Wird beim Uebertragen eines Belegs auf das vorherige Konto angewandt.
+ * Wichtig: Ein per Stripe oder Code erworbener Anspruch desselben Kontos darf
+ * dabei NICHT verschwinden, sonst nimmt man jemandem etwas weg, das er
+ * unabhaengig bezahlt hat. Deshalb wird jedes Feld nur angefasst, wenn sein
+ * Anbieter tatsaechlich "ios_iap" ist.
+ */
+export function entzieheIosAnspruch(state: LicenseState): LicenseState {
+  if (state.premiumProvider === "ios_iap") {
+    state.premiumActive = false;
+    state.premiumProvider = "";
+    state.premiumGrantedAt = null;
+  }
+  if (state.baseProductProvider === "ios_iap") {
+    state.baseProductPurchased = false;
+    state.baseProductProvider = "";
+    state.baseProductPurchasedAt = null;
+  }
+  return state;
+}
+
+export function evaluateAppleTransaction(payload: any):
+  | { ok: true; transactionId: string; originalTransactionId: string }
+  | { ok: false; status: number; code: string; message: string } {
+  if (stringValue(payload?.bundleId) !== APPLE_BUNDLE_ID) {
+    return { ok: false, status: 400, code: "bundle_mismatch", message: "Der Kaufbeleg gehoert nicht zu dieser App." };
+  }
+  if (stringValue(payload?.productId) !== APPLE_PREMIUM_PRODUCT_ID) {
+    return { ok: false, status: 400, code: "product_mismatch", message: "Der Kaufbeleg gehoert nicht zum Premium-Produkt." };
+  }
+  if (payload?.revocationDate || payload?.revocationReason !== undefined) {
+    return { ok: false, status: 400, code: "transaction_revoked", message: "Dieser Kauf wurde zurueckerstattet." };
+  }
+  const transactionId = stringValue(payload?.transactionId);
+  if (!transactionId) {
+    return { ok: false, status: 400, code: "invalid_transaction", message: "Dem Kaufbeleg fehlt die Transaktionsnummer." };
+  }
+  return {
+    ok: true,
+    transactionId,
+    originalTransactionId: stringValue(payload?.originalTransactionId) || transactionId
+  };
+}
+
+export const meditestVerifyApplePurchase = onRequest(
+  {
+    invoker: "public",
+    memory: "256MiB",
+    timeoutSeconds: 60
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.set("Allow", "POST").status(405).json({ error: { message: "Nur POST-Anfragen sind erlaubt." } });
+      return;
+    }
+
+    // Bewusst authenticatedUser statt verifiedUser: siehe Begruendung dort.
+    const user = await authenticatedUser(req.header("authorization") ?? "", res);
+    if (!user) return;
+
+    const signedTransaction = stringValue(req.body?.signedTransaction).trim();
+    if (!signedTransaction || signedTransaction.split(".").length !== 3) {
+      res.status(400).json({
+        error: { code: "invalid_transaction", message: "Es wurde kein gueltiger Kaufbeleg uebermittelt." }
+      });
+      return;
+    }
+
+    // ---- 1. Signatur pruefen (Apple Root CA) ----
+    let payload: any;
+    try {
+      payload = await verifyAppleTransaction(signedTransaction);
+    } catch (error) {
+      // Feld NICHT "message" nennen: Cloud Logging nutzt denselben Namen fuer
+      // den Eintragstext, dadurch war Apples eigentlicher Fehlergrund am
+      // 11.11.2026 im Log unsichtbar (nur "Apple transaction verification
+      // rejected" ohne Ursache). "status" ist die VerificationStatus-Angabe
+      // der Apple-Bibliothek und sagt genau, welche Pruefung gescheitert ist.
+      const grund = error instanceof Error ? error.message : String(error);
+      const status = (error as { status?: unknown })?.status;
+      logger.warn("Apple transaction verification rejected", {
+        uid: user.uid,
+        grund,
+        status: status === undefined ? null : String(status),
+        umgebung: peekEnvironment(signedTransaction)
+      });
+      res.status(400).json({
+        error: {
+          code: "verification_failed",
+          message: "Der Kaufbeleg konnte bei Apple nicht bestaetigt werden.",
+          // Kurzkennung fuer die Fehlersuche vor dem Launch - keine Geheimnisse.
+          detail: status === undefined ? grund.slice(0, 120) : `status=${String(status)}`
+        }
+      });
+      return;
+    }
+
+    // ---- 2. Inhalt pruefen ----
+    const pruefung = evaluateAppleTransaction(payload);
+    if (!pruefung.ok) {
+      logger.warn("Apple transaction content rejected", {
+        uid: user.uid,
+        code: pruefung.code,
+        bundleId: stringValue(payload?.bundleId),
+        productId: stringValue(payload?.productId)
+      });
+      res.status(pruefung.status).json({ error: { code: pruefung.code, message: pruefung.message } });
+      return;
+    }
+    const { transactionId, originalTransactionId } = pruefung;
+
+    // ---- 3. Beleg an genau EIN Konto binden (uebertragbar) ----
+    // Ziel ist "ein Kauf = ein aktiver Anspruch", nicht "ein Kauf = fuer immer
+    // dasselbe Konto". Die erste Fassung (11.11.2026) band den Beleg dauerhaft
+    // an das erste Konto, das ihn einloeste - mit zwei schlechten Folgen:
+    //   * Wer sein Konto neu anlegt, konnte seinen Kauf nie wieder herstellen,
+    //     obwohl Apple eine funktionierende Wiederherstellung verlangt.
+    //     Bezahlt und trotzdem ausgesperrt.
+    //   * Beim Testen mit einem Sandbox-Apple-Konto war nach dem ersten
+    //     Durchlauf jedes weitere Firebase-Konto blockiert.
+    // Deshalb wird der Beleg jetzt UEBERTRAGEN und dem vorherigen Konto im
+    // selben Zug entzogen. Die Schutzwirkung bleibt: gleichzeitig aktiv ist
+    // der Anspruch immer nur bei einem Konto - genau die Garantie, die auch
+    // Apple fuer die Apple-ID gibt.
+    const linkRef = db.doc(`mobileSubscriptionLinks/${originalTransactionId}`);
+    let vorherigesKonto = "";
+    await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(linkRef);
+      const bisher = stringValue((snapshot.data() ?? {}).uid);
+      vorherigesKonto = bisher && bisher !== user.uid ? bisher : "";
+
+      transaction.set(linkRef, {
+        uid: user.uid,
+        platform: "ios",
+        productId: APPLE_PREMIUM_PRODUCT_ID,
+        transactionId,
+        originalTransactionId,
+        environment: stringValue(payload.environment),
+        verifiedAt: Timestamp.now(),
+        ...(vorherigesKonto
+          ? {
+              // Historie behalten: eine Kette von Uebertragungen ist das
+              // Signal, mit dem sich Weitergabe erkennen laesst.
+              previousUids: FieldValue.arrayUnion(vorherigesKonto),
+              transferCount: FieldValue.increment(1),
+              lastTransferAt: Timestamp.now()
+            }
+          : {})
+      }, { merge: true });
+    });
+
+    if (vorherigesKonto) {
+      // Erst entziehen, dann zuteilen - sonst waere der Anspruch kurzzeitig
+      // bei zwei Konten gleichzeitig aktiv.
+      try {
+        await updateLicenseState(vorherigesKonto, entzieheIosAnspruch);
+        logger.warn("Apple-Beleg auf ein anderes Konto uebertragen", {
+          originalTransactionId,
+          vonUid: vorherigesKonto,
+          nachUid: user.uid
+        });
+      } catch (error) {
+        // Nicht abbrechen: Der neue Eigentuemer steht in der Bindung schon
+        // fest. Aber laut melden, weil dann zwei Konten aktiv sein koennten.
+        logger.error("Entzug beim vorherigen Konto fehlgeschlagen", {
+          originalTransactionId,
+          vonUid: vorherigesKonto,
+          nachUid: user.uid,
+          grund: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+
+    // ---- 4. Lizenz serverseitig setzen ----
+    const state = await updateLicenseState(user.uid, (current) => {
+      const now = new Date().toISOString();
+      current.premiumActive = true;
+      current.premiumGrantedAt ||= now;
+      current.premiumProvider = "ios_iap";
+      current.baseProductPurchased = true;
+      current.baseProductPurchasedAt ||= now;
+      current.baseProductProvider = "ios_iap";
+      return current;
+    });
+
+    logger.info("Apple purchase verified and premium granted", {
+      uid: user.uid,
+      originalTransactionId,
+      environment: stringValue(payload.environment)
+    });
+
+    res.status(200).json({
+      verified: true,
+      state: licenseStateResponse(state),
+      message: `${BRAND.productName} Premium ist freigeschaltet.`
+    });
+  }
+);

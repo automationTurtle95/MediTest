@@ -45,9 +45,19 @@ service cloud.firestore {
       }
 
       match /billing/{document=**} {
+        // SEC-001 (10.11.2026): Hier stand "allow write: if ownsUserData()",
+        // damit die iOS-App ihren IAP-Kauf selbst eintragen konnte. Das war ein
+        // Entitlement-Bypass: Der Server liest genau dieses Dokument
+        // (users/{uid}/billing/license -> dataJson) und leitet daraus in
+        // ensureCommercialLicense() den Lizenzstatus ab. Ein einziger Write mit
+        // {"premiumActive":true} genuegte damit fuer Vollzugang ohne Zahlung,
+        // inklusive der kostenpflichtigen KI-Fragengenerierung.
+        //
+        // Lizenzstand wird ausschliesslich serverseitig gesetzt (Admin SDK
+        // umgeht diese Regeln): Stripe-Webhook, Code-Einloesung, und kuenftig
+        // die Apple-Belegpruefung (SEC-002). Der Client darf nur lesen.
         allow read: if ownsUserData();
-        // write erlaubt für IAP-Aktivierung vom Client (iOS StoreKit)
-        allow write: if ownsUserData();
+        allow write: if false;
       }
     }
 

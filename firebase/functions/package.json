@@ -10,7 +10,8 @@
     "serve": "npm run build && npx firebase-tools emulators:start --only functions",
     "deploy": "npm run build && npx firebase-tools deploy --only functions",
     "logs": "npx firebase-tools functions:log",
-    "admin:set": "node scripts/set-admin-claim.cjs"
+    "admin:set": "node scripts/set-admin-claim.cjs",
+    "test": "npm run build && node --test test/apple-verification.test.mjs"
   },
   "dependencies": {
     "@apple/app-store-server-library": "^3.1.0",

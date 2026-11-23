@@ -79,6 +79,16 @@ public sealed class FirestoreUserDataStore
         return state;
     }
 
+    /// <summary>
+    /// NICHT VERWENDEN. Der Lizenzstand wird ausschliesslich serverseitig gesetzt
+    /// (Stripe-Webhook, Code-Einloesung, Apple-Belegpruefung) - der Client darf
+    /// users/{uid}/billing/** seit 10.11.2026 nur noch lesen (SEC-001).
+    /// Diese Methode wird nirgends aufgerufen und wuerde jetzt PERMISSION_DENIED
+    /// liefern. Sie bleibt nur stehen, damit der Grund dokumentiert ist: Ein
+    /// clientseitig schreibbarer Lizenzstand war ein Entitlement-Bypass, weil der
+    /// Server genau dieses Dokument liest, um den Lizenzstatus abzuleiten.
+    /// </summary>
+    [Obsolete("Lizenzstand ist serverseitig autoritativ (SEC-001). Client-Writes werden von Firestore abgelehnt.", error: true)]
     public async Task SaveLicenseStateAsync(UserLicenseState state, CancellationToken ct)
     {
         state.UpdatedAt = DateTime.UtcNow;

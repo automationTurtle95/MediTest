@@ -31,3 +31,4 @@ appsettings.Development.json
 
 # Local source material not meant for public releases
 Altfragen/
+.backups-*/
